@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: odoo-erp-mcp-linux
+            asset_name: odoo-erp-mcp-linux
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            artifact_name: odoo-erp-mcp-windows.exe
+            asset_name: odoo-erp-mcp-windows.exe
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            artifact_name: odoo-erp-mcp-macos
+            asset_name: odoo-erp-mcp-macos
+            target: aarch64-apple-darwin
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifacts
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp target/${{ matrix.target }}/release/odoo-erp-mcp.exe ${{ matrix.asset_name }}
+          else
+            cp target/${{ matrix.target }}/release/odoo-erp-mcp ${{ matrix.asset_name }}
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.asset_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: odoo-erp-mcp ${{ github.ref_name }}
+          files: |
+            odoo-erp-mcp-linux/odoo-erp-mcp-linux
+            odoo-erp-mcp-windows.exe/odoo-erp-mcp-windows.exe
+            odoo-erp-mcp-macos/odoo-erp-mcp-macos
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

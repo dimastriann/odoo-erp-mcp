@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Odoo MCP Config</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.31/dist/vue.global.prod.js"></script>
+    <style>
+        :root { --bg: #ffffff; --text: #1a202c; }
+        .dark { --bg: #1a202c; --text: #f7fafc; }
+        body { background-color: var(--bg); color: var(--text); transition: background-color 0.3s, color 0.3s; }
+        .card { background-color: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body class="min-h-screen p-8 transition-colors duration-300">
+    <div id="app" class="max-w-4xl mx-auto">
+        <header class="flex justify-between items-center mb-12">
+            <div>
+                <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">Odoo MCP Server</h1>
+                <p class="text-gray-500 mt-2">Manage your Odoo instances and AI prompts</p>
+            </div>
+            <button @click="toggleDarkMode" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+                <span v-if="isDark">🌞</span><span v-else>🌙</span>
+            </button>
+        </header>
+
+        <!-- Instances Section -->
+        <section class="mb-12">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">Odoo Instances</h2>
+                <button @click="openInstanceModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition shadow-lg">
+                    + Add Instance
+                </button>
+            </div>
+            
+            <div class="grid gap-4">
+                <div v-for="inst in config.instances" :key="inst.id" 
+                     class="card p-6 rounded-xl flex justify-between items-center group transition transform hover:scale-101 border border-gray-700">
+                    <div class="flex items-center gap-4">
+                        <div :class="inst.active ? 'bg-green-500' : 'bg-gray-500'" class="w-3 h-3 rounded-full shadow-glow"></div>
+                        <div>
+                            <h3 class="text-xl font-bold">{{ inst.name }}</h3>
+                            <p class="text-gray-400 text-sm">{{ inst.url }} ({{ inst.db }})</p>
+                        </div>
+                    </div>
+                    <div class="flex gap-4 items-center">
+                        <button v-if="!inst.active" @click="setActive(inst.id)" class="text-xs font-bold text-blue-400 hover:text-blue-300 uppercase tracking-widest">Set Active</button>
+                        <button @click="openInstanceModal(inst)" class="text-sm text-yellow-500 hover:text-yellow-400 font-medium">Edit</button>
+                        <button @click="deleteInstance(inst.id)" class="text-red-500 hover:text-red-400 transition opacity-0 group-hover:opacity-100">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Prompts Section -->
+        <section>
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold">Odoo AI Prompts</h2>
+                <button @click="openPromptModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition shadow-lg">
+                    + Add Prompt
+                </button>
+            </div>
+            
+            <div class="grid gap-4">
+                <div v-for="p in config.prompts" :key="p.id" 
+                     class="card p-6 rounded-xl transition border border-gray-700">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-xl font-bold">{{ p.name }}</h3>
+                        <div class="flex gap-4">
+                            <button @click="openPromptModal(p)" class="text-yellow-500 hover:text-yellow-400">Edit</button>
+                            <button @click="deletePrompt(p.id)" class="text-red-500 hover:text-red-400 transition">Delete</button>
+                        </div>
+                    </div>
+                    <p class="text-gray-400 text-sm whitespace-pre-wrap">{{ p.content }}</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Instance Modal -->
+        <div v-if="showInstanceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div class="bg-gray-900 border border-gray-700 p-8 rounded-2xl w-full max-w-md shadow-2xl">
+                <h3 class="text-2xl font-bold mb-6">{{ newInstance.id ? 'Edit Odoo Instance' : 'New Odoo Instance' }}</h3>
+                <div class="space-y-4">
+                    <input v-model="newInstance.name" placeholder="Name (e.g. My Odoo)" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
+                    <input v-model="newInstance.url" placeholder="URL (e.g. https://odoo.id)" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
+                    <input v-model="newInstance.db" placeholder="Database Name" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
+                    <input v-model="newInstance.username" placeholder="Username" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
+                    <input v-model="newInstance.password" type="password" placeholder="Password / API Key" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button @click="showInstanceModal = false" class="text-gray-400 hover:text-white px-4 py-2">Cancel</button>
+                    <button @click="saveInstance" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition">Save Instance</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prompt Modal -->
+        <div v-if="showPromptModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div class="bg-gray-900 border border-gray-700 p-8 rounded-2xl w-full max-w-lg shadow-2xl">
+                <h3 class="text-2xl font-bold mb-6">{{ newPrompt.id ? 'Edit Odoo Prompt' : 'New Odoo Prompt' }}</h3>
+                <div class="space-y-4">
+                    <input v-model="newPrompt.name" placeholder="Prompt Name" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
+                    <textarea v-model="newPrompt.content" placeholder="Prompt Content..." rows="6" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white"></textarea>
+                </div>
+                <div class="flex justify-end gap-4 mt-8">
+                    <button @click="showPromptModal = false" class="text-gray-400 hover:text-white px-4 py-2">Cancel</button>
+                    <button @click="savePrompt" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg transition">Save Prompt</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                const isDark = ref(true);
+                const config = ref({ instances: [], prompts: [] });
+                const showInstanceModal = ref(false);
+                const showPromptModal = ref(false);
+                const newInstance = ref({ id: '', name: '', url: '', db: '', username: '', password: '', active: false });
+                const newPrompt = ref({ id: '', name: '', content: '' });
+
+                const fetchConfig = async () => {
+                    console.log("[UI] Fetching config...");
+                    const res = await fetch('/api/config');
+                    const data = await res.json();
+                    config.value = data;
+                    console.log("[UI] Config received:", data);
+                };
+
+                const openInstanceModal = (item = null) => {
+                    if (item) {
+                        newInstance.value = { ...item };
+                    } else {
+                        newInstance.value = { id: '', name: '', url: '', db: '', username: '', password: '', active: false };
+                    }
+                    showInstanceModal.value = true;
+                };
+
+                const openPromptModal = (item = null) => {
+                    if (item) {
+                        newPrompt.value = { ...item };
+                    } else {
+                        newPrompt.value = { id: '', name: '', content: '' };
+                    }
+                    showPromptModal.value = true;
+                };
+
+                const saveInstance = async () => {
+                    console.log("[UI] Saving instance:", newInstance.value);
+                    const res = await fetch('/api/instances', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newInstance.value)
+                    });
+                    if (res.ok) {
+                        showInstanceModal.value = false;
+                        await fetchConfig();
+                    } else {
+                        alert("Failed to save instance");
+                    }
+                };
+
+                const savePrompt = async () => {
+                    console.log("[UI] Saving prompt:", newPrompt.value);
+                    const res = await fetch('/api/prompts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(newPrompt.value)
+                    });
+                    if (res.ok) {
+                        showPromptModal.value = false;
+                        await fetchConfig();
+                    } else {
+                        alert("Failed to save prompt");
+                    }
+                };
+
+                const deleteInstance = async (id) => {
+                    if (!confirm("Are you sure?")) return;
+                    await fetch(`/api/instances/${id}`, { method: 'DELETE' });
+                    await fetchConfig();
+                };
+
+                const deletePrompt = async (id) => {
+                    if (!confirm("Are you sure?")) return;
+                    await fetch(`/api/prompts/${id}`, { method: 'DELETE' });
+                    await fetchConfig();
+                };
+
+                const setActive = async (id) => {
+                    await fetch(`/api/instances/${id}/active`, { method: 'POST' });
+                    await fetchConfig();
+                };
+
+                const toggleDarkMode = () => {
+                    isDark.value = !isDark.value;
+                    document.body.classList.toggle('dark', isDark.value);
+                };
+
+                onMounted(() => {
+                    document.body.classList.add('dark');
+                    fetchConfig();
+                });
+
+                return {
+                    isDark, config, showInstanceModal, showPromptModal, 
+                    newInstance, newPrompt, saveInstance, savePrompt,
+                    deleteInstance, deletePrompt, setActive, toggleDarkMode,
+                    openInstanceModal, openPromptModal
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
