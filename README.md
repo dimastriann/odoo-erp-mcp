@@ -62,6 +62,55 @@ sequenceDiagram
     AI->>AI: Generate Human Response
 ```
 
+## 🔌 Editor Integration
+
+You can integrate this MCP server with various AI-powered code editors across different platforms (Windows, macOS, Linux). Ensure you have compiled the server or downloaded the executable.
+
+> **Note on Paths**: On Windows, ensure your path points to the `.exe` file using double backslashes (e.g., `C:\\path\\to\\odoo-erp-mcp.exe`) or forward slashes. On Linux/macOS, point to the generated binary directly (e.g., `/path/to/odoo-erp-mcp`).
+
+### Cursor
+1. Go to **Cursor Settings** > **Features** > **MCP Servers**.
+2. Click **+ Add new MCP server**.
+3. Set the **Name** to `odoo-mcp`.
+4. Set the **Type** to `command`.
+5. Set the **Command** to the absolute path of your `odoo-erp-mcp` executable.
+
+### Antigravity
+Add the server to your `mcp_config.json` (typically located in `~/.gemini/antigravity/mcp_config.json` or `%USERPROFILE%\.gemini\antigravity\mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "odoo-mcp": {
+      "command": "absolute/path/to/odoo-erp-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}
+```
+
+### Visual Studio Code (via Extensions)
+If you use MCP clients in VSCode (e.g., *Cline* or *Claude Dev*), edit your MCP settings file (e.g., `cline_mcp_settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "odoo-mcp": {
+      "command": "absolute/path/to/odoo-erp-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}
+```
+
+### PyCharm / JetBrains IDEs
+For JetBrains IDEs using an MCP or AI assistant plugin that supports standard MCP servers:
+1. Open the plugin's MCP server configuration.
+2. Add a new **Stdio** based server.
+3. Configure the command path to the `odoo-erp-mcp` executable.
+
 ## 🚢 Deployment & Release
 
 ### Build for Release
