@@ -213,4 +213,39 @@ impl OdooClient {
 
         self.call_rpc(params).await
     }
+
+    pub async fn search(&self, model: &str, domain: Value) -> Result<Value, Box<dyn std::error::Error>> {
+        let params = json!({
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+                self.db,
+                self.uid,
+                self.password,
+                model,
+                "search",
+                [domain]
+            ]
+        });
+
+        self.call_rpc(params).await
+    }
+
+    pub async fn read(&self, model: &str, ids: Vec<i64>, fields: Value) -> Result<Value, Box<dyn std::error::Error>> {
+        let params = json!({
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+                self.db,
+                self.uid,
+                self.password,
+                model,
+                "read",
+                [ids],
+                { "fields": fields }
+            ]
+        });
+
+        self.call_rpc(params).await
+    }
 }

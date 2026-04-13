@@ -26,7 +26,7 @@ A high-performance, secure Model Context Protocol (MCP) server built in Rust for
 ### Prerequisites
 
 - [Rust & Cargo](https://rustup.rs/) (Stable)
-- An Odoo Instance (v12 to v17 supported)
+- An Odoo Instance (v12 to v19 supported)
 
 ### Local Development
 

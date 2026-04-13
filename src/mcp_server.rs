@@ -159,6 +159,31 @@ async fn handle_request(req: Value, odoo_client: &Option<OdooClient>) -> Option<
                                 },
                                 "required": ["model"]
                             }
+                        },
+                        {
+                            "name": "odoo-search",
+                            "description": "Search for records and return only their IDs (lighter than search-read for large datasets).",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
+                                    "domain": { "type": "array", "description": "Search domain (e.g., [['is_company', '=', true]])" }
+                                },
+                                "required": ["model", "domain"]
+                            }
+                        },
+                        {
+                            "name": "odoo-read",
+                            "description": "Read specific records by their IDs.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
+                                    "ids": { "type": "array", "items": { "type": "integer" }, "description": "List of record IDs to read" },
+                                    "fields": { "type": "array", "items": { "type": "string" }, "description": "List of fields to return (optional)" }
+                                },
+                                "required": ["model", "ids"]
+                            }
                         }
                     ]
                 }
@@ -278,6 +303,27 @@ async fn execute_tool(name: &str, arguments: Value, odoo_opt: &Option<OdooClient
             match odoo.get_metadata(model, fields).await {
                 Ok(data) => serde_json::to_string_pretty(&data).unwrap_or_else(|e| format!("Error parsing result: {}", e)),
                 Err(e) => format!("Error executing get_metadata: {}", e),
+            }
+        }
+        "odoo-search" => {
+            let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
+            match odoo.search(model, domain).await {
+                Ok(data) => serde_json::to_string_pretty(&data).unwrap_or_else(|e| format!("Error parsing result: {}", e)),
+                Err(e) => format!("Error executing search: {}", e),
+            }
+        }
+        "odoo-read" => {
+            let ids_arr = arguments.get("ids").and_then(|ids| ids.as_array());
+            let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
+
+            if let Some(arr) = ids_arr {
+                let ids: Vec<i64> = arr.iter().filter_map(|v| v.as_i64()).collect();
+                match odoo.read(model, ids, fields).await {
+                    Ok(data) => serde_json::to_string_pretty(&data).unwrap_or_else(|e| format!("Error parsing result: {}", e)),
+                    Err(e) => format!("Error executing read: {}", e),
+                }
+            } else {
+                "Error: Missing required parameter 'ids' (array of ints)".to_string()
             }
         }
         _ => format!("Error: Unknown tool {}", name),
