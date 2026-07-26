@@ -132,4 +132,4 @@ The binary will be located at `./target/release/odoo-erp-mcp`.
 3. Add the binary path to your MCP client configuration (e.g. `claude_desktop_config.json`).
 
 ## 📄 License
-This project is licensed under the GNU AGPL-3.
+This project is licensed under the MIT License.
