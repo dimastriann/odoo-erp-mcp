@@ -1,0 +1,19 @@
+{
+  "global_settings": {
+    "default_mode": "crud"
+  },
+  "instances": [
+    {
+      "id": "1",
+      "name": "My Odoo Instance",
+      "url": "https://your-odoo-instance.example.com",
+      "db": "your_database",
+      "username": "admin",
+      "password": "your_password_or_api_key",
+      "active": true,
+      "mode": "crud",
+      "allowed_tools": null
+    }
+  ],
+  "prompts": []
+}

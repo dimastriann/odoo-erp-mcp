@@ -1,12 +1,12 @@
+use crate::config::{Config, OdooInstance, OdooPrompt, generate_id};
 use axum::{
-    extract::{Path, State},
-    http::{StatusCode},
-    response::{Html},
-    routing::{get, post, delete},
     Json, Router,
+    extract::{Path, State},
+    http::StatusCode,
+    response::Html,
+    routing::{delete, get, post},
 };
 use std::sync::{Arc, RwLock};
-use crate::config::{Config, OdooInstance, OdooPrompt, generate_id};
 // use serde_json::json;
 use tower_http::cors::CorsLayer;
 
@@ -16,9 +16,10 @@ pub async fn start_ui(config: SharedConfig) {
     let app = Router::new()
         .route("/", get(index))
         .route("/api/config", get(get_config))
+        .route("/api/global-settings", post(update_global_settings))
         .route("/api/instances", post(add_instance))
         .route("/api/instances/{id}", delete(delete_instance))
-        .route("/api/instances/{id}/active", post(set_active))
+        .route("/api/instances/{id}/active", post(toggle_active))
         .route("/api/prompts", post(add_prompt))
         .route("/api/prompts/{id}", delete(delete_prompt))
         .layer(CorsLayer::permissive())
@@ -27,6 +28,23 @@ pub async fn start_ui(config: SharedConfig) {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3333").await.unwrap();
     eprintln!("Web UI started on http://localhost:3333");
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn update_global_settings(
+    State(state): State<SharedConfig>,
+    Json(settings): Json<crate::config::GlobalSettings>,
+) -> StatusCode {
+    let mut config = state.write().unwrap();
+    config.global_settings = settings;
+    config.save().unwrap();
+    StatusCode::OK
+}
+
+async fn toggle_active(State(state): State<SharedConfig>, Path(id): Path<String>) -> StatusCode {
+    let mut config = state.write().unwrap();
+    config.toggle_active_instance(&id);
+    config.save().unwrap();
+    StatusCode::OK
 }
 
 async fn index() -> Html<&'static str> {
@@ -38,12 +56,15 @@ async fn get_config(State(state): State<SharedConfig>) -> Json<Config> {
     Json(config.clone())
 }
 
-async fn add_instance(State(state): State<SharedConfig>, Json(mut instance): Json<OdooInstance>) -> StatusCode {
+async fn add_instance(
+    State(state): State<SharedConfig>,
+    Json(mut instance): Json<OdooInstance>,
+) -> StatusCode {
     if instance.id.is_empty() {
         instance.id = generate_id();
     }
     let mut config = state.write().unwrap();
-    
+
     // If first instance, make it active
     if config.instances.is_empty() {
         instance.active = true;
@@ -55,7 +76,7 @@ async fn add_instance(State(state): State<SharedConfig>, Json(mut instance): Jso
     } else {
         config.instances.push(instance);
     }
-    
+
     config.save().unwrap();
     StatusCode::OK
 }
@@ -67,25 +88,21 @@ async fn delete_instance(State(state): State<SharedConfig>, Path(id): Path<Strin
     StatusCode::OK
 }
 
-async fn set_active(State(state): State<SharedConfig>, Path(id): Path<String>) -> StatusCode {
-    let mut config = state.write().unwrap();
-    config.set_active_instance(&id);
-    config.save().unwrap();
-    StatusCode::OK
-}
-
-async fn add_prompt(State(state): State<SharedConfig>, Json(mut prompt): Json<OdooPrompt>) -> StatusCode {
+async fn add_prompt(
+    State(state): State<SharedConfig>,
+    Json(mut prompt): Json<OdooPrompt>,
+) -> StatusCode {
     if prompt.id.is_empty() {
         prompt.id = generate_id();
     }
     let mut config = state.write().unwrap();
-    
+
     if let Some(existing) = config.prompts.iter_mut().find(|p| p.id == prompt.id) {
         *existing = prompt;
     } else {
         config.prompts.push(prompt);
     }
-    
+
     config.save().unwrap();
     StatusCode::OK
 }

@@ -13,6 +13,54 @@ pub struct OdooInstance {
     pub username: String,
     pub password: String,
     pub active: bool,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub allowed_tools: Option<Vec<String>>,
+}
+
+impl OdooInstance {
+    pub fn get_mode<'a>(&'a self, global_default: &'a str) -> &'a str {
+        match &self.mode {
+            Some(m) if !m.trim().is_empty() && m != "inherit" => m.as_str(),
+            _ => global_default,
+        }
+    }
+
+    pub fn is_tool_allowed(&self, tool_name: &str, global_default_mode: &str) -> bool {
+        if let Some(ref allowed) = self.allowed_tools {
+            if !allowed.is_empty() {
+                return allowed.iter().any(|t| t == tool_name);
+            }
+        }
+
+        let mode = self.get_mode(global_default_mode);
+        match mode {
+            "read_only" => {
+                let write_tools = ["odoo-create", "odoo-update", "odoo-delete", "odoo-copy"];
+                !write_tools.contains(&tool_name)
+            }
+            "crud" | _ => true,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GlobalSettings {
+    #[serde(default = "default_global_mode")]
+    pub default_mode: String,
+}
+
+fn default_global_mode() -> String {
+    "crud".to_string()
+}
+
+impl Default for GlobalSettings {
+    fn default() -> Self {
+        Self {
+            default_mode: default_global_mode(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -24,6 +72,8 @@ pub struct OdooPrompt {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
+    #[serde(default)]
+    pub global_settings: GlobalSettings,
     pub instances: Vec<OdooInstance>,
     pub prompts: Vec<OdooPrompt>,
 }
@@ -36,7 +86,8 @@ impl Config {
             std::path::Path::new(manifest_dir).join("config.json")
         } else {
             // In release mode, look in the same folder as the executable
-            let exe_path = std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            let exe_path =
+                std::env::current_exe().unwrap_or_else(|_| std::path::PathBuf::from("."));
             let dir = exe_path.parent().unwrap_or(std::path::Path::new("."));
             dir.join("config.json")
         }
@@ -62,17 +113,102 @@ impl Config {
         Ok(())
     }
 
+    // pub fn get_active_instances(&self) -> Vec<&OdooInstance> {
+    //     self.instances.iter().filter(|i| i.active).collect()
+    // }
+
     pub fn get_active_instance(&self) -> Option<&OdooInstance> {
         self.instances.iter().find(|i| i.active)
     }
 
-    pub fn set_active_instance(&mut self, id: &str) {
-        for instance in &mut self.instances {
-            instance.active = instance.id == id;
+    pub fn find_instance(&self, identifier: &str) -> Option<&OdooInstance> {
+        if identifier.trim().is_empty() {
+            return self.get_active_instance();
+        }
+        self.instances
+            .iter()
+            .find(|i| i.id == identifier || i.name.eq_ignore_ascii_case(identifier))
+    }
+
+    pub fn toggle_active_instance(&mut self, id: &str) {
+        if let Some(instance) = self.instances.iter_mut().find(|i| i.id == id) {
+            instance.active = !instance.active;
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn set_instance_active(&mut self, id: &str, active: bool) {
+        if let Some(instance) = self.instances.iter_mut().find(|i| i.id == id) {
+            instance.active = active;
         }
     }
 }
 
 pub fn generate_id() -> String {
     Uuid::new_v4().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_crud_instance_permissions() {
+        let instance = OdooInstance {
+            id: "1".into(),
+            name: "Prod".into(),
+            url: "https://odoo.com".into(),
+            db: "db".into(),
+            username: "admin".into(),
+            password: "pass".into(),
+            active: true,
+            mode: Some("crud".into()),
+            allowed_tools: None,
+        };
+
+        assert!(instance.is_tool_allowed("odoo-search-read", "crud"));
+        assert!(instance.is_tool_allowed("odoo-create", "crud"));
+        assert!(instance.is_tool_allowed("odoo-update", "crud"));
+        assert!(instance.is_tool_allowed("odoo-delete", "crud"));
+    }
+
+    #[test]
+    fn test_read_only_instance_permissions() {
+        let instance = OdooInstance {
+            id: "2".into(),
+            name: "ReadOnly".into(),
+            url: "https://odoo.com".into(),
+            db: "db".into(),
+            username: "admin".into(),
+            password: "pass".into(),
+            active: false,
+            mode: Some("read_only".into()),
+            allowed_tools: None,
+        };
+
+        assert!(instance.is_tool_allowed("odoo-search-read", "crud"));
+        assert!(instance.is_tool_allowed("odoo-search-count", "crud"));
+        assert!(!instance.is_tool_allowed("odoo-create", "crud"));
+        assert!(!instance.is_tool_allowed("odoo-update", "crud"));
+        assert!(!instance.is_tool_allowed("odoo-delete", "crud"));
+        assert!(!instance.is_tool_allowed("odoo-copy", "crud"));
+    }
+
+    #[test]
+    fn test_inherit_global_mode() {
+        let instance = OdooInstance {
+            id: "3".into(),
+            name: "Inherit".into(),
+            url: "https://odoo.com".into(),
+            db: "db".into(),
+            username: "admin".into(),
+            password: "pass".into(),
+            active: false,
+            mode: Some("inherit".into()),
+            allowed_tools: None,
+        };
+
+        assert!(!instance.is_tool_allowed("odoo-create", "read_only"));
+        assert!(instance.is_tool_allowed("odoo-create", "crud"));
+    }
 }

@@ -15,16 +15,19 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact_name: odoo-erp-mcp-linux
-            asset_name: odoo-erp-mcp-linux
             target: x86_64-unknown-linux-gnu
+            binary: odoo-erp-mcp
+            suffix: linux
           - os: windows-latest
-            artifact_name: odoo-erp-mcp-windows.exe
-            asset_name: odoo-erp-mcp-windows.exe
+            artifact_name: odoo-erp-mcp-windows
             target: x86_64-pc-windows-msvc
+            binary: odoo-erp-mcp.exe
+            suffix: windows
           - os: macos-latest
             artifact_name: odoo-erp-mcp-macos
-            asset_name: odoo-erp-mcp-macos
             target: aarch64-apple-darwin
+            binary: odoo-erp-mcp
+            suffix: macos
 
     steps:
       - name: Checkout code
@@ -44,20 +47,29 @@ jobs:
       - name: Build release
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Prepare artifacts
+      - name: Prepare artifact (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cp target/${{ matrix.target }}/release/odoo-erp-mcp.exe ${{ matrix.asset_name }}
-          else
-            cp target/${{ matrix.target }}/release/odoo-erp-mcp ${{ matrix.asset_name }}
-          fi
+          VERSION=${GITHUB_REF_NAME#v}
+          ASSET="odoo-erp-mcp-${{ matrix.suffix }}-${VERSION}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "${ASSET}"
+          echo "ASSET_PATH=${ASSET}" >> $GITHUB_ENV
 
-      - name: Upload artifacts
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          ASSET="odoo-erp-mcp-${{ matrix.suffix }}-${VERSION}.exe"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "${ASSET}"
+          echo "ASSET_PATH=${ASSET}" >> $GITHUB_ENV
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.asset_name }}
+          path: ${{ env.ASSET_PATH }}
 
   release:
     name: Create Release
@@ -74,8 +86,8 @@ jobs:
         with:
           name: odoo-erp-mcp ${{ github.ref_name }}
           files: |
-            odoo-erp-mcp-linux/odoo-erp-mcp-linux
-            odoo-erp-mcp-windows.exe/odoo-erp-mcp-windows.exe
-            odoo-erp-mcp-macos/odoo-erp-mcp-macos
+            odoo-erp-mcp-linux/*
+            odoo-erp-mcp-windows/*
+            odoo-erp-mcp-macos/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

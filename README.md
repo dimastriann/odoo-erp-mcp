@@ -2,6 +2,10 @@
 
 A high-performance, secure Model Context Protocol (MCP) server built in Rust for seamless interaction with Odoo ERP systems. This server allows AI models (like Claude, GPT-4, etc.) to perform advanced ORM operations and data analysis on Odoo models natively.
 
+[![Release](https://img.shields.io/github/v/release/dimastriann/odoo-erp-mcp?style=flat-square)](https://github.com/dimastriann/odoo-erp-mcp/releases)
+[![License](https://img.shields.io/github/license/dimastriann/odoo-erp-mcp?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square)](#-download)
+
 ## 🚀 Features
 
 - **Standard CRUD**: Search, Create, Update, and Delete any Odoo model.
@@ -11,6 +15,8 @@ A high-performance, secure Model Context Protocol (MCP) server built in Rust for
     - `copy`: Quickly duplicate existing records.
     - `get_metadata`: Inspect model structures and field definitions.
 - **Web Configuration UI**: Modern, dark/light mode interface at `http://localhost:3333` to manage multiple Odoo instances and custom AI prompts.
+- **Multi‑Instance Active Management**: Each instance can be toggled active/inactive, and the server routes calls to the selected active instance.
+- **Global & Instance‑Specific Tool Permissions**: Set a global default mode (CRUD or Read‑Only) and override per instance with its own mode or explicit allowed tools list.
 - **Protocol Version 2025-11-25**: Built on the latest stable MCP specification for reliability and rich metadata support.
 
 ## 🛠 Tech Stack
