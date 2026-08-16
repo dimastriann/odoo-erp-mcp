@@ -3,286 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Odoo MCP Config</title>
+    <title>Odoo MCP Admin</title>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.31/dist/vue.global.prod.js"></script>
-    <style>
-        :root { --bg: #ffffff; --text: #1a202c; }
-        .dark { --bg: #1a202c; --text: #f7fafc; }
-        body { background-color: var(--bg); color: var(--text); transition: background-color 0.3s, color 0.3s; }
-        .card { background-color: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-    </style>
+    <link href="/styles.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.2.31/dist/vue.global.prod.js" defer></script>
+    <script src="/app.js" defer></script>
 </head>
-<body class="min-h-screen p-8 transition-colors duration-300">
-    <div id="app" class="max-w-4xl mx-auto">
-        <header class="flex justify-between items-center mb-8">
-            <div>
-                <h1 class="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">Odoo MCP Server</h1>
-                <p class="text-gray-500 mt-2">Manage Odoo instances, tool permissions & AI prompts</p>
+<body class="min-h-screen">
+<div id="app" v-cloak>
+    <section v-if="!authenticated" class="login-shell">
+        <form @submit.prevent="login" class="panel login-card">
+            <div class="brand-mark">O</div>
+            <h1 class="text-2xl font-bold mt-5">Odoo MCP Admin</h1>
+            <p class="muted text-sm mt-2 mb-6">Sign in to manage your connections and prompts.</p>
+            <div class="space-y-4">
+                <label class="field"><span>Username</span><input v-model="loginForm.username" autocomplete="username" required></label>
+                <label class="field"><span>Password</span><input v-model="loginForm.password" type="password" autocomplete="current-password" required></label>
+                <p v-if="loginError" class="text-red-400 text-sm">{{ loginError }}</p>
+                <button class="button primary w-full" type="submit">Sign in</button>
             </div>
-            <button @click="toggleDarkMode" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition">
-                <span v-if="isDark">🌞</span><span v-else>🌙</span>
-            </button>
-        </header>
+        </form>
+    </section>
 
-        <!-- Global Settings Bar -->
-        <section class="card p-4 rounded-xl mb-8 flex justify-between items-center border border-gray-700">
-            <div class="flex items-center gap-3">
-                <span class="text-sm font-semibold text-gray-400">Global Default Mode:</span>
-                <span class="px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider bg-purple-900 text-purple-200 border border-purple-700">
-                    {{ config.global_settings?.default_mode || 'crud' }}
-                </span>
+    <template v-else>
+        <aside class="sidebar">
+            <div><div class="brand-mark small">O</div><strong>Odoo MCP</strong></div>
+            <nav>
+                <a href="#instances">Instances <span>{{ config.instances.length }}</span></a>
+                <a href="#prompts">Prompts <span>{{ config.prompts.length }}</span></a>
+            </nav>
+            <div class="sidebar-footer">
+                <span class="version-label">Version {{ serverVersion }}</span>
+                <button @click="logout" class="button ghost w-full">Sign out</button>
             </div>
-            <div class="flex items-center gap-2">
-                <label class="text-xs text-gray-400">Change Default:</label>
-                <select @change="updateGlobalMode($event.target.value)" :value="config.global_settings?.default_mode || 'crud'" class="bg-gray-800 border border-gray-700 text-xs text-white rounded p-1.5 focus:outline-none">
-                    <option value="crud">CRUD (Full Access)</option>
-                    <option value="read_only">Read Only</option>
-                </select>
-            </div>
-        </section>
+        </aside>
 
-        <!-- Instances Section -->
-        <section class="mb-12">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-semibold">Odoo Instances</h2>
-                <button @click="openInstanceModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition shadow-lg">
-                    + Add Instance
-                </button>
-            </div>
-            
-            <div class="grid gap-4">
-                <div v-for="inst in config.instances" :key="inst.id" 
-                     class="card p-6 rounded-xl flex justify-between items-center group transition transform hover:scale-101 border border-gray-700">
-                    <div class="flex items-center gap-4">
-                        <div :class="inst.active ? 'bg-green-500' : 'bg-gray-500'" class="w-3 h-3 rounded-full shadow-glow"></div>
-                        <div>
-                            <div class="flex items-center gap-3">
-                                <h3 class="text-xl font-bold">{{ inst.name }}</h3>
-                                <!-- Mode Badge -->
-                                <span v-if="getInstanceMode(inst) === 'read_only'" class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-amber-900 text-amber-300 border border-amber-700">
-                                    Read Only
-                                </span>
-                                <span v-else class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-emerald-900 text-emerald-300 border border-emerald-700">
-                                    CRUD
-                                </span>
-                                <span v-if="!inst.mode || inst.mode === 'inherit'" class="text-xs text-gray-500">(Inherited)</span>
-                            </div>
-                            <p class="text-gray-400 text-sm mt-1">{{ inst.url }} ({{ inst.db }})</p>
-                        </div>
-                    </div>
-                    <div class="flex gap-4 items-center">
-                        <button @click="toggleActive(inst.id)" 
-                                :class="inst.active ? 'text-green-300 bg-green-900 border-green-700' : 'text-gray-400 bg-gray-800 border-gray-700'" 
-                                class="text-xs font-bold px-3 py-1.5 rounded-full uppercase tracking-wider border hover:opacity-80 transition">
-                            {{ inst.active ? '✓ Active' : 'Inactive' }}
-                        </button>
-                        <button @click="openInstanceModal(inst)" class="text-sm text-yellow-500 hover:text-yellow-400 font-medium">Edit</button>
-                        <button @click="deleteInstance(inst.id)" class="text-red-500 hover:text-red-400 transition opacity-0 group-hover:opacity-100">Delete</button>
-                    </div>
+        <main class="content">
+            <header class="page-header">
+                <div><p class="eyebrow">Configuration</p><h1>Odoo workspace</h1><p class="muted">Manage connections, permissions, and reusable AI prompts.</p></div>
+                <button @click="toggleDarkMode" class="icon-button" :aria-label="isDark ? 'Use light theme' : 'Use dark theme'">{{ isDark ? '☀' : '☾' }}</button>
+            </header>
 
+            <section class="stats-grid">
+                <article class="panel stat"><span>Instances</span><strong>{{ config.instances.length }}</strong></article>
+                <article class="panel stat"><span>Active</span><strong>{{ activeCount }}</strong></article>
+                <article class="panel stat"><span>Default access</span><strong class="capitalize">{{ displayMode(config.global_settings?.default_mode) }}</strong></article>
+            </section>
+
+            <section id="instances" class="section-block">
+                <div class="section-heading">
+                    <div><h2>Odoo instances</h2><p class="muted text-sm">Choose which environments the MCP server can access.</p></div>
+                    <button @click="openInstanceModal()" class="button primary">+ Add instance</button>
                 </div>
-            </div>
-        </section>
+                <div class="toolbar panel">
+                    <input v-model="instanceSearch" class="search" type="search" aria-label="Search Odoo instances" placeholder="Search instances by name, URL, database, or username…">
+                    <select @change="updateGlobalMode($event.target.value)" :value="config.global_settings?.default_mode || 'crud'">
+                        <option value="crud">Default: Full access</option><option value="read_only">Default: Read only</option>
+                    </select>
+                </div>
+                <div v-if="filteredInstances.length" class="instance-list">
+                    <article v-for="inst in filteredInstances" :key="inst.id" class="panel instance-row">
+                        <div class="instance-main"><span :class="['status-dot', { active: inst.active }]"></span><div><h3>{{ inst.name }}</h3><p class="muted truncate">{{ inst.url }} · {{ inst.db }}</p></div></div>
+                        <div class="instance-meta"><span :class="['badge', getInstanceMode(inst)]">{{ displayMode(getInstanceMode(inst)) }}</span><span class="muted text-sm">{{ inst.username }}</span></div>
+                        <div class="actions"><button @click="toggleActive(inst.id)" class="button ghost">{{ inst.active ? 'Active' : 'Enable' }}</button><button @click="openInstanceModal(inst)" class="button ghost">Edit</button><button @click="deleteInstance(inst.id)" class="button danger">Delete</button></div>
+                    </article>
+                </div>
+                <div v-else class="empty panel"><h3>{{ instanceSearch ? 'No matching instances' : 'No instances yet' }}</h3><p class="muted">{{ instanceSearch ? 'Try another search term.' : 'Add your first Odoo connection to get started.' }}</p></div>
+            </section>
 
-        <!-- Prompts Section -->
-        <section>
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-semibold">Odoo AI Prompts</h2>
-                <button @click="openPromptModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition shadow-lg">
-                    + Add Prompt
-                </button>
-            </div>
-            
-            <div class="grid gap-4">
-                <div v-for="p in config.prompts" :key="p.id" 
-                     class="card p-6 rounded-xl transition border border-gray-700">
-                    <div class="flex justify-between items-start mb-4">
-                        <h3 class="text-xl font-bold">{{ p.name }}</h3>
-                        <div class="flex gap-4">
-                            <button @click="openPromptModal(p)" class="text-yellow-500 hover:text-yellow-400">Edit</button>
-                            <button @click="deletePrompt(p.id)" class="text-red-500 hover:text-red-400 transition">Delete</button>
-                        </div>
-                    </div>
-                    <p class="text-gray-400 text-sm whitespace-pre-wrap">{{ p.content }}</p>
-                </div>
-            </div>
-        </section>
+            <section id="prompts" class="section-block">
+                <div class="section-heading"><div><h2>AI prompts</h2><p class="muted text-sm">Reusable instructions exposed through MCP.</p></div><button @click="openPromptModal()" class="button primary">+ Add prompt</button></div>
+                <div class="prompt-grid"><article v-for="p in config.prompts" :key="p.id" class="panel prompt-card"><div><h3>{{ p.name }}</h3><p class="muted prompt-preview">{{ p.content }}</p></div><div class="actions"><button @click="openPromptModal(p)" class="button ghost">Edit</button><button @click="deletePrompt(p.id)" class="button danger">Delete</button></div></article></div>
+                <div v-if="!config.prompts.length" class="empty panel"><h3>No prompts yet</h3><p class="muted">Create a reusable prompt for your MCP clients.</p></div>
+            </section>
+        </main>
 
-        <!-- Instance Modal -->
-        <div v-if="showInstanceModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div class="bg-gray-900 border border-gray-700 p-8 rounded-2xl w-full max-w-md shadow-2xl">
-                <h3 class="text-2xl font-bold mb-6">{{ newInstance.id ? 'Edit Odoo Instance' : 'New Odoo Instance' }}</h3>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-400 mb-1">Instance Name</label>
-                        <input v-model="newInstance.name" placeholder="Name (e.g. My Odoo)" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-400 mb-1">Odoo URL</label>
-                        <input v-model="newInstance.url" placeholder="URL (e.g. https://odoo.id)" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-400 mb-1">Database</label>
-                        <input v-model="newInstance.db" placeholder="Database Name" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-400 mb-1">Username</label>
-                        <input v-model="newInstance.username" placeholder="Username" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-400 mb-1">Password / API Key</label>
-                        <input v-model="newInstance.password" type="password" placeholder="Password / API Key" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-400 mb-1">Tool Access Mode</label>
-                        <select v-model="newInstance.mode" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
-                            <option value="inherit">Inherit (Global Default)</option>
-                            <option value="crud">CRUD (Full Read & Write Access)</option>
-                            <option value="read_only">Read Only (Search, Read, Aggregate)</option>
-                        </select>
-                    </div>
+        <div v-if="showInstanceModal" class="modal-backdrop" @click.self="showInstanceModal = false">
+            <form @submit.prevent="saveInstance" class="panel modal-card">
+                <div class="modal-heading"><div><p class="eyebrow">Connection</p><h2>{{ newInstance.id ? 'Edit instance' : 'Add instance' }}</h2></div><button type="button" @click="showInstanceModal = false" class="icon-button">×</button></div>
+                <div class="form-grid">
+                    <label class="field full"><span>Instance name</span><input v-model.trim="newInstance.name" placeholder="Production Odoo" required></label>
+                    <label class="field full"><span>Odoo URL</span><input v-model.trim="newInstance.url" type="url" placeholder="https://example.odoo.com" required></label>
+                    <label class="field"><span>Database</span><input v-model.trim="newInstance.db" required></label>
+                    <label class="field"><span>Username</span><input v-model.trim="newInstance.username" autocomplete="username" required></label>
+                    <label class="field full"><span>Password / API key</span><input v-model="newInstance.password" type="password" autocomplete="new-password" :placeholder="newInstance.id ? 'Leave blank to keep current secret' : 'Required'" :required="!newInstance.id"><small v-if="newInstance.id && newInstance.has_password">A secret is already stored.</small></label>
+                    <label class="field full"><span>Tool access</span><select v-model="newInstance.mode"><option value="inherit">Inherit global default</option><option value="crud">Full CRUD access</option><option value="read_only">Read only</option></select></label>
                 </div>
-                <div class="flex justify-end gap-4 mt-8">
-                    <button @click="showInstanceModal = false" class="text-gray-400 hover:text-white px-4 py-2">Cancel</button>
-                    <button @click="saveInstance" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition">Save Instance</button>
-                </div>
-            </div>
+                <p v-if="formError" class="text-red-400 text-sm mt-4">{{ formError }}</p>
+                <div class="modal-actions"><button type="button" @click="showInstanceModal = false" class="button ghost">Cancel</button><button class="button primary">Save instance</button></div>
+            </form>
         </div>
 
-        <!-- Prompt Modal -->
-        <div v-if="showPromptModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div class="bg-gray-900 border border-gray-700 p-8 rounded-2xl w-full max-w-lg shadow-2xl">
-                <h3 class="text-2xl font-bold mb-6">{{ newPrompt.id ? 'Edit Odoo Prompt' : 'New Odoo Prompt' }}</h3>
-                <div class="space-y-4">
-                    <input v-model="newPrompt.name" placeholder="Prompt Name" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white">
-                    <textarea v-model="newPrompt.content" placeholder="Prompt Content..." rows="6" class="w-full bg-gray-800 border border-gray-700 p-3 rounded-lg text-white"></textarea>
-                </div>
-                <div class="flex justify-end gap-4 mt-8">
-                    <button @click="showPromptModal = false" class="text-gray-400 hover:text-white px-4 py-2">Cancel</button>
-                    <button @click="savePrompt" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg transition">Save Prompt</button>
-                </div>
-            </div>
+        <div v-if="showPromptModal" class="modal-backdrop" @click.self="showPromptModal = false">
+            <form @submit.prevent="savePrompt" class="panel modal-card">
+                <div class="modal-heading"><div><p class="eyebrow">Reusable instruction</p><h2>{{ newPrompt.id ? 'Edit prompt' : 'Add prompt' }}</h2></div><button type="button" @click="showPromptModal = false" class="icon-button">×</button></div>
+                <label class="field"><span>Prompt name</span><input v-model.trim="newPrompt.name" required></label>
+                <label class="field mt-4"><span>Prompt content</span><textarea v-model.trim="newPrompt.content" rows="8" required></textarea></label>
+                <p v-if="formError" class="text-red-400 text-sm mt-4">{{ formError }}</p>
+                <div class="modal-actions"><button type="button" @click="showPromptModal = false" class="button ghost">Cancel</button><button class="button primary">Save prompt</button></div>
+            </form>
         </div>
-    </div>
-
-    <script>
-        const { createApp, ref, onMounted } = Vue;
-
-        createApp({
-            setup() {
-                const isDark = ref(true);
-                const config = ref({ global_settings: { default_mode: 'crud' }, instances: [], prompts: [] });
-                const showInstanceModal = ref(false);
-                const showPromptModal = ref(false);
-                const newInstance = ref({ id: '', name: '', url: '', db: '', username: '', password: '', active: false, mode: 'inherit' });
-                const newPrompt = ref({ id: '', name: '', content: '' });
-
-                const fetchConfig = async () => {
-                    console.log("[UI] Fetching config...");
-                    const res = await fetch('/api/config');
-                    const data = await res.json();
-                    config.value = data;
-                };
-
-                const getInstanceMode = (inst) => {
-                    if (inst.mode && inst.mode !== 'inherit') {
-                        return inst.mode;
-                    }
-                    return config.value.global_settings?.default_mode || 'crud';
-                };
-
-                const updateGlobalMode = async (mode) => {
-                    await fetch('/api/global-settings', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ default_mode: mode })
-                    });
-                    await fetchConfig();
-                };
-
-                const openInstanceModal = (item = null) => {
-                    if (item) {
-                        newInstance.value = { ...item, mode: item.mode || 'inherit' };
-                    } else {
-                        newInstance.value = { id: '', name: '', url: '', db: '', username: '', password: '', active: false, mode: 'inherit' };
-                    }
-                    showInstanceModal.value = true;
-                };
-
-                const openPromptModal = (item = null) => {
-                    if (item) {
-                        newPrompt.value = { ...item };
-                    } else {
-                        newPrompt.value = { id: '', name: '', content: '' };
-                    }
-                    showPromptModal.value = true;
-                };
-
-                const saveInstance = async () => {
-                    const res = await fetch('/api/instances', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(newInstance.value)
-                    });
-                    if (res.ok) {
-                        showInstanceModal.value = false;
-                        await fetchConfig();
-                    } else {
-                        alert("Failed to save instance");
-                    }
-                };
-
-                const savePrompt = async () => {
-                    const res = await fetch('/api/prompts', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(newPrompt.value)
-                    });
-                    if (res.ok) {
-                        showPromptModal.value = false;
-                        await fetchConfig();
-                    } else {
-                        alert("Failed to save prompt");
-                    }
-                };
-
-                const deleteInstance = async (id) => {
-                    if (!confirm("Are you sure?")) return;
-                    await fetch(`/api/instances/${id}`, { method: 'DELETE' });
-                    await fetchConfig();
-                };
-
-                const deletePrompt = async (id) => {
-                    if (!confirm("Are you sure?")) return;
-                    await fetch(`/api/prompts/${id}`, { method: 'DELETE' });
-                    await fetchConfig();
-                };
-
-                const toggleActive = async (id) => {
-                    await fetch(`/api/instances/${id}/active`, { method: 'POST' });
-                    await fetchConfig();
-                };
-
-                const toggleDarkMode = () => {
-                    isDark.value = !isDark.value;
-                    document.body.classList.toggle('dark', isDark.value);
-                };
-
-                onMounted(() => {
-                    document.body.classList.add('dark');
-                    fetchConfig();
-                });
-
-                return {
-                    isDark, config, showInstanceModal, showPromptModal, 
-                    newInstance, newPrompt, saveInstance, savePrompt,
-                    deleteInstance, deletePrompt, toggleActive, toggleDarkMode,
-                    openInstanceModal, openPromptModal, getInstanceMode, updateGlobalMode
-                };
-
-            }
-        }).mount('#app');
-    </script>
+    </template>
+</div>
 </body>
 </html>

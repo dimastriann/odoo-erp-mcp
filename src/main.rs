@@ -9,10 +9,19 @@ use std::sync::{Arc, RwLock};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let _ = dotenvy::dotenv();
+    let config_path = config::Config::get_path();
+    // Load .env from the same directory as config.json. In release builds this is
+    // the executable directory, independent of the MCP client's working directory.
+    if let Some(config_dir) = config_path.parent() {
+        let env_path = config_dir.join(".env");
+        match dotenvy::from_path(&env_path) {
+            Ok(_) => eprintln!("Loaded environment from: {:?}", env_path),
+            Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => eprintln!("Warning: failed to load {:?}: {}", env_path, error),
+        }
+    }
 
     // Load configuration
-    let config_path = config::Config::get_path();
     eprintln!("Loading config from: {:?}", config_path);
     let config = Config::load().expect("Failed to load config.json");
     let shared_config = Arc::new(RwLock::new(config));
