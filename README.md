@@ -214,9 +214,21 @@ cargo build --release
 The binary will be located at `./target/release/odoo-erp-mcp`.
 
 ### Deploying to Production
-1. Copy the compiled binary to your server.
-2. Copy `config.example.json` as `config.json` and fill in your credentials, or configure via the Web UI on first run.
-3. Add the binary path to your MCP client configuration.
+1. Copy the compiled binary into a dedicated folder.
+2. Put `.env` in the same folder so the Web UI credentials are found regardless of the MCP client's working directory.
+3. Copy `config.example.json` as `config.json` and fill in your Odoo credentials, or configure them through the Web UI on first run.
+4. Add the binary's absolute path to your MCP client configuration.
+
+The deployed folder should look like this (the `.exe` extension may be hidden by Windows):
+
+```text
+odoo-mcp/
+├── .env
+├── config.json
+└── odoo-erp-mcp.exe
+```
+
+![Example Windows release folder containing the environment file, Odoo configuration, and MCP executable](assets/example-mcp-folder.png)
 
 ### GitHub Actions Release
 The included workflow (`.github/workflows/release.yml`) automatically:
