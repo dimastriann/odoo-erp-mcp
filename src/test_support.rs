@@ -1,22 +1,38 @@
 use crate::config::{Config, GlobalSettings, OdooInstance};
-use axum::{Json, Router, routing::post};
+use axum::{Json, Router, extract::State, routing::post};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
 
 pub(crate) struct MockOdooServer {
     base_url: String,
+    requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
     task: tokio::task::JoinHandle<()>,
+}
+
+#[derive(Clone)]
+struct MockOdooState {
+    response: Value,
+    requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
+}
+
+async fn handle_mock_rpc(
+    State(state): State<MockOdooState>,
+    Json(request): Json<Value>,
+) -> Json<Value> {
+    state.requests.lock().await.push(request);
+    Json(state.response)
 }
 
 impl MockOdooServer {
     pub(crate) async fn start(response: Value) -> Self {
-        let app = Router::new().route(
-            "/jsonrpc",
-            post(move || {
-                let response = response.clone();
-                async move { Json(response) }
-            }),
-        );
+        let requests = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let state = MockOdooState {
+            response,
+            requests: Arc::clone(&requests),
+        };
+        let app = Router::new()
+            .route("/jsonrpc", post(handle_mock_rpc))
+            .with_state(state);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("mock Odoo server should bind");
@@ -31,12 +47,17 @@ impl MockOdooServer {
 
         Self {
             base_url: format!("http://{address}"),
+            requests,
             task,
         }
     }
 
     pub(crate) fn base_url(&self) -> &str {
         &self.base_url
+    }
+
+    pub(crate) async fn requests(&self) -> Vec<Value> {
+        self.requests.lock().await.clone()
     }
 }
 
@@ -114,5 +135,9 @@ mod tests {
             .expect("mock response should contain JSON");
 
         assert_eq!(response["result"], 7);
+        assert_eq!(
+            server.requests().await,
+            vec![json!({"jsonrpc": "2.0", "id": 1, "method": "call"})]
+        );
     }
 }
