@@ -51,7 +51,7 @@ async fn handle_request(
                 "protocolVersion": "2025-11-25",
                 "serverInfo": {
                     "name": "odoo-erp-mcp",
-                    "version": "1.1.0"
+                    "version": env!("CARGO_PKG_VERSION")
                 },
                 "capabilities": {
                     "tools": {}
@@ -464,6 +464,10 @@ mod tests {
         let resp = handle_request(req, &config, &client_manager).await.unwrap();
         assert_eq!(resp["result"]["protocolVersion"], "2025-11-25");
         assert_eq!(resp["result"]["serverInfo"]["name"], "odoo-erp-mcp");
+        assert_eq!(
+            resp["result"]["serverInfo"]["version"],
+            env!("CARGO_PKG_VERSION")
+        );
     }
 
     #[tokio::test]
