@@ -39,3 +39,16 @@ jobs:
 
       - name: Check lints
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run tests
+        run: cargo test --all-targets --all-features
