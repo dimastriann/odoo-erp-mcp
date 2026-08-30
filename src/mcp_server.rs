@@ -415,45 +415,11 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Config, GlobalSettings, OdooInstance};
-
-    fn create_test_config() -> Arc<RwLock<Config>> {
-        let config = Config {
-            global_settings: GlobalSettings {
-                default_mode: "crud".to_string(),
-            },
-            instances: vec![
-                OdooInstance {
-                    id: "1".into(),
-                    name: "CRUD Instance".into(),
-                    url: "https://odoo-crud.com".into(),
-                    db: "db1".into(),
-                    username: "admin".into(),
-                    password: "pass".into(),
-                    active: true,
-                    mode: Some("crud".into()),
-                    allowed_tools: None,
-                },
-                OdooInstance {
-                    id: "2".into(),
-                    name: "Read Only Instance".into(),
-                    url: "https://odoo-readonly.com".into(),
-                    db: "db2".into(),
-                    username: "admin".into(),
-                    password: "pass".into(),
-                    active: true,
-                    mode: Some("read_only".into()),
-                    allowed_tools: None,
-                },
-            ],
-            prompts: vec![],
-        };
-        Arc::new(RwLock::new(config))
-    }
+    use crate::test_support::multi_instance_config;
 
     #[tokio::test]
     async fn test_initialize_request() {
-        let config = create_test_config();
+        let config = multi_instance_config();
         let client_manager = ClientManager::new();
         let req = json!({
             "jsonrpc": "2.0",
@@ -472,7 +438,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_initialized_notification() {
-        let config = create_test_config();
+        let config = multi_instance_config();
         let client_manager = ClientManager::new();
         let req = json!({
             "jsonrpc": "2.0",
@@ -485,7 +451,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tools_list_request() {
-        let config = create_test_config();
+        let config = multi_instance_config();
         let client_manager = ClientManager::new();
         let req = json!({
             "jsonrpc": "2.0",
@@ -505,7 +471,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tools_call_permission_denied_on_readonly() {
-        let config = create_test_config();
+        let config = multi_instance_config();
         let client_manager = ClientManager::new();
         let req = json!({
             "jsonrpc": "2.0",
@@ -528,7 +494,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tools_call_unknown_instance() {
-        let config = create_test_config();
+        let config = multi_instance_config();
         let client_manager = ClientManager::new();
         let req = json!({
             "jsonrpc": "2.0",
@@ -550,7 +516,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_unknown_method() {
-        let config = create_test_config();
+        let config = multi_instance_config();
         let client_manager = ClientManager::new();
         let req = json!({
             "jsonrpc": "2.0",

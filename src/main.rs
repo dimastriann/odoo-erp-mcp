@@ -1,6 +1,8 @@
 mod config;
 mod mcp_server;
 mod odoo_client;
+#[cfg(test)]
+mod test_support;
 mod views;
 
 use config::Config;

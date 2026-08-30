@@ -76,7 +76,7 @@ Goal: Establish a modular, testable foundation before adding production features
 
 ## 0.2 Test infrastructure
 
-- [ ] S0-09 — Create a reusable multi-instance configuration fixture.
+- [x] S0-09 — Create a reusable multi-instance configuration fixture.
 - [ ] S0-10 — Create a mock Odoo JSON-RPC server.
 - [ ] S0-11 — Add an RPC request recorder for integration tests.
 - [ ] S0-12 — Add successful Odoo response fixtures.
@@ -674,7 +674,7 @@ Affected stages, configuration, or compatibility.
 
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
-| Stage 0 — Baseline Engineering and Testability | In progress | 8/23 | Repository baseline complete. |
+| Stage 0 — Baseline Engineering and Testability | In progress | 9/23 | Repository baseline complete. |
 | Stage 1 — Structured Errors and RPC Reliability | Not started | 0/29 | |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
