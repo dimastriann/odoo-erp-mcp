@@ -57,7 +57,7 @@ Configure the instance URL, database, Odoo username, password or API key, and to
 
 ### Prerequisites
 
-- [Rust & Cargo](https://rustup.rs/) (Stable)
+- [Rust & Cargo](https://rustup.rs/) 1.85 or newer
 - An Odoo Instance (v12 to v19+ supported)
 
 ### Local Development

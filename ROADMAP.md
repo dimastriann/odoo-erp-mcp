@@ -67,7 +67,7 @@ Goal: Establish a modular, testable foundation before adding production features
 
 - [x] S0-01 — Align the Cargo, MCP `serverInfo`, UI, and documentation versions.
 - [x] S0-02 — Use `CARGO_PKG_VERSION` as the single runtime version source.
-- [ ] S0-03 — Document the minimum supported Rust version.
+- [x] S0-03 — Document the minimum supported Rust version.
 - [ ] S0-04 — Add `.editorconfig` if it is not already present.
 - [ ] S0-05 — Add CI formatting checks.
 - [ ] S0-06 — Add CI Clippy checks with warnings treated as errors.
@@ -674,7 +674,7 @@ Affected stages, configuration, or compatibility.
 
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
-| Stage 0 — Baseline Engineering and Testability | In progress | 2/23 | |
+| Stage 0 — Baseline Engineering and Testability | In progress | 3/23 | |
 | Stage 1 — Structured Errors and RPC Reliability | Not started | 0/29 | |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
