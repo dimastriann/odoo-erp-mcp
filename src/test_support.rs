@@ -15,6 +15,29 @@ pub(crate) fn authentication_success(uid: i64) -> Value {
     json_rpc_success(Value::from(uid))
 }
 
+fn odoo_error(name: &str, message: &str) -> Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "error": {
+            "code": 200,
+            "message": "Odoo Server Error",
+            "data": {
+                "name": name,
+                "message": message
+            }
+        }
+    })
+}
+
+pub(crate) fn validation_error(message: &str) -> Value {
+    odoo_error("odoo.exceptions.ValidationError", message)
+}
+
+pub(crate) fn access_error(message: &str) -> Value {
+    odoo_error("odoo.exceptions.AccessError", message)
+}
+
 pub(crate) struct MockOdooServer {
     base_url: String,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
@@ -157,6 +180,21 @@ mod tests {
                 "id": 1,
                 "result": [{"id": 42, "name": "Example"}]
             })
+        );
+    }
+
+    #[test]
+    fn error_fixtures_identify_odoo_exception_types() {
+        let validation = validation_error("Invalid quantity");
+        let access = access_error("Access denied");
+
+        assert_eq!(
+            validation["error"]["data"]["name"],
+            "odoo.exceptions.ValidationError"
+        );
+        assert_eq!(
+            access["error"]["data"]["name"],
+            "odoo.exceptions.AccessError"
         );
     }
 }
