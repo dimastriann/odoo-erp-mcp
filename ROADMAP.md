@@ -72,7 +72,7 @@ Goal: Establish a modular, testable foundation before adding production features
 - [x] S0-05 — Add CI formatting checks.
 - [x] S0-06 — Add CI Clippy checks with warnings treated as errors.
 - [x] S0-07 — Add CI unit and integration test execution.
-- [ ] S0-08 — Add debug and release build verification.
+- [x] S0-08 — Add debug and release build verification.
 
 ## 0.2 Test infrastructure
 
@@ -674,7 +674,7 @@ Affected stages, configuration, or compatibility.
 
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
-| Stage 0 — Baseline Engineering and Testability | In progress | 7/23 | |
+| Stage 0 — Baseline Engineering and Testability | In progress | 8/23 | Repository baseline complete. |
 | Stage 1 — Structured Errors and RPC Reliability | Not started | 0/29 | |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |

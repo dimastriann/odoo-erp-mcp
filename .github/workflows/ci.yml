@@ -52,3 +52,19 @@ jobs:
 
       - name: Run tests
         run: cargo test --all-targets --all-features
+
+  builds:
+    name: Debug and release builds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build debug targets
+        run: cargo build --all-targets --all-features
+
+      - name: Build release targets
+        run: cargo build --release --all-targets --all-features
