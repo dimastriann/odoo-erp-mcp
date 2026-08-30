@@ -28,10 +28,10 @@ impl OdooInstance {
     }
 
     pub fn is_tool_allowed(&self, tool_name: &str, global_default_mode: &str) -> bool {
-        if let Some(ref allowed) = self.allowed_tools {
-            if !allowed.is_empty() {
-                return allowed.iter().any(|t| t == tool_name);
-            }
+        if let Some(ref allowed) = self.allowed_tools
+            && !allowed.is_empty()
+        {
+            return allowed.iter().any(|t| t == tool_name);
         }
 
         let mode = self.get_mode(global_default_mode);
@@ -40,7 +40,7 @@ impl OdooInstance {
                 let write_tools = ["odoo-create", "odoo-update", "odoo-delete", "odoo-copy"];
                 !write_tools.contains(&tool_name)
             }
-            "crud" | _ => true,
+            _ => true,
         }
     }
 }
