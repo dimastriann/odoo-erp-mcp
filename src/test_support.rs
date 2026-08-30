@@ -3,6 +3,18 @@ use axum::{Json, Router, extract::State, routing::post};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
 
+pub(crate) fn json_rpc_success(result: Value) -> Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": result
+    })
+}
+
+pub(crate) fn authentication_success(uid: i64) -> Value {
+    json_rpc_success(Value::from(uid))
+}
+
 pub(crate) struct MockOdooServer {
     base_url: String,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
@@ -117,12 +129,7 @@ mod tests {
 
     #[tokio::test]
     async fn mock_server_returns_configured_json_rpc_response() {
-        let server = MockOdooServer::start(json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "result": 7
-        }))
-        .await;
+        let server = MockOdooServer::start(authentication_success(7)).await;
 
         let response: Value = reqwest::Client::new()
             .post(format!("{}/jsonrpc", server.base_url()))
@@ -138,6 +145,18 @@ mod tests {
         assert_eq!(
             server.requests().await,
             vec![json!({"jsonrpc": "2.0", "id": 1, "method": "call"})]
+        );
+    }
+
+    #[test]
+    fn success_fixture_wraps_arbitrary_results() {
+        assert_eq!(
+            json_rpc_success(json!([{"id": 42, "name": "Example"}])),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": [{"id": 42, "name": "Example"}]
+            })
         );
     }
 }
