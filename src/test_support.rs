@@ -2,6 +2,7 @@ use crate::config::{Config, GlobalSettings, OdooInstance};
 use axum::{Json, Router, extract::State, routing::post};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 pub(crate) fn json_rpc_success(result: Value) -> Value {
     serde_json::json!({
@@ -38,6 +39,10 @@ pub(crate) fn access_error(message: &str) -> Value {
     odoo_error("odoo.exceptions.AccessError", message)
 }
 
+pub(crate) fn connection_failure_url() -> &'static str {
+    "http://127.0.0.1:0"
+}
+
 pub(crate) struct MockOdooServer {
     base_url: String,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
@@ -48,6 +53,7 @@ pub(crate) struct MockOdooServer {
 struct MockOdooState {
     response: Value,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
+    response_delay: Duration,
 }
 
 async fn handle_mock_rpc(
@@ -55,15 +61,21 @@ async fn handle_mock_rpc(
     Json(request): Json<Value>,
 ) -> Json<Value> {
     state.requests.lock().await.push(request);
+    tokio::time::sleep(state.response_delay).await;
     Json(state.response)
 }
 
 impl MockOdooServer {
     pub(crate) async fn start(response: Value) -> Self {
+        Self::start_delayed(response, Duration::ZERO).await
+    }
+
+    pub(crate) async fn start_delayed(response: Value, response_delay: Duration) -> Self {
         let requests = Arc::new(tokio::sync::Mutex::new(Vec::new()));
         let state = MockOdooState {
             response,
             requests: Arc::clone(&requests),
+            response_delay,
         };
         let app = Router::new()
             .route("/jsonrpc", post(handle_mock_rpc))
@@ -196,5 +208,27 @@ mod tests {
             access["error"]["data"]["name"],
             "odoo.exceptions.AccessError"
         );
+    }
+
+    #[tokio::test]
+    async fn delayed_server_and_unreachable_url_simulate_transport_failures() {
+        let server =
+            MockOdooServer::start_delayed(authentication_success(7), Duration::from_millis(100))
+                .await;
+        let timeout_client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(10))
+            .build()
+            .unwrap();
+
+        let timeout = timeout_client
+            .post(format!("{}/jsonrpc", server.base_url()))
+            .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "call"}))
+            .send()
+            .await
+            .unwrap_err();
+        let connection = reqwest::get(connection_failure_url()).await.unwrap_err();
+
+        assert!(timeout.is_timeout());
+        assert!(connection.is_connect());
     }
 }
