@@ -461,12 +461,38 @@ mod tests {
 
         let resp = handle_request(req, &config, &client_manager).await.unwrap();
         let tools = resp["result"]["tools"].as_array().unwrap();
-        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        let expected_contracts = [
+            ("odoo-search-read", &["model", "domain", "fields"][..]),
+            ("odoo-search-count", &["model", "domain"][..]),
+            (
+                "odoo-read-group",
+                &["model", "domain", "fields", "groupby"][..],
+            ),
+            ("odoo-create", &["model", "vals"][..]),
+            ("odoo-copy", &["model", "id", "vals"][..]),
+            ("odoo-update", &["model", "ids", "vals"][..]),
+            ("odoo-delete", &["model", "ids"][..]),
+            ("odoo-get-metadata", &["model"][..]),
+            ("odoo-search", &["model", "domain"][..]),
+            ("odoo-read", &["model", "ids"][..]),
+        ];
 
-        assert!(names.contains(&"odoo-search-read"));
-        assert!(names.contains(&"odoo-create"));
-        assert!(names.contains(&"odoo-update"));
-        assert!(names.contains(&"odoo-delete"));
+        assert_eq!(tools.len(), expected_contracts.len());
+        for (name, required) in expected_contracts {
+            let tool = tools
+                .iter()
+                .find(|tool| tool["name"] == name)
+                .unwrap_or_else(|| panic!("missing tool contract: {name}"));
+
+            assert!(
+                tool["description"]
+                    .as_str()
+                    .is_some_and(|text| !text.is_empty())
+            );
+            assert_eq!(tool["inputSchema"]["type"], "object");
+            assert!(tool["inputSchema"]["properties"].is_object());
+            assert_eq!(tool["inputSchema"]["required"], json!(required));
+        }
     }
 
     #[tokio::test]

@@ -82,7 +82,7 @@ Goal: Establish a modular, testable foundation before adding production features
 - [x] S0-12 — Add successful Odoo response fixtures.
 - [x] S0-13 — Add Odoo validation and access-error fixtures.
 - [x] S0-14 — Add timeout and connection-failure fixtures.
-- [ ] S0-15 — Add contract tests for all existing MCP tools.
+- [x] S0-15 — Add contract tests for all existing MCP tools.
 
 ## 0.3 MCP modularization
 
@@ -98,7 +98,7 @@ Goal: Establish a modular, testable foundation before adding production features
 ## Stage 0 Definition of Done
 
 - [ ] Versions are consistent across the application.
-- [ ] All existing tools have contract tests.
+- [x] All existing tools have contract tests.
 - [ ] The dispatcher no longer contains all business logic.
 - [ ] CI verifies formatting, linting, tests, and builds.
 
@@ -674,7 +674,7 @@ Affected stages, configuration, or compatibility.
 
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
-| Stage 0 — Baseline Engineering and Testability | In progress | 14/23 | Repository baseline complete. |
+| Stage 0 — Baseline Engineering and Testability | In progress | 15/23 | Baseline and test infrastructure complete. |
 | Stage 1 — Structured Errors and RPC Reliability | Not started | 0/29 | |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
