@@ -5,6 +5,7 @@ mod odoo_client;
 mod test_support;
 mod tool_arguments;
 mod tool_catalog;
+mod tool_result;
 mod views;
 
 use config::Config;

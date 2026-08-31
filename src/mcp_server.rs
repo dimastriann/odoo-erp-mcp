@@ -5,6 +5,7 @@ use crate::tool_arguments::{
     SearchReadArgs, UpdateArgs,
 };
 use crate::tool_catalog::{ToolName, tool_definitions};
+use crate::tool_result::ToolExecutionResult;
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -153,7 +154,9 @@ async fn handle_request(
                 }
             };
 
-            let result = execute_tool(tool_name, arguments, &odoo_client).await;
+            let result = execute_tool(tool_name, arguments, &odoo_client)
+                .await
+                .into_text();
 
             Some(json!({
                 "jsonrpc": "2.0",
@@ -176,137 +179,117 @@ async fn handle_request(
     }
 }
 
-async fn execute_tool(name: ToolName, arguments: Value, odoo: &OdooClient) -> String {
+async fn execute_tool(name: ToolName, arguments: Value, odoo: &OdooClient) -> ToolExecutionResult {
     let model = arguments
         .get("model")
         .and_then(|m| m.as_str())
         .unwrap_or("");
     if model.is_empty() {
-        return "Error: Missing required parameter 'model'".to_string();
+        return ToolExecutionResult::Failure(
+            "Error: Missing required parameter 'model'".to_string(),
+        );
     }
 
     match name {
         ToolName::SearchRead => {
             let args: SearchReadArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid search-read arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("search-read", error),
             };
-            match odoo
-                .search_read(&args.model, args.domain, args.fields)
-                .await
-            {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing search_read: {}", e),
-            }
+            ToolExecutionResult::from_rpc(
+                "search_read",
+                odoo.search_read(&args.model, args.domain, args.fields)
+                    .await,
+            )
         }
         ToolName::SearchCount => {
             let args: SearchDomainArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid search-count arguments: {error}"),
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("search-count", error);
+                }
             };
-            match odoo.search_count(&args.model, args.domain).await {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing search_count: {}", e),
-            }
+            ToolExecutionResult::from_rpc(
+                "search_count",
+                odoo.search_count(&args.model, args.domain).await,
+            )
         }
         ToolName::ReadGroup => {
             let args: ReadGroupArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid read-group arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("read-group", error),
             };
-            match odoo
-                .read_group(&args.model, args.domain, args.fields, args.groupby)
-                .await
-            {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing read_group: {}", e),
-            }
+            ToolExecutionResult::from_rpc(
+                "read_group",
+                odoo.read_group(&args.model, args.domain, args.fields, args.groupby)
+                    .await,
+            )
         }
         ToolName::Create => {
             let args: CreateArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid create arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("create", error),
             };
-            match odoo.create(&args.model, Value::Object(args.vals)).await {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing create: {}", e),
-            }
+            ToolExecutionResult::from_rpc(
+                "create",
+                odoo.create(&args.model, Value::Object(args.vals)).await,
+            )
         }
         ToolName::Copy => {
             let args: CopyArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid copy arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("copy", error),
             };
-            match odoo
-                .copy(&args.model, args.id, Value::Object(args.vals))
-                .await
-            {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing copy: {}", e),
-            }
+            ToolExecutionResult::from_rpc(
+                "copy",
+                odoo.copy(&args.model, args.id, Value::Object(args.vals))
+                    .await,
+            )
         }
         ToolName::Update => {
             let args: UpdateArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid update arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("update", error),
             };
-            match odoo
-                .update(&args.model, args.ids, Value::Object(args.vals))
-                .await
-            {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing update: {}", e),
-            }
+            ToolExecutionResult::from_rpc(
+                "update",
+                odoo.update(&args.model, args.ids, Value::Object(args.vals))
+                    .await,
+            )
         }
         ToolName::Delete => {
             let args: DeleteArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid delete arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("delete", error),
             };
-            match odoo.delete(&args.model, args.ids).await {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing delete: {}", e),
-            }
+            ToolExecutionResult::from_rpc("delete", odoo.delete(&args.model, args.ids).await)
         }
         ToolName::GetMetadata => {
             let args: ModelFieldsArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid metadata arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("metadata", error),
             };
-            match odoo.get_metadata(&args.model, args.fields).await {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing get_metadata: {}", e),
-            }
+            ToolExecutionResult::from_rpc(
+                "get_metadata",
+                odoo.get_metadata(&args.model, args.fields).await,
+            )
         }
         ToolName::Search => {
             let args: SearchDomainArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid search arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("search", error),
             };
-            match odoo.search(&args.model, args.domain).await {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing search: {}", e),
-            }
+            ToolExecutionResult::from_rpc("search", odoo.search(&args.model, args.domain).await)
         }
         ToolName::Read => {
             let args: ReadArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
-                Err(error) => return format!("Error: Invalid read arguments: {error}"),
+                Err(error) => return ToolExecutionResult::invalid_arguments("read", error),
             };
-            match odoo.read(&args.model, args.ids, args.fields).await {
-                Ok(data) => serde_json::to_string_pretty(&data)
-                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                Err(e) => format!("Error executing read: {}", e),
-            }
+            ToolExecutionResult::from_rpc(
+                "read",
+                odoo.read(&args.model, args.ids, args.fields).await,
+            )
         }
     }
 }
