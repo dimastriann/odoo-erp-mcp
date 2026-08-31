@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 fn empty_array() -> Value {
     json!([])
@@ -45,4 +45,30 @@ pub(crate) struct ReadArgs {
     pub(crate) ids: Vec<i64>,
     #[serde(default = "empty_array")]
     pub(crate) fields: Value,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateArgs {
+    pub(crate) model: String,
+    pub(crate) vals: Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CopyArgs {
+    pub(crate) model: String,
+    pub(crate) id: i64,
+    pub(crate) vals: Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateArgs {
+    pub(crate) model: String,
+    pub(crate) ids: Vec<i64>,
+    pub(crate) vals: Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct DeleteArgs {
+    pub(crate) model: String,
+    pub(crate) ids: Vec<i64>,
 }

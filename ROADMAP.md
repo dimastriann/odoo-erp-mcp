@@ -89,7 +89,7 @@ Goal: Establish a modular, testable foundation before adding production features
 - [x] S0-16 — Separate tool declarations from the MCP request dispatcher.
 - [x] S0-17 — Create a typed `ToolName`.
 - [x] S0-18 — Create typed argument structures for read tools.
-- [ ] S0-19 — Create typed argument structures for write tools.
+- [x] S0-19 — Create typed argument structures for write tools.
 - [ ] S0-20 — Create a typed tool-execution result.
 - [ ] S0-21 — Separate the tool registry from the tool executor.
 - [ ] S0-22 — Remove duplicate result-serialization logic.
@@ -674,7 +674,7 @@ Affected stages, configuration, or compatibility.
 
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
-| Stage 0 — Baseline Engineering and Testability | In progress | 18/23 | Baseline and test infrastructure complete. |
+| Stage 0 — Baseline Engineering and Testability | In progress | 19/23 | Baseline and test infrastructure complete. |
 | Stage 1 — Structured Errors and RPC Reliability | Not started | 0/29 | |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |

@@ -1,7 +1,8 @@
 use crate::config::Config;
 use crate::odoo_client::{ClientManager, OdooClient};
 use crate::tool_arguments::{
-    ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchDomainArgs, SearchReadArgs,
+    CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchDomainArgs,
+    SearchReadArgs, UpdateArgs,
 };
 use crate::tool_catalog::{ToolName, tool_definitions};
 use serde_json::{Value, json};
@@ -225,49 +226,53 @@ async fn execute_tool(name: ToolName, arguments: Value, odoo: &OdooClient) -> St
             }
         }
         ToolName::Create => {
-            let vals = arguments.get("vals").cloned().unwrap_or(json!({}));
-            match odoo.create(model, vals).await {
+            let args: CreateArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid create arguments: {error}"),
+            };
+            match odoo.create(&args.model, Value::Object(args.vals)).await {
                 Ok(data) => serde_json::to_string_pretty(&data)
                     .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
                 Err(e) => format!("Error executing create: {}", e),
             }
         }
         ToolName::Copy => {
-            let id = arguments.get("id").and_then(|i| i.as_i64()).unwrap_or(0);
-            let vals = arguments.get("vals").cloned().unwrap_or(json!({}));
-            match odoo.copy(model, id, vals).await {
+            let args: CopyArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid copy arguments: {error}"),
+            };
+            match odoo
+                .copy(&args.model, args.id, Value::Object(args.vals))
+                .await
+            {
                 Ok(data) => serde_json::to_string_pretty(&data)
                     .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
                 Err(e) => format!("Error executing copy: {}", e),
             }
         }
         ToolName::Update => {
-            let ids_arr = arguments.get("ids").and_then(|ids| ids.as_array());
-            let vals = arguments.get("vals").cloned().unwrap_or(json!({}));
-
-            if let Some(arr) = ids_arr {
-                let ids: Vec<i64> = arr.iter().filter_map(|v| v.as_i64()).collect();
-                match odoo.update(model, ids, vals).await {
-                    Ok(data) => serde_json::to_string_pretty(&data)
-                        .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                    Err(e) => format!("Error executing update: {}", e),
-                }
-            } else {
-                "Error: Missing required parameter 'ids' (array of ints)".to_string()
+            let args: UpdateArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid update arguments: {error}"),
+            };
+            match odoo
+                .update(&args.model, args.ids, Value::Object(args.vals))
+                .await
+            {
+                Ok(data) => serde_json::to_string_pretty(&data)
+                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
+                Err(e) => format!("Error executing update: {}", e),
             }
         }
         ToolName::Delete => {
-            let ids_arr = arguments.get("ids").and_then(|ids| ids.as_array());
-
-            if let Some(arr) = ids_arr {
-                let ids: Vec<i64> = arr.iter().filter_map(|v| v.as_i64()).collect();
-                match odoo.delete(model, ids).await {
-                    Ok(data) => serde_json::to_string_pretty(&data)
-                        .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                    Err(e) => format!("Error executing delete: {}", e),
-                }
-            } else {
-                "Error: Missing required parameter 'ids' (array of ints)".to_string()
+            let args: DeleteArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid delete arguments: {error}"),
+            };
+            match odoo.delete(&args.model, args.ids).await {
+                Ok(data) => serde_json::to_string_pretty(&data)
+                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
+                Err(e) => format!("Error executing delete: {}", e),
             }
         }
         ToolName::GetMetadata => {
