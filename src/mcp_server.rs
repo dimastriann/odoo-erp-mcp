@@ -1,11 +1,7 @@
 use crate::config::Config;
-use crate::odoo_client::{ClientManager, OdooClient};
-use crate::tool_arguments::{
-    CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchDomainArgs,
-    SearchReadArgs, UpdateArgs,
-};
+use crate::odoo_client::ClientManager;
 use crate::tool_catalog::{ToolName, tool_definitions};
-use crate::tool_result::ToolExecutionResult;
+use crate::tool_executor::execute_tool;
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -176,121 +172,6 @@ async fn handle_request(
             "id": id,
             "error": { "code": -32601, "message": "Method not found" }
         })),
-    }
-}
-
-async fn execute_tool(name: ToolName, arguments: Value, odoo: &OdooClient) -> ToolExecutionResult {
-    let model = arguments
-        .get("model")
-        .and_then(|m| m.as_str())
-        .unwrap_or("");
-    if model.is_empty() {
-        return ToolExecutionResult::Failure(
-            "Error: Missing required parameter 'model'".to_string(),
-        );
-    }
-
-    match name {
-        ToolName::SearchRead => {
-            let args: SearchReadArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("search-read", error),
-            };
-            ToolExecutionResult::from_rpc(
-                "search_read",
-                odoo.search_read(&args.model, args.domain, args.fields)
-                    .await,
-            )
-        }
-        ToolName::SearchCount => {
-            let args: SearchDomainArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => {
-                    return ToolExecutionResult::invalid_arguments("search-count", error);
-                }
-            };
-            ToolExecutionResult::from_rpc(
-                "search_count",
-                odoo.search_count(&args.model, args.domain).await,
-            )
-        }
-        ToolName::ReadGroup => {
-            let args: ReadGroupArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("read-group", error),
-            };
-            ToolExecutionResult::from_rpc(
-                "read_group",
-                odoo.read_group(&args.model, args.domain, args.fields, args.groupby)
-                    .await,
-            )
-        }
-        ToolName::Create => {
-            let args: CreateArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("create", error),
-            };
-            ToolExecutionResult::from_rpc(
-                "create",
-                odoo.create(&args.model, Value::Object(args.vals)).await,
-            )
-        }
-        ToolName::Copy => {
-            let args: CopyArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("copy", error),
-            };
-            ToolExecutionResult::from_rpc(
-                "copy",
-                odoo.copy(&args.model, args.id, Value::Object(args.vals))
-                    .await,
-            )
-        }
-        ToolName::Update => {
-            let args: UpdateArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("update", error),
-            };
-            ToolExecutionResult::from_rpc(
-                "update",
-                odoo.update(&args.model, args.ids, Value::Object(args.vals))
-                    .await,
-            )
-        }
-        ToolName::Delete => {
-            let args: DeleteArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("delete", error),
-            };
-            ToolExecutionResult::from_rpc("delete", odoo.delete(&args.model, args.ids).await)
-        }
-        ToolName::GetMetadata => {
-            let args: ModelFieldsArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("metadata", error),
-            };
-            ToolExecutionResult::from_rpc(
-                "get_metadata",
-                odoo.get_metadata(&args.model, args.fields).await,
-            )
-        }
-        ToolName::Search => {
-            let args: SearchDomainArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("search", error),
-            };
-            ToolExecutionResult::from_rpc("search", odoo.search(&args.model, args.domain).await)
-        }
-        ToolName::Read => {
-            let args: ReadArgs = match serde_json::from_value(arguments) {
-                Ok(args) => args,
-                Err(error) => return ToolExecutionResult::invalid_arguments("read", error),
-            };
-            ToolExecutionResult::from_rpc(
-                "read",
-                odoo.read(&args.model, args.ids, args.fields).await,
-            )
-        }
     }
 }
 
