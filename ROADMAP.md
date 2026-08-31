@@ -93,14 +93,14 @@ Goal: Establish a modular, testable foundation before adding production features
 - [x] S0-20 — Create a typed tool-execution result.
 - [x] S0-21 — Separate the tool registry from the tool executor.
 - [x] S0-22 — Remove duplicate result-serialization logic.
-- [ ] S0-23 — Add registry and argument-validation tests.
+- [x] S0-23 — Add registry and argument-validation tests.
 
 ## Stage 0 Definition of Done
 
-- [ ] Versions are consistent across the application.
+- [x] Versions are consistent across the application.
 - [x] All existing tools have contract tests.
-- [ ] The dispatcher no longer contains all business logic.
-- [ ] CI verifies formatting, linting, tests, and builds.
+- [x] The dispatcher no longer contains all business logic.
+- [x] CI verifies formatting, linting, tests, and builds.
 
 ---
 
@@ -674,7 +674,7 @@ Affected stages, configuration, or compatibility.
 
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
-| Stage 0 — Baseline Engineering and Testability | In progress | 22/23 | Baseline and test infrastructure complete. |
+| Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Not started | 0/29 | |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |

@@ -15,6 +15,20 @@ pub(crate) enum ToolName {
 }
 
 impl ToolName {
+    #[cfg(test)]
+    pub(crate) const ALL: [Self; 10] = [
+        Self::SearchRead,
+        Self::SearchCount,
+        Self::ReadGroup,
+        Self::Create,
+        Self::Copy,
+        Self::Update,
+        Self::Delete,
+        Self::GetMetadata,
+        Self::Search,
+        Self::Read,
+    ];
+
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::SearchRead => "odoo-search-read",
@@ -190,4 +204,32 @@ pub(crate) fn tool_definitions() -> Value {
             }
         }
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_tool_name_round_trips_and_has_one_definition() {
+        let definitions = tool_definitions();
+        let definitions = definitions.as_array().unwrap();
+
+        assert_eq!(definitions.len(), ToolName::ALL.len());
+        for tool_name in ToolName::ALL {
+            assert_eq!(ToolName::try_from(tool_name.as_str()), Ok(tool_name));
+            assert_eq!(
+                definitions
+                    .iter()
+                    .filter(|definition| definition["name"] == tool_name.as_str())
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_tool_name_is_rejected() {
+        assert_eq!(ToolName::try_from("odoo-unknown"), Err(()));
+    }
 }

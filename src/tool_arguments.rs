@@ -72,3 +72,47 @@ pub(crate) struct DeleteArgs {
     pub(crate) model: String,
     pub(crate) ids: Vec<i64>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn optional_read_arguments_default_to_empty_arrays() {
+        let search: SearchReadArgs =
+            serde_json::from_value(json!({"model": "res.partner"})).unwrap();
+
+        assert_eq!(search.domain, json!([]));
+        assert_eq!(search.fields, json!([]));
+    }
+
+    #[test]
+    fn read_ids_must_be_an_integer_array() {
+        let result = serde_json::from_value::<ReadArgs>(json!({
+            "model": "res.partner",
+            "ids": [1, "invalid"]
+        }));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn write_values_must_be_an_object() {
+        let result = serde_json::from_value::<CreateArgs>(json!({
+            "model": "res.partner",
+            "vals": ["not", "an", "object"]
+        }));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn required_write_arguments_cannot_be_omitted() {
+        let result = serde_json::from_value::<UpdateArgs>(json!({
+            "model": "res.partner",
+            "vals": {"name": "Updated"}
+        }));
+
+        assert!(result.is_err());
+    }
+}
