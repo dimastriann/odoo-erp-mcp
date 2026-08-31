@@ -3,6 +3,7 @@ mod mcp_server;
 mod odoo_client;
 #[cfg(test)]
 mod test_support;
+mod tool_arguments;
 mod tool_catalog;
 mod views;
 

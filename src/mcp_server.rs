@@ -1,5 +1,8 @@
 use crate::config::Config;
 use crate::odoo_client::{ClientManager, OdooClient};
+use crate::tool_arguments::{
+    ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchDomainArgs, SearchReadArgs,
+};
 use crate::tool_catalog::{ToolName, tool_definitions};
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
@@ -183,27 +186,39 @@ async fn execute_tool(name: ToolName, arguments: Value, odoo: &OdooClient) -> St
 
     match name {
         ToolName::SearchRead => {
-            let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
-            let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
-            match odoo.search_read(model, domain, fields).await {
+            let args: SearchReadArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid search-read arguments: {error}"),
+            };
+            match odoo
+                .search_read(&args.model, args.domain, args.fields)
+                .await
+            {
                 Ok(data) => serde_json::to_string_pretty(&data)
                     .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
                 Err(e) => format!("Error executing search_read: {}", e),
             }
         }
         ToolName::SearchCount => {
-            let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
-            match odoo.search_count(model, domain).await {
+            let args: SearchDomainArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid search-count arguments: {error}"),
+            };
+            match odoo.search_count(&args.model, args.domain).await {
                 Ok(data) => serde_json::to_string_pretty(&data)
                     .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
                 Err(e) => format!("Error executing search_count: {}", e),
             }
         }
         ToolName::ReadGroup => {
-            let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
-            let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
-            let groupby = arguments.get("groupby").cloned().unwrap_or(json!([]));
-            match odoo.read_group(model, domain, fields, groupby).await {
+            let args: ReadGroupArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid read-group arguments: {error}"),
+            };
+            match odoo
+                .read_group(&args.model, args.domain, args.fields, args.groupby)
+                .await
+            {
                 Ok(data) => serde_json::to_string_pretty(&data)
                     .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
                 Err(e) => format!("Error executing read_group: {}", e),
@@ -256,34 +271,36 @@ async fn execute_tool(name: ToolName, arguments: Value, odoo: &OdooClient) -> St
             }
         }
         ToolName::GetMetadata => {
-            let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
-            match odoo.get_metadata(model, fields).await {
+            let args: ModelFieldsArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid metadata arguments: {error}"),
+            };
+            match odoo.get_metadata(&args.model, args.fields).await {
                 Ok(data) => serde_json::to_string_pretty(&data)
                     .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
                 Err(e) => format!("Error executing get_metadata: {}", e),
             }
         }
         ToolName::Search => {
-            let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
-            match odoo.search(model, domain).await {
+            let args: SearchDomainArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid search arguments: {error}"),
+            };
+            match odoo.search(&args.model, args.domain).await {
                 Ok(data) => serde_json::to_string_pretty(&data)
                     .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
                 Err(e) => format!("Error executing search: {}", e),
             }
         }
         ToolName::Read => {
-            let ids_arr = arguments.get("ids").and_then(|ids| ids.as_array());
-            let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
-
-            if let Some(arr) = ids_arr {
-                let ids: Vec<i64> = arr.iter().filter_map(|v| v.as_i64()).collect();
-                match odoo.read(model, ids, fields).await {
-                    Ok(data) => serde_json::to_string_pretty(&data)
-                        .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
-                    Err(e) => format!("Error executing read: {}", e),
-                }
-            } else {
-                "Error: Missing required parameter 'ids' (array of ints)".to_string()
+            let args: ReadArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return format!("Error: Invalid read arguments: {error}"),
+            };
+            match odoo.read(&args.model, args.ids, args.fields).await {
+                Ok(data) => serde_json::to_string_pretty(&data)
+                    .unwrap_or_else(|e| format!("Error parsing result: {}", e)),
+                Err(e) => format!("Error executing read: {}", e),
             }
         }
     }
