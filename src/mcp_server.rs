@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::odoo_client::{ClientManager, OdooClient};
-use crate::tool_catalog::tool_definitions;
+use crate::tool_catalog::{ToolName, tool_definitions};
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -71,6 +71,18 @@ async fn handle_request(
             let params = req.get("params").cloned().unwrap_or(json!({}));
             let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
             let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+            let tool_name = match ToolName::try_from(name) {
+                Ok(tool_name) => tool_name,
+                Err(()) => {
+                    return Some(json!({
+                        "jsonrpc": "2.0",
+                        "id": id,
+                        "result": {
+                            "content": [{ "type": "text", "text": format!("Error: Unknown tool {name}") }]
+                        }
+                    }));
+                }
+            };
 
             let instance_target = arguments
                 .get("instance")
@@ -106,11 +118,13 @@ async fn handle_request(
             };
 
             // Enforce Instance Tool Permissions
-            if !instance_obj.is_tool_allowed(name, &global_mode) {
+            if !instance_obj.is_tool_allowed(tool_name.as_str(), &global_mode) {
                 let mode_str = instance_obj.get_mode(&global_mode);
                 let err_msg = format!(
                     "Error: Tool '{}' is restricted for Odoo instance '{}' (Mode: '{}'). Permission denied.",
-                    name, instance_obj.name, mode_str
+                    tool_name.as_str(),
+                    instance_obj.name,
+                    mode_str
                 );
                 return Some(json!({
                     "jsonrpc": "2.0",
@@ -135,7 +149,7 @@ async fn handle_request(
                 }
             };
 
-            let result = execute_tool(name, arguments, &odoo_client).await;
+            let result = execute_tool(tool_name, arguments, &odoo_client).await;
 
             Some(json!({
                 "jsonrpc": "2.0",
@@ -158,7 +172,7 @@ async fn handle_request(
     }
 }
 
-async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String {
+async fn execute_tool(name: ToolName, arguments: Value, odoo: &OdooClient) -> String {
     let model = arguments
         .get("model")
         .and_then(|m| m.as_str())
@@ -168,7 +182,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
     }
 
     match name {
-        "odoo-search-read" => {
+        ToolName::SearchRead => {
             let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
             let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
             match odoo.search_read(model, domain, fields).await {
@@ -177,7 +191,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 Err(e) => format!("Error executing search_read: {}", e),
             }
         }
-        "odoo-search-count" => {
+        ToolName::SearchCount => {
             let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
             match odoo.search_count(model, domain).await {
                 Ok(data) => serde_json::to_string_pretty(&data)
@@ -185,7 +199,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 Err(e) => format!("Error executing search_count: {}", e),
             }
         }
-        "odoo-read-group" => {
+        ToolName::ReadGroup => {
             let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
             let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
             let groupby = arguments.get("groupby").cloned().unwrap_or(json!([]));
@@ -195,7 +209,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 Err(e) => format!("Error executing read_group: {}", e),
             }
         }
-        "odoo-create" => {
+        ToolName::Create => {
             let vals = arguments.get("vals").cloned().unwrap_or(json!({}));
             match odoo.create(model, vals).await {
                 Ok(data) => serde_json::to_string_pretty(&data)
@@ -203,7 +217,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 Err(e) => format!("Error executing create: {}", e),
             }
         }
-        "odoo-copy" => {
+        ToolName::Copy => {
             let id = arguments.get("id").and_then(|i| i.as_i64()).unwrap_or(0);
             let vals = arguments.get("vals").cloned().unwrap_or(json!({}));
             match odoo.copy(model, id, vals).await {
@@ -212,7 +226,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 Err(e) => format!("Error executing copy: {}", e),
             }
         }
-        "odoo-update" => {
+        ToolName::Update => {
             let ids_arr = arguments.get("ids").and_then(|ids| ids.as_array());
             let vals = arguments.get("vals").cloned().unwrap_or(json!({}));
 
@@ -227,7 +241,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 "Error: Missing required parameter 'ids' (array of ints)".to_string()
             }
         }
-        "odoo-delete" => {
+        ToolName::Delete => {
             let ids_arr = arguments.get("ids").and_then(|ids| ids.as_array());
 
             if let Some(arr) = ids_arr {
@@ -241,7 +255,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 "Error: Missing required parameter 'ids' (array of ints)".to_string()
             }
         }
-        "odoo-get-metadata" => {
+        ToolName::GetMetadata => {
             let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
             match odoo.get_metadata(model, fields).await {
                 Ok(data) => serde_json::to_string_pretty(&data)
@@ -249,7 +263,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 Err(e) => format!("Error executing get_metadata: {}", e),
             }
         }
-        "odoo-search" => {
+        ToolName::Search => {
             let domain = arguments.get("domain").cloned().unwrap_or(json!([]));
             match odoo.search(model, domain).await {
                 Ok(data) => serde_json::to_string_pretty(&data)
@@ -257,7 +271,7 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 Err(e) => format!("Error executing search: {}", e),
             }
         }
-        "odoo-read" => {
+        ToolName::Read => {
             let ids_arr = arguments.get("ids").and_then(|ids| ids.as_array());
             let fields = arguments.get("fields").cloned().unwrap_or(json!([]));
 
@@ -272,7 +286,6 @@ async fn execute_tool(name: &str, arguments: Value, odoo: &OdooClient) -> String
                 "Error: Missing required parameter 'ids' (array of ints)".to_string()
             }
         }
-        _ => format!("Error: Unknown tool {}", name),
     }
 }
 

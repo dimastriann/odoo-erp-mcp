@@ -1,5 +1,56 @@
 use serde_json::{Value, json};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ToolName {
+    SearchRead,
+    SearchCount,
+    ReadGroup,
+    Create,
+    Copy,
+    Update,
+    Delete,
+    GetMetadata,
+    Search,
+    Read,
+}
+
+impl ToolName {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::SearchRead => "odoo-search-read",
+            Self::SearchCount => "odoo-search-count",
+            Self::ReadGroup => "odoo-read-group",
+            Self::Create => "odoo-create",
+            Self::Copy => "odoo-copy",
+            Self::Update => "odoo-update",
+            Self::Delete => "odoo-delete",
+            Self::GetMetadata => "odoo-get-metadata",
+            Self::Search => "odoo-search",
+            Self::Read => "odoo-read",
+        }
+    }
+}
+
+impl TryFrom<&str> for ToolName {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "odoo-search-read" => Ok(Self::SearchRead),
+            "odoo-search-count" => Ok(Self::SearchCount),
+            "odoo-read-group" => Ok(Self::ReadGroup),
+            "odoo-create" => Ok(Self::Create),
+            "odoo-copy" => Ok(Self::Copy),
+            "odoo-update" => Ok(Self::Update),
+            "odoo-delete" => Ok(Self::Delete),
+            "odoo-get-metadata" => Ok(Self::GetMetadata),
+            "odoo-search" => Ok(Self::Search),
+            "odoo-read" => Ok(Self::Read),
+            _ => Err(()),
+        }
+    }
+}
+
 pub(crate) fn tool_definitions() -> Value {
     json!([
         {
