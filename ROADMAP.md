@@ -116,7 +116,7 @@ Goal: Make MCP-to-Odoo communication understandable, classifiable, reliable, and
 - [x] S1-04 — Add authentication and authorization error categories.
 - [x] S1-05 — Add Odoo validation and access-error categories.
 - [x] S1-06 — Add transport, timeout, and protocol-error categories.
-- [ ] S1-07 — Add stable machine-readable error codes.
+- [x] S1-07 — Add stable machine-readable error codes.
 - [ ] S1-08 — Add retryability classification.
 - [ ] S1-09 — Create a structured MCP error response.
 - [ ] S1-10 — Migrate one read tool as the reference implementation.
@@ -691,7 +691,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
-| Stage 1 — Structured Errors and RPC Reliability | In progress | 6/29 | |
+| Stage 1 — Structured Errors and RPC Reliability | In progress | 7/29 | |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |

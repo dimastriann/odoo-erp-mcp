@@ -2,6 +2,38 @@ use serde_json::Value;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ErrorCode {
+    Authentication,
+    Authorization,
+    Configuration,
+    InputValidation,
+    Internal,
+    OdooAccess,
+    OdooValidation,
+    Protocol,
+    Timeout,
+    Transport,
+}
+
+impl ErrorCode {
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Authentication => "AUTHENTICATION_FAILED",
+            Self::Authorization => "PERMISSION_DENIED",
+            Self::Configuration => "CONFIGURATION_ERROR",
+            Self::InputValidation => "INVALID_ARGUMENTS",
+            Self::Internal => "INTERNAL_ERROR",
+            Self::OdooAccess => "ODOO_ACCESS_ERROR",
+            Self::OdooValidation => "ODOO_VALIDATION_ERROR",
+            Self::Protocol => "PROTOCOL_ERROR",
+            Self::Timeout => "TIMEOUT",
+            Self::Transport => "TRANSPORT_ERROR",
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum AppError {
     Authentication { message: String },
@@ -17,6 +49,22 @@ pub(crate) enum AppError {
 }
 
 impl AppError {
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) const fn code(&self) -> ErrorCode {
+        match self {
+            Self::Authentication { .. } => ErrorCode::Authentication,
+            Self::Authorization { .. } => ErrorCode::Authorization,
+            Self::Configuration { .. } => ErrorCode::Configuration,
+            Self::InputValidation { .. } => ErrorCode::InputValidation,
+            Self::Internal { .. } => ErrorCode::Internal,
+            Self::OdooAccess { .. } => ErrorCode::OdooAccess,
+            Self::OdooValidation { .. } => ErrorCode::OdooValidation,
+            Self::Protocol { .. } => ErrorCode::Protocol,
+            Self::Timeout { .. } => ErrorCode::Timeout,
+            Self::Transport { .. } => ErrorCode::Transport,
+        }
+    }
+
     pub(crate) fn authentication(message: impl Into<String>) -> Self {
         Self::Authentication {
             message: message.into(),
@@ -174,5 +222,35 @@ mod tests {
             AppError::protocol("invalid response"),
             AppError::Protocol { .. }
         ));
+    }
+
+    #[test]
+    fn categories_map_to_stable_machine_codes() {
+        let cases = [
+            (AppError::authentication(""), "AUTHENTICATION_FAILED"),
+            (AppError::authorization(""), "PERMISSION_DENIED"),
+            (AppError::configuration(""), "CONFIGURATION_ERROR"),
+            (AppError::input_validation(""), "INVALID_ARGUMENTS"),
+            (AppError::internal(""), "INTERNAL_ERROR"),
+            (
+                AppError::from_odoo_rpc(&serde_json::json!({
+                    "data": {"name": "odoo.exceptions.AccessError"}
+                })),
+                "ODOO_ACCESS_ERROR",
+            ),
+            (
+                AppError::from_odoo_rpc(&serde_json::json!({
+                    "data": {"name": "odoo.exceptions.ValidationError"}
+                })),
+                "ODOO_VALIDATION_ERROR",
+            ),
+            (AppError::protocol(""), "PROTOCOL_ERROR"),
+            (AppError::timeout(""), "TIMEOUT"),
+            (AppError::transport(""), "TRANSPORT_ERROR"),
+        ];
+
+        for (error, expected) in cases {
+            assert_eq!(error.code().as_str(), expected);
+        }
     }
 }
