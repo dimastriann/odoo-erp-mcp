@@ -27,8 +27,11 @@ impl OdooClient {
         db: String,
         username: String,
         password: String,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let client = Client::builder().cookie_store(true).build()?;
+    ) -> Result<Self, AppError> {
+        let client = Client::builder()
+            .cookie_store(true)
+            .build()
+            .map_err(|error| AppError::internal(error.to_string()))?;
 
         let mut odoo = OdooClient {
             base_url,
@@ -45,7 +48,7 @@ impl OdooClient {
         Ok(odoo)
     }
 
-    async fn call_rpc(&self, params: Value) -> Result<Value, Box<dyn std::error::Error>> {
+    async fn call_rpc(&self, params: Value) -> Result<Value, AppError> {
         let req = RpcRequest {
             jsonrpc: "2.0".into(),
             method: "call".into(),
@@ -54,11 +57,20 @@ impl OdooClient {
         };
 
         let url = format!("{}/jsonrpc", self.base_url);
-        let res = self.client.post(&url).json(&req).send().await?;
-        let resp_json: Value = res.json().await?;
+        let res = self
+            .client
+            .post(&url)
+            .json(&req)
+            .send()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
+        let resp_json: Value = res
+            .json()
+            .await
+            .map_err(|error| AppError::internal(error.to_string()))?;
 
         if let Some(error) = resp_json.get("error") {
-            return Err(format!("Odoo RPC Error: {}", error).into());
+            return Err(AppError::from_odoo_rpc(error));
         }
 
         Ok(resp_json["result"].clone())
@@ -69,7 +81,7 @@ impl OdooClient {
         db: &str,
         username: &str,
         password: &str,
-    ) -> Result<i64, Box<dyn std::error::Error>> {
+    ) -> Result<i64, AppError> {
         let params = json!({
             "service": "common",
             "method": "authenticate",
@@ -78,9 +90,9 @@ impl OdooClient {
 
         let result = self.call_rpc(params).await?;
 
-        let uid = result
-            .as_i64()
-            .ok_or("Authentication failed or returned empty uid")?;
+        let uid = result.as_i64().ok_or_else(|| {
+            AppError::authentication("Authentication failed or returned empty uid")
+        })?;
         Ok(uid)
     }
 
@@ -89,7 +101,7 @@ impl OdooClient {
         model: &str,
         domain: Value,
         fields: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    ) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -107,11 +119,7 @@ impl OdooClient {
         self.call_rpc(params).await
     }
 
-    pub async fn search_count(
-        &self,
-        model: &str,
-        domain: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn search_count(&self, model: &str, domain: Value) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -134,7 +142,7 @@ impl OdooClient {
         domain: Value,
         fields: Value,
         groupby: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    ) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -152,11 +160,7 @@ impl OdooClient {
         self.call_rpc(params).await
     }
 
-    pub async fn create(
-        &self,
-        model: &str,
-        vals: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn create(&self, model: &str, vals: Value) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -173,12 +177,7 @@ impl OdooClient {
         self.call_rpc(params).await
     }
 
-    pub async fn copy(
-        &self,
-        model: &str,
-        id: i64,
-        vals: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn copy(&self, model: &str, id: i64, vals: Value) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -195,12 +194,7 @@ impl OdooClient {
         self.call_rpc(params).await
     }
 
-    pub async fn update(
-        &self,
-        model: &str,
-        ids: Vec<i64>,
-        vals: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn update(&self, model: &str, ids: Vec<i64>, vals: Value) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -217,11 +211,7 @@ impl OdooClient {
         self.call_rpc(params).await
     }
 
-    pub async fn delete(
-        &self,
-        model: &str,
-        ids: Vec<i64>,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn delete(&self, model: &str, ids: Vec<i64>) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -238,11 +228,7 @@ impl OdooClient {
         self.call_rpc(params).await
     }
 
-    pub async fn get_metadata(
-        &self,
-        model: &str,
-        fields: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn get_metadata(&self, model: &str, fields: Value) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -260,11 +246,7 @@ impl OdooClient {
         self.call_rpc(params).await
     }
 
-    pub async fn search(
-        &self,
-        model: &str,
-        domain: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn search(&self, model: &str, domain: Value) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -281,12 +263,7 @@ impl OdooClient {
         self.call_rpc(params).await
     }
 
-    pub async fn read(
-        &self,
-        model: &str,
-        ids: Vec<i64>,
-        fields: Value,
-    ) -> Result<Value, Box<dyn std::error::Error>> {
+    pub async fn read(&self, model: &str, ids: Vec<i64>, fields: Value) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
             "method": "execute_kw",

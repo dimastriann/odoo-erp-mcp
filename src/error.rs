@@ -1,3 +1,4 @@
+use serde_json::Value;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
@@ -8,6 +9,8 @@ pub(crate) enum AppError {
     Configuration { message: String },
     InputValidation { message: String },
     Internal { message: String },
+    OdooAccess { message: String },
+    OdooValidation { message: String },
 }
 
 impl AppError {
@@ -39,6 +42,19 @@ impl AppError {
         Self::input_validation(format!("Error: Invalid {operation} arguments: {error}"))
     }
 
+    pub(crate) fn from_odoo_rpc(error: &Value) -> Self {
+        let message = format!("Odoo RPC Error: {error}");
+        match error
+            .pointer("/data/name")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+        {
+            "odoo.exceptions.AccessError" => Self::OdooAccess { message },
+            "odoo.exceptions.ValidationError" => Self::OdooValidation { message },
+            _ => Self::Internal { message },
+        }
+    }
+
     pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self::Internal {
             message: message.into(),
@@ -53,7 +69,9 @@ impl Display for AppError {
             | Self::Authorization { message }
             | Self::Configuration { message }
             | Self::InputValidation { message }
-            | Self::Internal { message } => formatter.write_str(message),
+            | Self::Internal { message }
+            | Self::OdooAccess { message }
+            | Self::OdooValidation { message } => formatter.write_str(message),
         }
     }
 }
@@ -103,5 +121,18 @@ mod tests {
 
         assert!(matches!(authentication, AppError::Authentication { .. }));
         assert!(matches!(authorization, AppError::Authorization { .. }));
+    }
+
+    #[test]
+    fn classifies_validation_and_access_errors_from_odoo_payloads() {
+        let validation = AppError::from_odoo_rpc(&serde_json::json!({
+            "data": {"name": "odoo.exceptions.ValidationError"}
+        }));
+        let access = AppError::from_odoo_rpc(&serde_json::json!({
+            "data": {"name": "odoo.exceptions.AccessError"}
+        }));
+
+        assert!(matches!(validation, AppError::OdooValidation { .. }));
+        assert!(matches!(access, AppError::OdooAccess { .. }));
     }
 }
