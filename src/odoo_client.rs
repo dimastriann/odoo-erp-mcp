@@ -31,7 +31,7 @@ impl OdooClient {
         let client = Client::builder()
             .cookie_store(true)
             .build()
-            .map_err(|error| AppError::internal(error.to_string()))?;
+            .map_err(|error| AppError::transport(error.to_string()))?;
 
         let mut odoo = OdooClient {
             base_url,
@@ -63,11 +63,17 @@ impl OdooClient {
             .json(&req)
             .send()
             .await
-            .map_err(|error| AppError::internal(error.to_string()))?;
+            .map_err(|error| {
+                if error.is_timeout() {
+                    AppError::timeout(error.to_string())
+                } else {
+                    AppError::transport(error.to_string())
+                }
+            })?;
         let resp_json: Value = res
             .json()
             .await
-            .map_err(|error| AppError::internal(error.to_string()))?;
+            .map_err(|error| AppError::protocol(error.to_string()))?;
 
         if let Some(error) = resp_json.get("error") {
             return Err(AppError::from_odoo_rpc(error));

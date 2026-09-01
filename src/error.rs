@@ -11,6 +11,9 @@ pub(crate) enum AppError {
     Internal { message: String },
     OdooAccess { message: String },
     OdooValidation { message: String },
+    Protocol { message: String },
+    Timeout { message: String },
+    Transport { message: String },
 }
 
 impl AppError {
@@ -55,6 +58,24 @@ impl AppError {
         }
     }
 
+    pub(crate) fn protocol(message: impl Into<String>) -> Self {
+        Self::Protocol {
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn timeout(message: impl Into<String>) -> Self {
+        Self::Timeout {
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn transport(message: impl Into<String>) -> Self {
+        Self::Transport {
+            message: message.into(),
+        }
+    }
+
     pub(crate) fn internal(message: impl Into<String>) -> Self {
         Self::Internal {
             message: message.into(),
@@ -71,7 +92,10 @@ impl Display for AppError {
             | Self::InputValidation { message }
             | Self::Internal { message }
             | Self::OdooAccess { message }
-            | Self::OdooValidation { message } => formatter.write_str(message),
+            | Self::OdooValidation { message }
+            | Self::Protocol { message }
+            | Self::Timeout { message }
+            | Self::Transport { message } => formatter.write_str(message),
         }
     }
 }
@@ -134,5 +158,21 @@ mod tests {
 
         assert!(matches!(validation, AppError::OdooValidation { .. }));
         assert!(matches!(access, AppError::OdooAccess { .. }));
+    }
+
+    #[test]
+    fn communication_errors_have_distinct_categories() {
+        assert!(matches!(
+            AppError::transport("connection refused"),
+            AppError::Transport { .. }
+        ));
+        assert!(matches!(
+            AppError::timeout("request timed out"),
+            AppError::Timeout { .. }
+        ));
+        assert!(matches!(
+            AppError::protocol("invalid response"),
+            AppError::Protocol { .. }
+        ));
     }
 }
