@@ -645,7 +645,7 @@ foundations.
 # Open Decisions
 
 - [ ] D-01 — Select the minimum supported Odoo version.
-- [ ] D-02 — Define backward compatibility for version `0.3.0` configuration.
+- [x] D-02 — Define backward compatibility for version `0.3.0` configuration.
 - [ ] D-03 — Select the first durable local store; SQLite is the leading candidate.
 - [ ] D-04 — Decide whether the approval UI is P0 or follows protocol stabilization.
 - [ ] D-05 — Select the first remote MCP transport and deployment model.
@@ -668,6 +668,22 @@ The primary reasoning and trade-offs.
 
 Impact:
 Affected stages, configuration, or compatibility.
+```
+
+```text
+2026-09-01 — D-02 — Preserve 0.3.0 configuration compatibility
+
+Decision:
+Version 0.3.1 continues to accept existing 0.3.0 configuration files without a
+migration step.
+
+Reason:
+The release changes runtime validation and internal architecture but does not
+change the serialized configuration schema.
+
+Impact:
+Existing deployments can replace the binary in place. Tool calls with malformed
+IDs, write values, or flat domains may now be rejected earlier.
 ```
 
 # Progress Summary
