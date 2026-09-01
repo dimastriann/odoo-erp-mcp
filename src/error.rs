@@ -65,6 +65,11 @@ impl AppError {
         }
     }
 
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) const fn is_retryable(&self) -> bool {
+        matches!(self, Self::Timeout { .. } | Self::Transport { .. })
+    }
+
     pub(crate) fn authentication(message: impl Into<String>) -> Self {
         Self::Authentication {
             message: message.into(),
@@ -252,5 +257,21 @@ mod tests {
         for (error, expected) in cases {
             assert_eq!(error.code().as_str(), expected);
         }
+    }
+
+    #[test]
+    fn only_transient_communication_errors_are_retryable() {
+        assert!(AppError::timeout("timeout").is_retryable());
+        assert!(AppError::transport("connection reset").is_retryable());
+
+        let permanent_errors = [
+            AppError::authentication("authentication failed"),
+            AppError::authorization("permission denied"),
+            AppError::configuration("invalid configuration"),
+            AppError::input_validation("invalid input"),
+            AppError::internal("internal error"),
+            AppError::protocol("malformed response"),
+        ];
+        assert!(permanent_errors.iter().all(|error| !error.is_retryable()));
     }
 }
