@@ -1,10 +1,11 @@
+use crate::error::AppError;
 use serde_json::Value;
 use std::fmt::Display;
 
 #[derive(Debug)]
 pub(crate) enum ToolExecutionResult {
     Success(Value),
-    Failure(String),
+    Failure(AppError),
 }
 
 impl ToolExecutionResult {
@@ -14,19 +15,23 @@ impl ToolExecutionResult {
     {
         match result {
             Ok(value) => Self::Success(value),
-            Err(error) => Self::Failure(format!("Error executing {operation}: {error}")),
+            Err(error) => Self::Failure(AppError::internal(format!(
+                "Error executing {operation}: {error}"
+            ))),
         }
     }
 
     pub(crate) fn invalid_arguments(operation: &str, error: impl Display) -> Self {
-        Self::Failure(format!("Error: Invalid {operation} arguments: {error}"))
+        Self::Failure(AppError::internal(format!(
+            "Error: Invalid {operation} arguments: {error}"
+        )))
     }
 
     pub(crate) fn into_text(self) -> String {
         match self {
             Self::Success(value) => serde_json::to_string_pretty(&value)
                 .unwrap_or_else(|error| format!("Error parsing result: {error}")),
-            Self::Failure(message) => message,
+            Self::Failure(error) => error.to_string(),
         }
     }
 }

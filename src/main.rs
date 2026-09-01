@@ -1,5 +1,6 @@
 mod config;
 mod domain;
+mod error;
 mod mcp_server;
 mod odoo_client;
 #[cfg(test)]

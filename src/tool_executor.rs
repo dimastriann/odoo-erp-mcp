@@ -18,9 +18,9 @@ pub(crate) async fn execute_tool(
         .and_then(|m| m.as_str())
         .unwrap_or("");
     if model.is_empty() {
-        return ToolExecutionResult::Failure(
-            "Error: Missing required parameter 'model'".to_string(),
-        );
+        return ToolExecutionResult::Failure(AppError::internal(
+            "Error: Missing required parameter 'model'",
+        ));
     }
 
     match name {
@@ -138,3 +138,4 @@ pub(crate) async fn execute_tool(
         }
     }
 }
+use crate::error::AppError;
