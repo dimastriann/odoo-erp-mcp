@@ -1,5 +1,30 @@
 use serde_json::{Value, json};
 
+fn domain_schema() -> Value {
+    json!({
+        "type": "array",
+        "description": "Odoo domain as an array of nested [field, operator, value] clauses and optional prefix logical operators. Example: [[\"name\", \"=\", \"S00027\"]].",
+        "items": {
+            "oneOf": [
+                {
+                    "type": "array",
+                    "prefixItems": [
+                        { "type": "string" },
+                        { "type": "string" },
+                        {}
+                    ],
+                    "minItems": 3,
+                    "maxItems": 3
+                },
+                {
+                    "type": "string",
+                    "enum": ["&", "|", "!"]
+                }
+            ]
+        }
+    })
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ToolName {
     SearchRead,
@@ -75,7 +100,7 @@ pub(crate) fn tool_definitions() -> Value {
                 "properties": {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
-                    "domain": { "type": "array", "description": "Search domain (e.g., [['is_company', '=', true]])" },
+                    "domain": domain_schema(),
                     "fields": { "type": "array", "items": { "type": "string" }, "description": "List of fields to return" }
                 },
                 "required": ["model", "domain", "fields"]
@@ -89,7 +114,7 @@ pub(crate) fn tool_definitions() -> Value {
                 "properties": {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string" },
-                    "domain": { "type": "array" }
+                    "domain": domain_schema()
                 },
                 "required": ["model", "domain"]
             }
@@ -102,7 +127,7 @@ pub(crate) fn tool_definitions() -> Value {
                 "properties": {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string" },
-                    "domain": { "type": "array" },
+                    "domain": domain_schema(),
                     "fields": { "type": "array", "items": { "type": "string" } },
                     "groupby": { "type": "array", "items": { "type": "string" } }
                 },
@@ -184,7 +209,7 @@ pub(crate) fn tool_definitions() -> Value {
                 "properties": {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
-                    "domain": { "type": "array", "description": "Search domain (e.g., [['is_company', '=', true]])" }
+                    "domain": domain_schema()
                 },
                 "required": ["model", "domain"]
             }
@@ -231,5 +256,23 @@ mod tests {
     #[test]
     fn unknown_tool_name_is_rejected() {
         assert_eq!(ToolName::try_from("odoo-unknown"), Err(()));
+    }
+
+    #[test]
+    fn search_tools_advertise_nested_domain_clauses() {
+        let definitions = tool_definitions();
+        let search_read = definitions
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|definition| definition["name"] == ToolName::SearchRead.as_str())
+            .unwrap();
+        let domain = &search_read["inputSchema"]["properties"]["domain"];
+
+        assert_eq!(domain["type"], "array");
+        assert!(domain["description"].as_str().unwrap().contains("nested"));
+        assert!(domain["items"]["oneOf"].is_array());
+        assert_eq!(domain["items"]["oneOf"][0]["minItems"], 3);
+        assert_eq!(domain["items"]["oneOf"][0]["maxItems"], 3);
     }
 }

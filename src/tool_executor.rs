@@ -1,3 +1,4 @@
+use crate::domain::validate_domain;
 use crate::odoo_client::OdooClient;
 use crate::tool_arguments::{
     CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchDomainArgs,
@@ -28,6 +29,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("search-read", error),
             };
+            if let Err(error) = validate_domain(&args.domain) {
+                return ToolExecutionResult::invalid_arguments("search-read domain", error);
+            }
             ToolExecutionResult::from_rpc(
                 "search_read",
                 odoo.search_read(&args.model, args.domain, args.fields)
@@ -41,6 +45,9 @@ pub(crate) async fn execute_tool(
                     return ToolExecutionResult::invalid_arguments("search-count", error);
                 }
             };
+            if let Err(error) = validate_domain(&args.domain) {
+                return ToolExecutionResult::invalid_arguments("search-count domain", error);
+            }
             ToolExecutionResult::from_rpc(
                 "search_count",
                 odoo.search_count(&args.model, args.domain).await,
@@ -51,6 +58,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("read-group", error),
             };
+            if let Err(error) = validate_domain(&args.domain) {
+                return ToolExecutionResult::invalid_arguments("read-group domain", error);
+            }
             ToolExecutionResult::from_rpc(
                 "read_group",
                 odoo.read_group(&args.model, args.domain, args.fields, args.groupby)
@@ -111,6 +121,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("search", error),
             };
+            if let Err(error) = validate_domain(&args.domain) {
+                return ToolExecutionResult::invalid_arguments("search domain", error);
+            }
             ToolExecutionResult::from_rpc("search", odoo.search(&args.model, args.domain).await)
         }
         ToolName::Read => {
