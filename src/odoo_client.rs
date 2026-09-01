@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -320,7 +321,7 @@ impl ClientManager {
         }
     }
 
-    pub async fn get_client(&self, instance: &OdooInstance) -> Result<Arc<OdooClient>, String> {
+    pub async fn get_client(&self, instance: &OdooInstance) -> Result<Arc<OdooClient>, AppError> {
         let mut map = self.clients.lock().await;
         if let Some(client) = map.get(&instance.id) {
             return Ok(Arc::clone(client));
@@ -343,10 +344,10 @@ impl ClientManager {
                 map.insert(instance.id.clone(), Arc::clone(&arc_client));
                 Ok(arc_client)
             }
-            Err(e) => Err(format!(
+            Err(e) => Err(AppError::authentication(format!(
                 "Failed to connect to Odoo instance '{}': {}",
                 instance.name, e
-            )),
+            ))),
         }
     }
 

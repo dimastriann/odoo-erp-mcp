@@ -3,12 +3,26 @@ use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum AppError {
+    Authentication { message: String },
+    Authorization { message: String },
     Configuration { message: String },
     InputValidation { message: String },
     Internal { message: String },
 }
 
 impl AppError {
+    pub(crate) fn authentication(message: impl Into<String>) -> Self {
+        Self::Authentication {
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn authorization(message: impl Into<String>) -> Self {
+        Self::Authorization {
+            message: message.into(),
+        }
+    }
+
     pub(crate) fn configuration(message: impl Into<String>) -> Self {
         Self::Configuration {
             message: message.into(),
@@ -35,7 +49,9 @@ impl AppError {
 impl Display for AppError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Configuration { message }
+            Self::Authentication { message }
+            | Self::Authorization { message }
+            | Self::Configuration { message }
             | Self::InputValidation { message }
             | Self::Internal { message } => formatter.write_str(message),
         }
@@ -78,5 +94,14 @@ mod tests {
 
         assert_eq!(error.to_string(), "No active Odoo instance configured");
         assert!(matches!(error, AppError::Configuration { .. }));
+    }
+
+    #[test]
+    fn identity_errors_have_distinct_categories() {
+        let authentication = AppError::authentication("Authentication failed");
+        let authorization = AppError::authorization("Permission denied");
+
+        assert!(matches!(authentication, AppError::Authentication { .. }));
+        assert!(matches!(authorization, AppError::Authorization { .. }));
     }
 }

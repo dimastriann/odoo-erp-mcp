@@ -124,17 +124,17 @@ async fn handle_request(
             // Enforce Instance Tool Permissions
             if !instance_obj.is_tool_allowed(tool_name.as_str(), &global_mode) {
                 let mode_str = instance_obj.get_mode(&global_mode);
-                let err_msg = format!(
+                let error = AppError::authorization(format!(
                     "Error: Tool '{}' is restricted for Odoo instance '{}' (Mode: '{}'). Permission denied.",
                     tool_name.as_str(),
                     instance_obj.name,
                     mode_str
-                );
+                ));
                 return Some(json!({
                     "jsonrpc": "2.0",
                     "id": id,
                     "result": {
-                        "content": [{ "type": "text", "text": err_msg }]
+                        "content": [{ "type": "text", "text": error.to_string() }]
                     }
                 }));
             }
