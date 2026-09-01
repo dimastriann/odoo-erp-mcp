@@ -112,7 +112,7 @@ Goal: Make MCP-to-Odoo communication understandable, classifiable, reliable, and
 
 - [x] S1-01 — Create the main internal error enum.
 - [x] S1-02 — Add an input-validation error category.
-- [ ] S1-03 — Add a configuration-error category.
+- [x] S1-03 — Add a configuration-error category.
 - [ ] S1-04 — Add authentication and authorization error categories.
 - [ ] S1-05 — Add Odoo validation and access-error categories.
 - [ ] S1-06 — Add transport, timeout, and protocol-error categories.
@@ -691,7 +691,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
-| Stage 1 — Structured Errors and RPC Reliability | In progress | 2/29 | |
+| Stage 1 — Structured Errors and RPC Reliability | In progress | 3/29 | |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |

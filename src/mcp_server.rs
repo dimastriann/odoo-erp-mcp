@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::error::AppError;
 use crate::odoo_client::ClientManager;
 use crate::tool_catalog::{ToolName, tool_definitions};
 use crate::tool_executor::execute_tool;
@@ -100,19 +101,21 @@ async fn handle_request(
             let instance_obj = match target_instance {
                 Some(i) => i,
                 None => {
-                    let err_msg = if instance_target.is_empty() {
-                        "Error: No active Odoo instance configured or selected.".to_string()
+                    let error = if instance_target.is_empty() {
+                        AppError::configuration(
+                            "Error: No active Odoo instance configured or selected.",
+                        )
                     } else {
-                        format!(
+                        AppError::configuration(format!(
                             "Error: Specified Odoo instance '{}' not found.",
                             instance_target
-                        )
+                        ))
                     };
                     return Some(json!({
                         "jsonrpc": "2.0",
                         "id": id,
                         "result": {
-                            "content": [{ "type": "text", "text": err_msg }]
+                            "content": [{ "type": "text", "text": error.to_string() }]
                         }
                     }));
                 }
