@@ -22,9 +22,7 @@ impl ToolExecutionResult {
     }
 
     pub(crate) fn invalid_arguments(operation: &str, error: impl Display) -> Self {
-        Self::Failure(AppError::internal(format!(
-            "Error: Invalid {operation} arguments: {error}"
-        )))
+        Self::Failure(AppError::invalid_arguments(operation, error))
     }
 
     pub(crate) fn into_text(self) -> String {

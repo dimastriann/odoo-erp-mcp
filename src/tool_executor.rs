@@ -18,7 +18,7 @@ pub(crate) async fn execute_tool(
         .and_then(|m| m.as_str())
         .unwrap_or("");
     if model.is_empty() {
-        return ToolExecutionResult::Failure(AppError::internal(
+        return ToolExecutionResult::Failure(AppError::input_validation(
             "Error: Missing required parameter 'model'",
         ));
     }
