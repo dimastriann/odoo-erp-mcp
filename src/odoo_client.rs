@@ -3,6 +3,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 #[derive(Clone)]
 pub struct OdooClient {
@@ -11,6 +12,7 @@ pub struct OdooClient {
     uid: i64,
     password: String,
     client: Client,
+    next_request_id: Arc<AtomicI64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -39,6 +41,7 @@ impl OdooClient {
             uid: 0,
             password: password.clone(),
             client,
+            next_request_id: Arc::new(AtomicI64::new(1)),
         };
 
         let uid = odoo
@@ -53,7 +56,7 @@ impl OdooClient {
             jsonrpc: "2.0".into(),
             method: "call".into(),
             params,
-            id: 1,
+            id: self.next_request_id.fetch_add(1, Ordering::Relaxed),
         };
 
         let url = format!("{}/jsonrpc", self.base_url);
@@ -338,5 +341,31 @@ impl ClientManager {
     pub async fn remove_client(&self, instance_id: &str) {
         let mut map = self.clients.lock().await;
         map.remove(instance_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{MockOdooServer, authentication_success};
+
+    #[tokio::test]
+    async fn assigns_a_unique_id_to_each_json_rpc_request() {
+        let server = MockOdooServer::start(authentication_success(7)).await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        client.search_count("res.partner", json!([])).await.unwrap();
+
+        let requests = server.requests().await;
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0]["id"], 1);
+        assert_eq!(requests[1]["id"], 2);
     }
 }

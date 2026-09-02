@@ -127,7 +127,7 @@ Goal: Make MCP-to-Odoo communication understandable, classifiable, reliable, and
 
 ## 1.2 RPC client hardening
 
-- [ ] S1-15 — Use a unique JSON-RPC request ID.
+- [x] S1-15 — Use a unique JSON-RPC request ID.
 - [ ] S1-16 — Validate HTTP status before parsing the response.
 - [ ] S1-17 — Validate the JSON-RPC result/error envelope.
 - [ ] S1-18 — Classify malformed JSON-RPC responses.
@@ -691,7 +691,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
-| Stage 1 — Structured Errors and RPC Reliability | In progress | 14/29 | Structured error model complete. |
+| Stage 1 — Structured Errors and RPC Reliability | In progress | 15/29 | Structured error model complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
