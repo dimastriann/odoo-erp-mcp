@@ -9,18 +9,6 @@ pub(crate) enum ToolExecutionResult {
 }
 
 impl ToolExecutionResult {
-    pub(crate) fn from_rpc<E>(operation: &str, result: Result<Value, E>) -> Self
-    where
-        E: Display,
-    {
-        match result {
-            Ok(value) => Self::Success(value),
-            Err(error) => Self::Failure(AppError::internal(format!(
-                "Error executing {operation}: {error}"
-            ))),
-        }
-    }
-
     pub(crate) fn from_app_error(result: Result<Value, AppError>) -> Self {
         match result {
             Ok(value) => Self::Success(value),
@@ -40,9 +28,9 @@ impl ToolExecutionResult {
         }
     }
 
-    pub(crate) fn into_mcp_result(self, structured_errors: bool) -> Value {
+    pub(crate) fn into_mcp_result(self) -> Value {
         match self {
-            Self::Failure(error) if structured_errors => {
+            Self::Failure(error) => {
                 let structured = serde_json::to_value(error.structured_response())
                     .expect("structured errors must be serializable");
                 let text = serde_json::to_string_pretty(&structured)
@@ -67,7 +55,7 @@ mod tests {
     #[test]
     fn structured_failure_sets_mcp_error_and_content() {
         let result = ToolExecutionResult::Failure(AppError::input_validation("invalid domain"))
-            .into_mcp_result(true);
+            .into_mcp_result();
 
         assert_eq!(result["isError"], true);
         assert_eq!(

@@ -145,7 +145,7 @@ impl AppError {
         {
             "odoo.exceptions.AccessError" => Self::OdooAccess { message },
             "odoo.exceptions.ValidationError" => Self::OdooValidation { message },
-            _ => Self::Internal { message },
+            _ => Self::internal(message),
         }
     }
 

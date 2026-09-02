@@ -67,8 +67,7 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("create", error),
             };
-            ToolExecutionResult::from_rpc(
-                "create",
+            ToolExecutionResult::from_app_error(
                 odoo.create(&args.model, Value::Object(args.vals)).await,
             )
         }
@@ -77,8 +76,7 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("copy", error),
             };
-            ToolExecutionResult::from_rpc(
-                "copy",
+            ToolExecutionResult::from_app_error(
                 odoo.copy(&args.model, args.id, Value::Object(args.vals))
                     .await,
             )
@@ -88,8 +86,7 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("update", error),
             };
-            ToolExecutionResult::from_rpc(
-                "update",
+            ToolExecutionResult::from_app_error(
                 odoo.update(&args.model, args.ids, Value::Object(args.vals))
                     .await,
             )
@@ -99,7 +96,7 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("delete", error),
             };
-            ToolExecutionResult::from_rpc("delete", odoo.delete(&args.model, args.ids).await)
+            ToolExecutionResult::from_app_error(odoo.delete(&args.model, args.ids).await)
         }
         ToolName::GetMetadata => {
             let args: ModelFieldsArgs = match serde_json::from_value(arguments) {
