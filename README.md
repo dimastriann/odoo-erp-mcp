@@ -53,6 +53,22 @@ Configure the instance URL, database, Odoo username, password or API key, and to
 - **Reqwest**: For handling Odoo JSON-RPC communication.
 - **Serde**: For high-speed JSON serialization.
 
+## 🧭 Source Layout
+
+The Rust source is organized by responsibility:
+
+```text
+src/
+├── mcp/       # MCP transport, request handling, and dispatch
+├── odoo/      # Odoo JSON-RPC client and per-instance client manager
+├── tools/     # Tool schemas, arguments, execution, and results
+├── views/     # Web configuration UI and static assets
+├── config.rs  # Persistent server and instance configuration
+├── domain.rs  # Shared domain validation
+├── error.rs   # Typed application errors and wire error codes
+└── main.rs    # Process bootstrap and module composition
+```
+
 ## 📦 Getting Started
 
 ### Prerequisites
