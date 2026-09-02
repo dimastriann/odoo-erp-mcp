@@ -153,7 +153,15 @@ async fn handle_request(
                 }
             };
 
-            let structured_errors = tool_name == ToolName::SearchRead;
+            let structured_errors = matches!(
+                tool_name,
+                ToolName::SearchRead
+                    | ToolName::SearchCount
+                    | ToolName::ReadGroup
+                    | ToolName::GetMetadata
+                    | ToolName::Search
+                    | ToolName::Read
+            );
             let result = execute_tool(tool_name, arguments, &odoo_client)
                 .await
                 .into_mcp_result(structured_errors);

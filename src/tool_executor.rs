@@ -47,10 +47,7 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search-count domain", error);
             }
-            ToolExecutionResult::from_rpc(
-                "search_count",
-                odoo.search_count(&args.model, args.domain).await,
-            )
+            ToolExecutionResult::from_app_error(odoo.search_count(&args.model, args.domain).await)
         }
         ToolName::ReadGroup => {
             let args: ReadGroupArgs = match serde_json::from_value(arguments) {
@@ -60,8 +57,7 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("read-group domain", error);
             }
-            ToolExecutionResult::from_rpc(
-                "read_group",
+            ToolExecutionResult::from_app_error(
                 odoo.read_group(&args.model, args.domain, args.fields, args.groupby)
                     .await,
             )
@@ -110,10 +106,7 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("metadata", error),
             };
-            ToolExecutionResult::from_rpc(
-                "get_metadata",
-                odoo.get_metadata(&args.model, args.fields).await,
-            )
+            ToolExecutionResult::from_app_error(odoo.get_metadata(&args.model, args.fields).await)
         }
         ToolName::Search => {
             let args: SearchDomainArgs = match serde_json::from_value(arguments) {
@@ -123,17 +116,14 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search domain", error);
             }
-            ToolExecutionResult::from_rpc("search", odoo.search(&args.model, args.domain).await)
+            ToolExecutionResult::from_app_error(odoo.search(&args.model, args.domain).await)
         }
         ToolName::Read => {
             let args: ReadArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("read", error),
             };
-            ToolExecutionResult::from_rpc(
-                "read",
-                odoo.read(&args.model, args.ids, args.fields).await,
-            )
+            ToolExecutionResult::from_app_error(odoo.read(&args.model, args.ids, args.fields).await)
         }
     }
 }
