@@ -84,11 +84,22 @@ impl OdooClient {
             .await
             .map_err(|_| AppError::protocol("Odoo returned an invalid JSON response"))?;
 
-        if let Some(error) = resp_json.get("error") {
-            return Err(AppError::from_odoo_rpc(error));
+        if resp_json.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
+            return Err(AppError::protocol(
+                "Odoo returned an invalid JSON-RPC version",
+            ));
         }
 
-        Ok(resp_json["result"].clone())
+        match (resp_json.get("result"), resp_json.get("error")) {
+            (Some(result), None) => Ok(result.clone()),
+            (None, Some(error)) => Err(AppError::from_odoo_rpc(error)),
+            (Some(_), Some(_)) => Err(AppError::protocol(
+                "Odoo returned both JSON-RPC result and error",
+            )),
+            (None, None) => Err(AppError::protocol(
+                "Odoo response is missing JSON-RPC result or error",
+            )),
+        }
     }
 
     pub async fn authenticate(
@@ -398,5 +409,61 @@ mod tests {
 
         assert!(matches!(error, AppError::Protocol { .. }));
         assert_eq!(error.to_string(), "Odoo returned HTTP status 503");
+    }
+
+    #[tokio::test]
+    async fn rejects_json_rpc_envelope_without_result_or_error() {
+        let server = MockOdooServer::start(json!({
+            "jsonrpc": "2.0",
+            "id": 1
+        }))
+        .await;
+
+        let result = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("malformed RPC envelope must not create a client"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AppError::Protocol { .. }));
+        assert_eq!(
+            error.to_string(),
+            "Odoo response is missing JSON-RPC result or error"
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_json_rpc_envelope_with_result_and_error() {
+        let server = MockOdooServer::start(json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": 7,
+            "error": {"message": "ambiguous"}
+        }))
+        .await;
+
+        let result = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("ambiguous RPC envelope must not create a client"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AppError::Protocol { .. }));
+        assert_eq!(
+            error.to_string(),
+            "Odoo returned both JSON-RPC result and error"
+        );
     }
 }
