@@ -3,9 +3,18 @@ use crate::error::AppError;
 use crate::odoo_client::ClientManager;
 use crate::tool_catalog::{ToolName, tool_definitions};
 use crate::tool_executor::execute_tool;
+use crate::tool_result::ToolExecutionResult;
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+fn tool_call_response(id: Value, result: ToolExecutionResult) -> Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": result.into_mcp_result()
+    })
+}
 
 pub async fn run_server(config: Arc<RwLock<Config>>, client_manager: ClientManager) {
     let stdin = io::stdin();
@@ -76,13 +85,12 @@ async fn handle_request(
             let tool_name = match ToolName::try_from(name) {
                 Ok(tool_name) => tool_name,
                 Err(()) => {
-                    return Some(json!({
-                        "jsonrpc": "2.0",
-                        "id": id,
-                        "result": {
-                            "content": [{ "type": "text", "text": format!("Error: Unknown tool {name}") }]
-                        }
-                    }));
+                    return Some(tool_call_response(
+                        id,
+                        ToolExecutionResult::Failure(AppError::input_validation(format!(
+                            "Error: Unknown tool {name}"
+                        ))),
+                    ));
                 }
             };
 
@@ -111,13 +119,7 @@ async fn handle_request(
                             instance_target
                         ))
                     };
-                    return Some(json!({
-                        "jsonrpc": "2.0",
-                        "id": id,
-                        "result": {
-                            "content": [{ "type": "text", "text": error.to_string() }]
-                        }
-                    }));
+                    return Some(tool_call_response(id, ToolExecutionResult::Failure(error)));
                 }
             };
 
@@ -130,26 +132,14 @@ async fn handle_request(
                     instance_obj.name,
                     mode_str
                 ));
-                return Some(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "result": {
-                        "content": [{ "type": "text", "text": error.to_string() }]
-                    }
-                }));
+                return Some(tool_call_response(id, ToolExecutionResult::Failure(error)));
             }
 
             // Get or create OdooClient dynamically
             let odoo_client = match client_manager.get_client(&instance_obj).await {
                 Ok(client) => client,
                 Err(err) => {
-                    return Some(json!({
-                        "jsonrpc": "2.0",
-                        "id": id,
-                        "result": {
-                            "content": [{ "type": "text", "text": format!("Error: {}", err) }]
-                        }
-                    }));
+                    return Some(tool_call_response(id, ToolExecutionResult::Failure(err)));
                 }
             };
 
@@ -157,11 +147,7 @@ async fn handle_request(
                 .await
                 .into_mcp_result();
 
-            Some(json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": result
-            }))
+            Some(json!({"jsonrpc": "2.0", "id": id, "result": result}))
         }
         _ => Some(json!({
             "jsonrpc": "2.0",
