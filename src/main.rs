@@ -2,14 +2,14 @@ mod config;
 mod domain;
 mod error;
 mod mcp_server;
-mod odoo_client;
+mod odoo;
 #[cfg(test)]
 mod test_support;
 mod tools;
 mod views;
 
 use config::Config;
-use odoo_client::ClientManager;
+use odoo::ClientManager;
 use std::sync::{Arc, RwLock};
 
 #[tokio::main]

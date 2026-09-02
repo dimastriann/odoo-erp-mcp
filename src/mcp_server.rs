@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::error::AppError;
-use crate::odoo_client::ClientManager;
+use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
 use crate::tools::executor::execute_tool;
 use crate::tools::result::ToolExecutionResult;

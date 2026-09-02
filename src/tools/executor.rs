@@ -1,5 +1,5 @@
 use crate::domain::validate_domain;
-use crate::odoo_client::OdooClient;
+use crate::odoo::OdooClient;
 use crate::tools::arguments::{
     CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchDomainArgs,
     SearchReadArgs, UpdateArgs,
