@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -14,6 +15,7 @@ pub struct OdooClient {
     password: String,
     client: Client,
     next_request_id: Arc<AtomicI64>,
+    max_response_bytes: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -39,6 +41,7 @@ impl OdooClient {
             password,
             Duration::from_secs(10),
             Duration::from_secs(30),
+            10 * 1024 * 1024,
         )
         .await
     }
@@ -50,6 +53,7 @@ impl OdooClient {
         password: String,
         connection_timeout: Duration,
         request_timeout: Duration,
+        max_response_bytes: usize,
     ) -> Result<Self, AppError> {
         let client = Client::builder()
             .cookie_store(true)
@@ -65,6 +69,7 @@ impl OdooClient {
             password: password.clone(),
             client,
             next_request_id: Arc::new(AtomicI64::new(1)),
+            max_response_bytes,
         };
 
         let uid = odoo
@@ -102,9 +107,33 @@ impl OdooClient {
                 res.status().as_u16()
             )));
         }
-        let resp_json: Value = res
-            .json()
-            .await
+        if res
+            .content_length()
+            .is_some_and(|length| length > self.max_response_bytes as u64)
+        {
+            return Err(AppError::protocol(
+                "Odoo response exceeds configured size limit",
+            ));
+        }
+
+        let mut response_body = Vec::new();
+        let mut response_stream = res.bytes_stream();
+        while let Some(chunk) = response_stream.next().await {
+            let chunk = chunk.map_err(|error| {
+                if error.is_timeout() {
+                    AppError::timeout("Odoo request timed out")
+                } else {
+                    AppError::transport("Failed to read Odoo response")
+                }
+            })?;
+            if response_body.len().saturating_add(chunk.len()) > self.max_response_bytes {
+                return Err(AppError::protocol(
+                    "Odoo response exceeds configured size limit",
+                ));
+            }
+            response_body.extend_from_slice(&chunk);
+        }
+        let resp_json: Value = serde_json::from_slice(&response_body)
             .map_err(|_| AppError::protocol("Odoo returned an invalid JSON response"))?;
 
         if resp_json.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
@@ -352,6 +381,7 @@ impl ClientManager {
         instance: &OdooInstance,
         connection_timeout: Duration,
         request_timeout: Duration,
+        max_response_bytes: usize,
     ) -> Result<Arc<OdooClient>, AppError> {
         let mut map = self.clients.lock().await;
         if let Some(client) = map.get(&instance.id) {
@@ -369,6 +399,7 @@ impl ClientManager {
             instance.password.clone(),
             connection_timeout,
             request_timeout,
+            max_response_bytes,
         )
         .await
         {
@@ -530,6 +561,7 @@ mod tests {
             "secret".to_string(),
             Duration::from_secs(1),
             Duration::from_millis(10),
+            10 * 1024 * 1024,
         )
         .await;
         let error = match result {
@@ -539,5 +571,31 @@ mod tests {
 
         assert!(matches!(error, AppError::Timeout { .. }));
         assert_eq!(error.to_string(), "Odoo request timed out");
+    }
+
+    #[tokio::test]
+    async fn rejects_response_larger_than_configured_limit() {
+        let server = MockOdooServer::start(authentication_success(7)).await;
+
+        let result = OdooClient::new_with_timeouts(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+            Duration::from_secs(1),
+            Duration::from_secs(1),
+            16,
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("oversized response must not create an Odoo client"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AppError::Protocol { .. }));
+        assert_eq!(
+            error.to_string(),
+            "Odoo response exceeds configured size limit"
+        );
     }
 }

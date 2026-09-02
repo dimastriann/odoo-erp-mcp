@@ -160,6 +160,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
             default_mode: "crud".to_string(),
             rpc_connection_timeout_secs: 10,
             rpc_request_timeout_secs: 30,
+            rpc_max_response_bytes: 10 * 1024 * 1024,
         },
         instances: vec![
             OdooInstance {

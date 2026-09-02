@@ -53,6 +53,8 @@ pub struct GlobalSettings {
     pub rpc_connection_timeout_secs: u64,
     #[serde(default = "default_rpc_request_timeout_secs")]
     pub rpc_request_timeout_secs: u64,
+    #[serde(default = "default_rpc_max_response_bytes")]
+    pub rpc_max_response_bytes: usize,
 }
 
 fn default_global_mode() -> String {
@@ -67,12 +69,17 @@ fn default_rpc_request_timeout_secs() -> u64 {
     30
 }
 
+fn default_rpc_max_response_bytes() -> usize {
+    10 * 1024 * 1024
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
             default_mode: default_global_mode(),
             rpc_connection_timeout_secs: default_rpc_connection_timeout_secs(),
             rpc_request_timeout_secs: default_rpc_request_timeout_secs(),
+            rpc_max_response_bytes: default_rpc_max_response_bytes(),
         }
     }
 }
