@@ -73,6 +73,12 @@ impl OdooClient {
                     AppError::transport("Failed to communicate with Odoo")
                 }
             })?;
+        if !res.status().is_success() {
+            return Err(AppError::protocol(format!(
+                "Odoo returned HTTP status {}",
+                res.status().as_u16()
+            )));
+        }
         let resp_json: Value = res
             .json()
             .await
@@ -348,6 +354,7 @@ impl ClientManager {
 mod tests {
     use super::*;
     use crate::test_support::{MockOdooServer, authentication_success};
+    use axum::http::StatusCode;
 
     #[tokio::test]
     async fn assigns_a_unique_id_to_each_json_rpc_request() {
@@ -367,5 +374,29 @@ mod tests {
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[0]["id"], 1);
         assert_eq!(requests[1]["id"], 2);
+    }
+
+    #[tokio::test]
+    async fn rejects_unsuccessful_http_status_before_parsing_rpc_result() {
+        let server = MockOdooServer::start_with_status(
+            authentication_success(7),
+            StatusCode::SERVICE_UNAVAILABLE,
+        )
+        .await;
+
+        let result = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("HTTP failure must not create an Odoo client"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AppError::Protocol { .. }));
+        assert_eq!(error.to_string(), "Odoo returned HTTP status 503");
     }
 }

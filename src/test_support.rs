@@ -1,4 +1,5 @@
 use crate::config::{Config, GlobalSettings, OdooInstance};
+use axum::http::StatusCode;
 use axum::{Json, Router, extract::State, routing::post};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
@@ -54,28 +55,42 @@ struct MockOdooState {
     response: Value,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
     response_delay: Duration,
+    status: StatusCode,
 }
 
 async fn handle_mock_rpc(
     State(state): State<MockOdooState>,
     Json(request): Json<Value>,
-) -> Json<Value> {
+) -> (StatusCode, Json<Value>) {
     state.requests.lock().await.push(request);
     tokio::time::sleep(state.response_delay).await;
-    Json(state.response)
+    (state.status, Json(state.response))
 }
 
 impl MockOdooServer {
     pub(crate) async fn start(response: Value) -> Self {
-        Self::start_delayed(response, Duration::ZERO).await
+        Self::start_with_options(response, StatusCode::OK, Duration::ZERO).await
     }
 
     pub(crate) async fn start_delayed(response: Value, response_delay: Duration) -> Self {
+        Self::start_with_options(response, StatusCode::OK, response_delay).await
+    }
+
+    pub(crate) async fn start_with_status(response: Value, status: StatusCode) -> Self {
+        Self::start_with_options(response, status, Duration::ZERO).await
+    }
+
+    async fn start_with_options(
+        response: Value,
+        status: StatusCode,
+        response_delay: Duration,
+    ) -> Self {
         let requests = Arc::new(tokio::sync::Mutex::new(Vec::new()));
         let state = MockOdooState {
             response,
             requests: Arc::clone(&requests),
             response_delay,
+            status,
         };
         let app = Router::new()
             .route("/jsonrpc", post(handle_mock_rpc))
