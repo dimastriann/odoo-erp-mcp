@@ -1,7 +1,7 @@
 mod config;
 mod domain;
 mod error;
-mod mcp_server;
+mod mcp;
 mod odoo;
 #[cfg(test)]
 mod test_support;
@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Starting MCP server with multi-instance support & permission enforcement...");
 
     // Start MCP Server loop
-    mcp_server::run_server(shared_config, client_manager).await;
+    mcp::run_server(shared_config, client_manager).await;
 
     Ok(())
 }
