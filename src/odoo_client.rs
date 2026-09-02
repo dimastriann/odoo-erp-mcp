@@ -417,7 +417,9 @@ impl ClientManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{MockOdooServer, authentication_success, json_rpc_success};
+    use crate::test_support::{
+        MockOdooServer, authentication_success, connection_failure_url, json_rpc_success,
+    };
     use axum::http::StatusCode;
 
     #[tokio::test]
@@ -612,5 +614,37 @@ mod tests {
             error.to_string(),
             "Odoo response exceeds configured size limit"
         );
+    }
+
+    #[tokio::test]
+    async fn client_manager_preserves_transport_failure_category() {
+        let manager = ClientManager::new();
+        let instance = OdooInstance {
+            id: "unreachable".to_string(),
+            name: "Unreachable Odoo".to_string(),
+            url: connection_failure_url().to_string(),
+            db: "test-db".to_string(),
+            username: "admin".to_string(),
+            password: "secret".to_string(),
+            active: true,
+            mode: None,
+            allowed_tools: None,
+        };
+
+        let result = manager
+            .get_client(
+                &instance,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                1024,
+            )
+            .await;
+        let error = match result {
+            Ok(_) => panic!("unreachable Odoo must not create a cached client"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AppError::Transport { .. }));
+        assert_eq!(error.to_string(), "Failed to communicate with Odoo");
     }
 }
