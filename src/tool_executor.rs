@@ -1,11 +1,11 @@
 use crate::domain::validate_domain;
 use crate::odoo_client::OdooClient;
-use crate::tool_result::ToolExecutionResult;
 use crate::tools::arguments::{
     CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchDomainArgs,
     SearchReadArgs, UpdateArgs,
 };
 use crate::tools::catalog::ToolName;
+use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
 
 pub(crate) async fn execute_tool(
