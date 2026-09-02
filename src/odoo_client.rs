@@ -466,4 +466,24 @@ mod tests {
             "Odoo returned both JSON-RPC result and error"
         );
     }
+
+    #[tokio::test]
+    async fn classifies_malformed_json_response_as_protocol_error() {
+        let server = MockOdooServer::start_raw("{not-valid-json").await;
+
+        let result = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("malformed JSON must not create an Odoo client"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AppError::Protocol { .. }));
+        assert_eq!(error.to_string(), "Odoo returned an invalid JSON response");
+    }
 }

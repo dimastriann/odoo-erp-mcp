@@ -1,5 +1,7 @@
 use crate::config::{Config, GlobalSettings, OdooInstance};
 use axum::http::StatusCode;
+use axum::http::header;
+use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, extract::State, routing::post};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
@@ -52,36 +54,59 @@ pub(crate) struct MockOdooServer {
 
 #[derive(Clone)]
 struct MockOdooState {
-    response: Value,
+    response: MockResponse,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
     response_delay: Duration,
     status: StatusCode,
 }
 
+#[derive(Clone)]
+enum MockResponse {
+    Json(Value),
+    Raw(String),
+}
+
 async fn handle_mock_rpc(
     State(state): State<MockOdooState>,
     Json(request): Json<Value>,
-) -> (StatusCode, Json<Value>) {
+) -> Response {
     state.requests.lock().await.push(request);
     tokio::time::sleep(state.response_delay).await;
-    (state.status, Json(state.response))
+    match state.response {
+        MockResponse::Json(value) => (state.status, Json(value)).into_response(),
+        MockResponse::Raw(body) => (
+            state.status,
+            [(header::CONTENT_TYPE, "application/json")],
+            body,
+        )
+            .into_response(),
+    }
 }
 
 impl MockOdooServer {
     pub(crate) async fn start(response: Value) -> Self {
-        Self::start_with_options(response, StatusCode::OK, Duration::ZERO).await
+        Self::start_with_options(MockResponse::Json(response), StatusCode::OK, Duration::ZERO).await
     }
 
     pub(crate) async fn start_delayed(response: Value, response_delay: Duration) -> Self {
-        Self::start_with_options(response, StatusCode::OK, response_delay).await
+        Self::start_with_options(MockResponse::Json(response), StatusCode::OK, response_delay).await
     }
 
     pub(crate) async fn start_with_status(response: Value, status: StatusCode) -> Self {
-        Self::start_with_options(response, status, Duration::ZERO).await
+        Self::start_with_options(MockResponse::Json(response), status, Duration::ZERO).await
+    }
+
+    pub(crate) async fn start_raw(response: impl Into<String>) -> Self {
+        Self::start_with_options(
+            MockResponse::Raw(response.into()),
+            StatusCode::OK,
+            Duration::ZERO,
+        )
+        .await
     }
 
     async fn start_with_options(
-        response: Value,
+        response: MockResponse,
         status: StatusCode,
         response_delay: Duration,
     ) -> Self {

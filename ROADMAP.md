@@ -130,7 +130,7 @@ Goal: Make MCP-to-Odoo communication understandable, classifiable, reliable, and
 - [x] S1-15 — Use a unique JSON-RPC request ID.
 - [x] S1-16 — Validate HTTP status before parsing the response.
 - [x] S1-17 — Validate the JSON-RPC result/error envelope.
-- [ ] S1-18 — Classify malformed JSON-RPC responses.
+- [x] S1-18 — Classify malformed JSON-RPC responses.
 - [ ] S1-19 — Add a configurable connection timeout.
 - [ ] S1-20 — Add a configurable request timeout.
 - [ ] S1-21 — Add response-body size protection.
@@ -691,7 +691,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
-| Stage 1 — Structured Errors and RPC Reliability | In progress | 17/29 | Structured error model complete. |
+| Stage 1 — Structured Errors and RPC Reliability | In progress | 18/29 | Structured error model complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
