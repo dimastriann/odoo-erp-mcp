@@ -1,9 +1,9 @@
 use crate::config::Config;
 use crate::error::AppError;
 use crate::odoo_client::ClientManager;
-use crate::tool_catalog::{ToolName, tool_definitions};
 use crate::tool_executor::execute_tool;
 use crate::tool_result::ToolExecutionResult;
+use crate::tools::catalog::{ToolName, tool_definitions};
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
