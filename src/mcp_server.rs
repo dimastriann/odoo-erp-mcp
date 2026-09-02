@@ -153,21 +153,15 @@ async fn handle_request(
                 }
             };
 
+            let structured_errors = tool_name == ToolName::SearchRead;
             let result = execute_tool(tool_name, arguments, &odoo_client)
                 .await
-                .into_text();
+                .into_mcp_result(structured_errors);
 
             Some(json!({
                 "jsonrpc": "2.0",
                 "id": id,
-                "result": {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": result
-                        }
-                    ]
-                }
+                "result": result
             }))
         }
         _ => Some(json!({

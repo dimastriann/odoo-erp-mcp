@@ -32,8 +32,7 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search-read domain", error);
             }
-            ToolExecutionResult::from_rpc(
-                "search_read",
+            ToolExecutionResult::from_app_error(
                 odoo.search_read(&args.model, args.domain, args.fields)
                     .await,
             )
