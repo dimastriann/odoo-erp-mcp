@@ -5,10 +5,10 @@ mod mcp_server;
 mod odoo_client;
 #[cfg(test)]
 mod test_support;
-mod tool_arguments;
 mod tool_catalog;
 mod tool_executor;
 mod tool_result;
+mod tools;
 mod views;
 
 use config::Config;
