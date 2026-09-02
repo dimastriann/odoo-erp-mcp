@@ -363,4 +363,78 @@ mod tests {
         assert!(!response.contains("super-secret"));
         assert!(!response.contains("private-key"));
     }
+
+    #[test]
+    fn every_category_serializes_with_its_stable_contract() {
+        let cases = [
+            (
+                AppError::authentication("authentication message"),
+                "AUTHENTICATION_FAILED",
+                false,
+            ),
+            (
+                AppError::authorization("authorization message"),
+                "PERMISSION_DENIED",
+                false,
+            ),
+            (
+                AppError::configuration("configuration message"),
+                "CONFIGURATION_ERROR",
+                false,
+            ),
+            (
+                AppError::input_validation("validation message"),
+                "INVALID_ARGUMENTS",
+                false,
+            ),
+            (
+                AppError::from_odoo_rpc(&serde_json::json!({
+                    "message": "internal message"
+                })),
+                "INTERNAL_ERROR",
+                false,
+            ),
+            (
+                AppError::from_odoo_rpc(&serde_json::json!({
+                    "data": {
+                        "name": "odoo.exceptions.AccessError",
+                        "message": "Odoo access message"
+                    }
+                })),
+                "ODOO_ACCESS_ERROR",
+                false,
+            ),
+            (
+                AppError::from_odoo_rpc(&serde_json::json!({
+                    "data": {
+                        "name": "odoo.exceptions.ValidationError",
+                        "message": "Odoo validation message"
+                    }
+                })),
+                "ODOO_VALIDATION_ERROR",
+                false,
+            ),
+            (
+                AppError::protocol("protocol message"),
+                "PROTOCOL_ERROR",
+                false,
+            ),
+            (AppError::timeout("timeout message"), "TIMEOUT", true),
+            (
+                AppError::transport("transport message"),
+                "TRANSPORT_ERROR",
+                true,
+            ),
+        ];
+
+        for (error, code, retryable) in cases {
+            let message = error.to_string();
+            let response = serde_json::to_value(error.structured_response()).unwrap();
+
+            assert_eq!(response["success"], false);
+            assert_eq!(response["error"]["code"], code);
+            assert_eq!(response["error"]["message"], message);
+            assert_eq!(response["error"]["retryable"], retryable);
+        }
+    }
 }

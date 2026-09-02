@@ -261,6 +261,11 @@ mod tests {
         let resp = handle_request(req, &config, &client_manager).await.unwrap();
         let text = resp["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("Permission denied"));
+        assert_eq!(resp["result"]["isError"], true);
+        assert_eq!(
+            resp["result"]["structuredContent"]["error"]["code"],
+            "PERMISSION_DENIED"
+        );
     }
 
     #[tokio::test]
@@ -283,6 +288,34 @@ mod tests {
         let resp = handle_request(req, &config, &client_manager).await.unwrap();
         let text = resp["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("not found"));
+        assert_eq!(resp["result"]["isError"], true);
+        assert_eq!(
+            resp["result"]["structuredContent"]["error"]["code"],
+            "CONFIGURATION_ERROR"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_unknown_tool_returns_structured_input_error() {
+        let config = multi_instance_config();
+        let client_manager = ClientManager::new();
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 6,
+            "method": "tools/call",
+            "params": {
+                "name": "odoo-unknown",
+                "arguments": {}
+            }
+        });
+
+        let resp = handle_request(req, &config, &client_manager).await.unwrap();
+
+        assert_eq!(resp["result"]["isError"], true);
+        assert_eq!(
+            resp["result"]["structuredContent"]["error"]["code"],
+            "INVALID_ARGUMENTS"
+        );
     }
 
     #[tokio::test]

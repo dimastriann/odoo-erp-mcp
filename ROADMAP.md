@@ -123,7 +123,7 @@ Goal: Make MCP-to-Odoo communication understandable, classifiable, reliable, and
 - [x] S1-11 — Migrate all remaining read tools.
 - [x] S1-12 — Migrate all write tools.
 - [x] S1-13 — Sanitize errors to prevent credential and secret disclosure.
-- [ ] S1-14 — Add regression tests for every error category.
+- [x] S1-14 — Add regression tests for every error category.
 
 ## 1.2 RPC client hardening
 
@@ -691,7 +691,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
-| Stage 1 — Structured Errors and RPC Reliability | In progress | 13/29 | |
+| Stage 1 — Structured Errors and RPC Reliability | In progress | 14/29 | Structured error model complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
