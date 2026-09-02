@@ -158,6 +158,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
     Arc::new(RwLock::new(Config {
         global_settings: GlobalSettings {
             default_mode: "crud".to_string(),
+            rpc_connection_timeout_secs: 10,
         },
         instances: vec![
             OdooInstance {

@@ -100,7 +100,8 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
 ```json
 {
   "global_settings": {
-    "default_mode": "crud"
+    "default_mode": "crud",
+    "rpc_connection_timeout_secs": 10
   },
   "instances": [
     {

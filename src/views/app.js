@@ -93,7 +93,7 @@ createApp({
         const deleteInstance = id => remove(`/api/instances/${id}`, 'Delete this Odoo instance?');
         const deletePrompt = id => remove(`/api/prompts/${id}`, 'Delete this prompt?');
         async function toggleActive(id) { await api(`/api/instances/${id}/active`, { method: 'POST' }); await fetchConfig(); }
-        async function updateGlobalMode(default_mode) { await api('/api/global-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ default_mode }) }); await fetchConfig(); }
+        async function updateGlobalMode(default_mode) { await api('/api/global-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...config.value.global_settings, default_mode }) }); await fetchConfig(); }
         const getInstanceMode = inst => inst.mode && inst.mode !== 'inherit' ? inst.mode : (config.value.global_settings?.default_mode || 'crud');
         const displayMode = mode => mode === 'read_only' ? 'Read only' : 'Full access';
         function toggleDarkMode() { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light'); document.documentElement.classList.toggle('light', !isDark.value); }

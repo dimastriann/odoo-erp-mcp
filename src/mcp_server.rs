@@ -6,6 +6,7 @@ use crate::tool_executor::execute_tool;
 use crate::tool_result::ToolExecutionResult;
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 fn tool_call_response(id: Value, result: ToolExecutionResult) -> Value {
@@ -99,11 +100,13 @@ async fn handle_request(
                 .and_then(|i| i.as_str())
                 .unwrap_or("");
 
-            let (target_instance, global_mode) = {
+            let (target_instance, global_mode, connection_timeout) = {
                 let conf = config.read().unwrap();
                 let inst = conf.find_instance(instance_target).cloned();
                 let mode = conf.global_settings.default_mode.clone();
-                (inst, mode)
+                let connection_timeout =
+                    Duration::from_secs(conf.global_settings.rpc_connection_timeout_secs);
+                (inst, mode, connection_timeout)
             };
 
             let instance_obj = match target_instance {
@@ -136,7 +139,10 @@ async fn handle_request(
             }
 
             // Get or create OdooClient dynamically
-            let odoo_client = match client_manager.get_client(&instance_obj).await {
+            let odoo_client = match client_manager
+                .get_client(&instance_obj, connection_timeout)
+                .await
+            {
                 Ok(client) => client,
                 Err(err) => {
                     return Some(tool_call_response(id, ToolExecutionResult::Failure(err)));

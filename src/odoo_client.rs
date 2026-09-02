@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct OdooClient {
@@ -24,14 +25,27 @@ struct RpcRequest {
 }
 
 impl OdooClient {
+    #[cfg(test)]
     pub async fn new(
         base_url: String,
         db: String,
         username: String,
         password: String,
     ) -> Result<Self, AppError> {
+        Self::new_with_connection_timeout(base_url, db, username, password, Duration::from_secs(10))
+            .await
+    }
+
+    pub async fn new_with_connection_timeout(
+        base_url: String,
+        db: String,
+        username: String,
+        password: String,
+        connection_timeout: Duration,
+    ) -> Result<Self, AppError> {
         let client = Client::builder()
             .cookie_store(true)
+            .connect_timeout(connection_timeout)
             .build()
             .map_err(|_| AppError::transport("Failed to initialize Odoo HTTP client"))?;
 
@@ -324,7 +338,11 @@ impl ClientManager {
         }
     }
 
-    pub async fn get_client(&self, instance: &OdooInstance) -> Result<Arc<OdooClient>, AppError> {
+    pub async fn get_client(
+        &self,
+        instance: &OdooInstance,
+        connection_timeout: Duration,
+    ) -> Result<Arc<OdooClient>, AppError> {
         let mut map = self.clients.lock().await;
         if let Some(client) = map.get(&instance.id) {
             return Ok(Arc::clone(client));
@@ -334,11 +352,12 @@ impl ClientManager {
             "Connecting & authenticating Odoo instance '{}' (id: {})...",
             instance.name, instance.id
         );
-        match OdooClient::new(
+        match OdooClient::new_with_connection_timeout(
             instance.url.clone(),
             instance.db.clone(),
             instance.username.clone(),
             instance.password.clone(),
+            connection_timeout,
         )
         .await
         {
