@@ -392,7 +392,7 @@ impl ClientManager {
             "Connecting & authenticating Odoo instance '{}' (id: {})...",
             instance.name, instance.id
         );
-        match OdooClient::new_with_timeouts(
+        let client = OdooClient::new_with_timeouts(
             instance.url.clone(),
             instance.db.clone(),
             instance.username.clone(),
@@ -401,18 +401,10 @@ impl ClientManager {
             request_timeout,
             max_response_bytes,
         )
-        .await
-        {
-            Ok(client) => {
-                let arc_client = Arc::new(client);
-                map.insert(instance.id.clone(), Arc::clone(&arc_client));
-                Ok(arc_client)
-            }
-            Err(e) => Err(AppError::authentication(format!(
-                "Failed to connect to Odoo instance '{}': {}",
-                instance.name, e
-            ))),
-        }
+        .await?;
+        let arc_client = Arc::new(client);
+        map.insert(instance.id.clone(), Arc::clone(&arc_client));
+        Ok(arc_client)
     }
 
     #[allow(dead_code)]
@@ -425,7 +417,7 @@ impl ClientManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{MockOdooServer, authentication_success};
+    use crate::test_support::{MockOdooServer, authentication_success, json_rpc_success};
     use axum::http::StatusCode;
 
     #[tokio::test]
@@ -470,6 +462,29 @@ mod tests {
 
         assert!(matches!(error, AppError::Protocol { .. }));
         assert_eq!(error.to_string(), "Odoo returned HTTP status 503");
+    }
+
+    #[tokio::test]
+    async fn classifies_rejected_credentials_as_authentication_failure() {
+        let server = MockOdooServer::start(json_rpc_success(Value::Bool(false))).await;
+
+        let result = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "wrong-secret".to_string(),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("rejected credentials must not create an Odoo client"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AppError::Authentication { .. }));
+        assert_eq!(
+            error.to_string(),
+            "Authentication failed or returned empty uid"
+        );
     }
 
     #[tokio::test]
