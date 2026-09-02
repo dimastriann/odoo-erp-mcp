@@ -31,7 +31,7 @@ impl OdooClient {
         let client = Client::builder()
             .cookie_store(true)
             .build()
-            .map_err(|error| AppError::transport(error.to_string()))?;
+            .map_err(|_| AppError::transport("Failed to initialize Odoo HTTP client"))?;
 
         let mut odoo = OdooClient {
             base_url,
@@ -65,15 +65,15 @@ impl OdooClient {
             .await
             .map_err(|error| {
                 if error.is_timeout() {
-                    AppError::timeout(error.to_string())
+                    AppError::timeout("Odoo request timed out")
                 } else {
-                    AppError::transport(error.to_string())
+                    AppError::transport("Failed to communicate with Odoo")
                 }
             })?;
         let resp_json: Value = res
             .json()
             .await
-            .map_err(|error| AppError::protocol(error.to_string()))?;
+            .map_err(|_| AppError::protocol("Odoo returned an invalid JSON response"))?;
 
         if let Some(error) = resp_json.get("error") {
             return Err(AppError::from_odoo_rpc(error));

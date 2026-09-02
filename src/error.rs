@@ -137,7 +137,13 @@ impl AppError {
     }
 
     pub(crate) fn from_odoo_rpc(error: &Value) -> Self {
-        let message = format!("Odoo RPC Error: {error}");
+        let detail = error
+            .pointer("/data/message")
+            .or_else(|| error.get("message"))
+            .and_then(Value::as_str)
+            .filter(|message| !message.trim().is_empty())
+            .unwrap_or("Odoo request failed");
+        let message = format!("Odoo RPC Error: {detail}");
         match error
             .pointer("/data/name")
             .and_then(Value::as_str)
@@ -241,14 +247,22 @@ mod tests {
     #[test]
     fn classifies_validation_and_access_errors_from_odoo_payloads() {
         let validation = AppError::from_odoo_rpc(&serde_json::json!({
-            "data": {"name": "odoo.exceptions.ValidationError"}
+            "data": {
+                "name": "odoo.exceptions.ValidationError",
+                "message": "Invalid quantity"
+            }
         }));
         let access = AppError::from_odoo_rpc(&serde_json::json!({
-            "data": {"name": "odoo.exceptions.AccessError"}
+            "data": {
+                "name": "odoo.exceptions.AccessError",
+                "message": "Access denied"
+            }
         }));
 
-        assert!(matches!(validation, AppError::OdooValidation { .. }));
-        assert!(matches!(access, AppError::OdooAccess { .. }));
+        assert!(matches!(&validation, AppError::OdooValidation { .. }));
+        assert!(matches!(&access, AppError::OdooAccess { .. }));
+        assert_eq!(validation.to_string(), "Odoo RPC Error: Invalid quantity");
+        assert_eq!(access.to_string(), "Odoo RPC Error: Access denied");
     }
 
     #[test]
@@ -329,5 +343,24 @@ mod tests {
                 }
             })
         );
+    }
+
+    #[test]
+    fn odoo_error_response_excludes_debug_context_and_secrets() {
+        let error = AppError::from_odoo_rpc(&serde_json::json!({
+            "message": "Odoo Server Error",
+            "data": {
+                "name": "odoo.exceptions.ValidationError",
+                "message": "Invalid quantity",
+                "debug": "Traceback: password=super-secret",
+                "context": {"api_key": "private-key"}
+            }
+        }));
+        let response = serde_json::to_string(&error.structured_response()).unwrap();
+
+        assert!(response.contains("Invalid quantity"));
+        assert!(!response.contains("Traceback"));
+        assert!(!response.contains("super-secret"));
+        assert!(!response.contains("private-key"));
     }
 }
