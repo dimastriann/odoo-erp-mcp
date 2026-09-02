@@ -1,3 +1,4 @@
+use serde::Serialize;
 use serde_json::Value;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
@@ -17,7 +18,6 @@ pub(crate) enum ErrorCode {
 }
 
 impl ErrorCode {
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Authentication => "AUTHENTICATION_FAILED",
@@ -32,6 +32,19 @@ impl ErrorCode {
             Self::Transport => "TRANSPORT_ERROR",
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct StructuredErrorResponse<'a> {
+    success: bool,
+    error: StructuredError<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct StructuredError<'a> {
+    code: &'static str,
+    message: &'a str,
+    retryable: bool,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -49,7 +62,6 @@ pub(crate) enum AppError {
 }
 
 impl AppError {
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) const fn code(&self) -> ErrorCode {
         match self {
             Self::Authentication { .. } => ErrorCode::Authentication,
@@ -65,9 +77,35 @@ impl AppError {
         }
     }
 
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) const fn is_retryable(&self) -> bool {
         matches!(self, Self::Timeout { .. } | Self::Transport { .. })
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn structured_response(&self) -> StructuredErrorResponse<'_> {
+        StructuredErrorResponse {
+            success: false,
+            error: StructuredError {
+                code: self.code().as_str(),
+                message: self.message(),
+                retryable: self.is_retryable(),
+            },
+        }
+    }
+
+    fn message(&self) -> &str {
+        match self {
+            Self::Authentication { message }
+            | Self::Authorization { message }
+            | Self::Configuration { message }
+            | Self::InputValidation { message }
+            | Self::Internal { message }
+            | Self::OdooAccess { message }
+            | Self::OdooValidation { message }
+            | Self::Protocol { message }
+            | Self::Timeout { message }
+            | Self::Transport { message } => message.as_str(),
+        }
     }
 
     pub(crate) fn authentication(message: impl Into<String>) -> Self {
@@ -273,5 +311,23 @@ mod tests {
             AppError::protocol("malformed response"),
         ];
         assert!(permanent_errors.iter().all(|error| !error.is_retryable()));
+    }
+
+    #[test]
+    fn structured_response_contains_code_message_and_retryability() {
+        let error = AppError::timeout("Odoo request timed out");
+        let response = serde_json::to_value(error.structured_response()).unwrap();
+
+        assert_eq!(
+            response,
+            serde_json::json!({
+                "success": false,
+                "error": {
+                    "code": "TIMEOUT",
+                    "message": "Odoo request timed out",
+                    "retryable": true
+                }
+            })
+        );
     }
 }
