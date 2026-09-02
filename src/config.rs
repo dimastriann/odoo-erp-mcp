@@ -51,6 +51,8 @@ pub struct GlobalSettings {
     pub default_mode: String,
     #[serde(default = "default_rpc_connection_timeout_secs")]
     pub rpc_connection_timeout_secs: u64,
+    #[serde(default = "default_rpc_request_timeout_secs")]
+    pub rpc_request_timeout_secs: u64,
 }
 
 fn default_global_mode() -> String {
@@ -61,11 +63,16 @@ fn default_rpc_connection_timeout_secs() -> u64 {
     10
 }
 
+fn default_rpc_request_timeout_secs() -> u64 {
+    30
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
             default_mode: default_global_mode(),
             rpc_connection_timeout_secs: default_rpc_connection_timeout_secs(),
+            rpc_request_timeout_secs: default_rpc_request_timeout_secs(),
         }
     }
 }

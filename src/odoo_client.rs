@@ -32,20 +32,29 @@ impl OdooClient {
         username: String,
         password: String,
     ) -> Result<Self, AppError> {
-        Self::new_with_connection_timeout(base_url, db, username, password, Duration::from_secs(10))
-            .await
+        Self::new_with_timeouts(
+            base_url,
+            db,
+            username,
+            password,
+            Duration::from_secs(10),
+            Duration::from_secs(30),
+        )
+        .await
     }
 
-    pub async fn new_with_connection_timeout(
+    pub async fn new_with_timeouts(
         base_url: String,
         db: String,
         username: String,
         password: String,
         connection_timeout: Duration,
+        request_timeout: Duration,
     ) -> Result<Self, AppError> {
         let client = Client::builder()
             .cookie_store(true)
             .connect_timeout(connection_timeout)
+            .timeout(request_timeout)
             .build()
             .map_err(|_| AppError::transport("Failed to initialize Odoo HTTP client"))?;
 
@@ -342,6 +351,7 @@ impl ClientManager {
         &self,
         instance: &OdooInstance,
         connection_timeout: Duration,
+        request_timeout: Duration,
     ) -> Result<Arc<OdooClient>, AppError> {
         let mut map = self.clients.lock().await;
         if let Some(client) = map.get(&instance.id) {
@@ -352,12 +362,13 @@ impl ClientManager {
             "Connecting & authenticating Odoo instance '{}' (id: {})...",
             instance.name, instance.id
         );
-        match OdooClient::new_with_connection_timeout(
+        match OdooClient::new_with_timeouts(
             instance.url.clone(),
             instance.db.clone(),
             instance.username.clone(),
             instance.password.clone(),
             connection_timeout,
+            request_timeout,
         )
         .await
         {
@@ -504,5 +515,29 @@ mod tests {
 
         assert!(matches!(error, AppError::Protocol { .. }));
         assert_eq!(error.to_string(), "Odoo returned an invalid JSON response");
+    }
+
+    #[tokio::test]
+    async fn classifies_request_timeout() {
+        let server =
+            MockOdooServer::start_delayed(authentication_success(7), Duration::from_millis(100))
+                .await;
+
+        let result = OdooClient::new_with_timeouts(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+            Duration::from_secs(1),
+            Duration::from_millis(10),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("delayed response must time out"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, AppError::Timeout { .. }));
+        assert_eq!(error.to_string(), "Odoo request timed out");
     }
 }

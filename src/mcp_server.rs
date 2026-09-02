@@ -100,13 +100,15 @@ async fn handle_request(
                 .and_then(|i| i.as_str())
                 .unwrap_or("");
 
-            let (target_instance, global_mode, connection_timeout) = {
+            let (target_instance, global_mode, connection_timeout, request_timeout) = {
                 let conf = config.read().unwrap();
                 let inst = conf.find_instance(instance_target).cloned();
                 let mode = conf.global_settings.default_mode.clone();
                 let connection_timeout =
                     Duration::from_secs(conf.global_settings.rpc_connection_timeout_secs);
-                (inst, mode, connection_timeout)
+                let request_timeout =
+                    Duration::from_secs(conf.global_settings.rpc_request_timeout_secs);
+                (inst, mode, connection_timeout, request_timeout)
             };
 
             let instance_obj = match target_instance {
@@ -140,7 +142,7 @@ async fn handle_request(
 
             // Get or create OdooClient dynamically
             let odoo_client = match client_manager
-                .get_client(&instance_obj, connection_timeout)
+                .get_client(&instance_obj, connection_timeout, request_timeout)
                 .await
             {
                 Ok(client) => client,
