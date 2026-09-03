@@ -5,7 +5,7 @@ use crate::tools::arguments::{
     SearchDomainArgs, SearchReadArgs, UpdateArgs,
 };
 use crate::tools::catalog::ToolName;
-use crate::tools::pagination::{fetch_limit, paginated_result, resolve_limit};
+use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, resolve_limit};
 use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
 
@@ -40,6 +40,7 @@ pub(crate) async fn execute_tool(
                     return ToolExecutionResult::invalid_arguments("search-read limit", error);
                 }
             };
+            let count_domain = args.include_total.then(|| args.domain.clone());
             let result = odoo
                 .search_read(
                     &args.model,
@@ -49,7 +50,13 @@ pub(crate) async fn execute_tool(
                     fetch_limit(limit),
                 )
                 .await;
-            ToolExecutionResult::from_app_error(paginated_result(result, args.offset, limit))
+            let mut page = paginated_result(result, args.offset, limit);
+            if page.is_ok()
+                && let Some(domain) = count_domain
+            {
+                page = add_total_count(page, odoo.search_count(&args.model, domain).await);
+            }
+            ToolExecutionResult::from_app_error(page)
         }
         ToolName::SearchCount => {
             let args: SearchDomainArgs = match serde_json::from_value(arguments) {
@@ -133,10 +140,17 @@ pub(crate) async fn execute_tool(
                     return ToolExecutionResult::invalid_arguments("search limit", error);
                 }
             };
+            let count_domain = args.include_total.then(|| args.domain.clone());
             let result = odoo
                 .search(&args.model, args.domain, args.offset, fetch_limit(limit))
                 .await;
-            ToolExecutionResult::from_app_error(paginated_result(result, args.offset, limit))
+            let mut page = paginated_result(result, args.offset, limit);
+            if page.is_ok()
+                && let Some(domain) = count_domain
+            {
+                page = add_total_count(page, odoo.search_count(&args.model, domain).await);
+            }
+            ToolExecutionResult::from_app_error(page)
         }
         ToolName::Read => {
             let args: ReadArgs = match serde_json::from_value(arguments) {

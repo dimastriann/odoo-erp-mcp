@@ -43,6 +43,18 @@ pub(crate) fn paginated_result(
     }))
 }
 
+pub(crate) fn add_total_count(
+    result: Result<Value, AppError>,
+    total: Result<Value, AppError>,
+) -> Result<Value, AppError> {
+    let mut result = result?;
+    let total = total?
+        .as_u64()
+        .ok_or_else(|| AppError::protocol("Odoo search count must be a non-negative integer"))?;
+    result["pagination"]["total"] = Value::from(total);
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,5 +108,13 @@ mod tests {
         let error = paginated_result(Ok(json!({"unexpected": true})), None, 100).unwrap_err();
 
         assert!(matches!(error, AppError::Protocol { .. }));
+    }
+
+    #[test]
+    fn optional_total_is_added_to_pagination_metadata() {
+        let page = paginated_result(Ok(json!([10, 11])), None, 100);
+        let response = add_total_count(page, Ok(json!(250))).unwrap();
+
+        assert_eq!(response["pagination"]["total"], 250);
     }
 }
