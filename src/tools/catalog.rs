@@ -101,7 +101,9 @@ pub(crate) fn tool_definitions() -> Value {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
                     "domain": domain_schema(),
-                    "fields": { "type": "array", "items": { "type": "string" }, "description": "List of fields to return" }
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "List of fields to return" },
+                    "offset": { "type": "integer", "minimum": 0, "description": "Number of matching records to skip" },
+                    "limit": { "type": "integer", "minimum": 1, "description": "Maximum number of records to return" }
                 },
                 "required": ["model", "domain", "fields"]
             }

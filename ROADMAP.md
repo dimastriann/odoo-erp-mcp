@@ -162,7 +162,7 @@ Goal: Provide a production-appropriate read-only deployment mode.
 ## 2.1 Pagination
 
 - [x] S2-01 — Add `offset` and `limit` to `odoo-search`.
-- [ ] S2-02 — Add `offset` and `limit` to `odoo-search-read`.
+- [x] S2-02 — Add `offset` and `limit` to `odoo-search-read`.
 - [ ] S2-03 — Add a default query limit.
 - [ ] S2-04 — Add a configurable maximum query limit.
 - [ ] S2-05 — Reject negative offsets and invalid limits.
@@ -692,7 +692,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
-| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 1/24 | `odoo-search` pagination parameters added. |
+| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 2/24 | Search tools accept pagination parameters. |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |

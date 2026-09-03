@@ -33,8 +33,14 @@ pub(crate) async fn execute_tool(
                 return ToolExecutionResult::invalid_arguments("search-read domain", error);
             }
             ToolExecutionResult::from_app_error(
-                odoo.search_read(&args.model, args.domain, args.fields)
-                    .await,
+                odoo.search_read(
+                    &args.model,
+                    args.domain,
+                    args.fields,
+                    args.offset,
+                    args.limit,
+                )
+                .await,
             )
         }
         ToolName::SearchCount => {

@@ -12,6 +12,8 @@ pub(crate) struct SearchReadArgs {
     pub(crate) domain: Value,
     #[serde(default = "empty_array")]
     pub(crate) fields: Value,
+    pub(crate) offset: Option<u64>,
+    pub(crate) limit: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,6 +95,8 @@ mod tests {
 
         assert_eq!(search.domain, json!([]));
         assert_eq!(search.fields, json!([]));
+        assert_eq!(search.offset, None);
+        assert_eq!(search.limit, None);
     }
 
     #[test]
