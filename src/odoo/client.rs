@@ -94,7 +94,7 @@ impl OdooClient {
             let result = self.call_rpc_once(params.clone()).await;
             let should_retry = result
                 .as_ref()
-                .is_err_and(|error| operation_class.is_retry_safe() && error.is_retryable());
+                .is_err_and(|error| operation_class.should_retry(error));
 
             if !should_retry || retry_index >= MAX_READ_RETRIES {
                 return result;

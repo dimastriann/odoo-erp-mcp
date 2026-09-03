@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -49,6 +50,10 @@ impl OperationClass {
     pub(crate) const fn is_retry_safe(self) -> bool {
         matches!(self, Self::ReadOnly)
     }
+
+    pub(crate) const fn should_retry(self, error: &AppError) -> bool {
+        self.is_retry_safe() && error.is_retryable()
+    }
 }
 
 #[cfg(test)]
@@ -60,6 +65,22 @@ mod tests {
         assert!(OperationClass::ReadOnly.is_retry_safe());
         assert!(!OperationClass::Authentication.is_retry_safe());
         assert!(!OperationClass::Mutation.is_retry_safe());
+    }
+
+    #[test]
+    fn mutations_and_authentication_never_retry() {
+        let timeout = AppError::timeout("temporary timeout");
+
+        assert!(OperationClass::ReadOnly.should_retry(&timeout));
+        assert!(!OperationClass::Mutation.should_retry(&timeout));
+        assert!(!OperationClass::Authentication.should_retry(&timeout));
+    }
+
+    #[test]
+    fn read_only_operations_do_not_retry_permanent_errors() {
+        let protocol = AppError::protocol("invalid response");
+
+        assert!(!OperationClass::ReadOnly.should_retry(&protocol));
     }
 
     #[test]
