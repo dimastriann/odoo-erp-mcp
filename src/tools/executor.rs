@@ -5,6 +5,7 @@ use crate::tools::arguments::{
     SearchDomainArgs, SearchReadArgs, UpdateArgs,
 };
 use crate::tools::catalog::ToolName;
+use crate::tools::pagination::resolve_limit;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
 
@@ -38,7 +39,7 @@ pub(crate) async fn execute_tool(
                     args.domain,
                     args.fields,
                     args.offset,
-                    args.limit,
+                    resolve_limit(args.limit),
                 )
                 .await,
             )
@@ -120,8 +121,13 @@ pub(crate) async fn execute_tool(
                 return ToolExecutionResult::invalid_arguments("search domain", error);
             }
             ToolExecutionResult::from_app_error(
-                odoo.search(&args.model, args.domain, args.offset, args.limit)
-                    .await,
+                odoo.search(
+                    &args.model,
+                    args.domain,
+                    args.offset,
+                    resolve_limit(args.limit),
+                )
+                .await,
             )
         }
         ToolName::Read => {

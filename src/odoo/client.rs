@@ -259,16 +259,14 @@ impl OdooClient {
         domain: Value,
         fields: Value,
         offset: Option<u64>,
-        limit: Option<u64>,
+        limit: u64,
     ) -> Result<Value, AppError> {
         let mut options = serde_json::Map::new();
         options.insert("fields".to_string(), fields);
         if let Some(offset) = offset {
             options.insert("offset".to_string(), Value::from(offset));
         }
-        if let Some(limit) = limit {
-            options.insert("limit".to_string(), Value::from(limit));
-        }
+        options.insert("limit".to_string(), Value::from(limit));
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -418,15 +416,13 @@ impl OdooClient {
         model: &str,
         domain: Value,
         offset: Option<u64>,
-        limit: Option<u64>,
+        limit: u64,
     ) -> Result<Value, AppError> {
         let mut options = serde_json::Map::new();
         if let Some(offset) = offset {
             options.insert("offset".to_string(), Value::from(offset));
         }
-        if let Some(limit) = limit {
-            options.insert("limit".to_string(), Value::from(limit));
-        }
+        options.insert("limit".to_string(), Value::from(limit));
         let params = json!({
             "service": "object",
             "method": "execute_kw",

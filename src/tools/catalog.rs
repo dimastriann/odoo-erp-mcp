@@ -103,7 +103,7 @@ pub(crate) fn tool_definitions() -> Value {
                     "domain": domain_schema(),
                     "fields": { "type": "array", "items": { "type": "string" }, "description": "List of fields to return" },
                     "offset": { "type": "integer", "minimum": 0, "description": "Number of matching records to skip" },
-                    "limit": { "type": "integer", "minimum": 1, "description": "Maximum number of records to return" }
+                    "limit": { "type": "integer", "minimum": 1, "default": 100, "description": "Maximum number of records to return" }
                 },
                 "required": ["model", "domain", "fields"]
             }
@@ -213,7 +213,7 @@ pub(crate) fn tool_definitions() -> Value {
                     "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
                     "domain": domain_schema(),
                     "offset": { "type": "integer", "minimum": 0, "description": "Number of matching records to skip" },
-                    "limit": { "type": "integer", "minimum": 1, "description": "Maximum number of record IDs to return" }
+                    "limit": { "type": "integer", "minimum": 1, "default": 100, "description": "Maximum number of record IDs to return" }
                 },
                 "required": ["model", "domain"]
             }
