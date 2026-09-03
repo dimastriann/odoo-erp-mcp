@@ -114,6 +114,21 @@ mod tests {
     }
 
     #[test]
+    fn search_rejects_negative_pagination_values() {
+        let negative_offset = serde_json::from_value::<SearchArgs>(json!({
+            "model": "res.partner",
+            "offset": -1
+        }));
+        let negative_limit = serde_json::from_value::<SearchReadArgs>(json!({
+            "model": "res.partner",
+            "limit": -1
+        }));
+
+        assert!(negative_offset.is_err());
+        assert!(negative_limit.is_err());
+    }
+
+    #[test]
     fn read_ids_must_be_an_integer_array() {
         let result = serde_json::from_value::<ReadArgs>(json!({
             "model": "res.partner",
