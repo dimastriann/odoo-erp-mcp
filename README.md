@@ -252,12 +252,12 @@ odoo-mcp/
 ### GitHub Actions Release
 The included workflow (`.github/workflows/release.yml`) automatically:
 - Builds optimized binaries for **Linux**, **Windows**, and **macOS** on every version tag push.
-- Names each artifact with the version number (e.g. `odoo-erp-mcp-windows-0.3.1.exe`).
+- Names each artifact with the version number (e.g. `odoo-erp-mcp-windows-0.4.0.exe`).
 - Publishes a GitHub Release with all three binaries attached.
 
 To release a new version:
 ```bash
-git tag v0.3.1
+git tag v0.4.0
 git push origin main --tags
 ```
 
