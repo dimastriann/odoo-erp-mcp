@@ -162,3 +162,85 @@ pub(crate) async fn execute_tool(
     }
 }
 use crate::error::AppError;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{MockOdooServer, authentication_success, json_rpc_success};
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn search_pagination_contract_includes_has_more_without_count() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!([10, 11, 12])),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Search,
+            json!({"model": "res.partner", "limit": 2}),
+            &client,
+            1_000,
+        )
+        .await;
+        let ToolExecutionResult::Success(response) = result else {
+            panic!("search should return a paginated response");
+        };
+
+        assert_eq!(response["items"], json!([10, 11]));
+        assert_eq!(response["pagination"]["has_more"], true);
+        assert!(response["pagination"].get("total").is_none());
+        let requests = server.requests().await;
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[1]["params"]["args"][6]["limit"], 3);
+    }
+
+    #[tokio::test]
+    async fn total_count_is_opt_in_and_uses_the_same_domain() {
+        let domain = json!([["active", "=", true]]);
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!([10])),
+            json_rpc_success(json!(25)),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Search,
+            json!({
+                "model": "res.partner",
+                "domain": domain,
+                "include_total": true
+            }),
+            &client,
+            1_000,
+        )
+        .await;
+        let ToolExecutionResult::Success(response) = result else {
+            panic!("search should return a paginated response");
+        };
+
+        assert_eq!(response["pagination"]["total"], 25);
+        let requests = server.requests().await;
+        assert_eq!(requests.len(), 3);
+        assert_eq!(requests[1]["params"]["args"][5][0], domain);
+        assert_eq!(requests[2]["params"]["args"][5][0], domain);
+    }
+}

@@ -123,6 +123,22 @@ impl MockOdooServer {
         Self::start_with_replies(responses, fallback).await
     }
 
+    pub(crate) async fn start_with_responses(responses: Vec<Value>) -> Self {
+        let responses: VecDeque<_> = responses
+            .into_iter()
+            .map(|response| MockReply {
+                response: MockResponse::Json(response),
+                response_delay: Duration::ZERO,
+                status: StatusCode::OK,
+            })
+            .collect();
+        let fallback = responses
+            .back()
+            .cloned()
+            .expect("scripted mock responses must not be empty");
+        Self::start_with_replies(responses, fallback).await
+    }
+
     pub(crate) async fn start_with_status(response: Value, status: StatusCode) -> Self {
         Self::start_with_options(MockResponse::Json(response), status, Duration::ZERO).await
     }

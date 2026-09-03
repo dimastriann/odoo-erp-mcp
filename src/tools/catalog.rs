@@ -281,4 +281,24 @@ mod tests {
         assert_eq!(domain["items"]["oneOf"][0]["minItems"], 3);
         assert_eq!(domain["items"]["oneOf"][0]["maxItems"], 3);
     }
+
+    #[test]
+    fn search_tools_advertise_consistent_pagination_contracts() {
+        let definitions = tool_definitions();
+
+        for tool_name in [ToolName::Search, ToolName::SearchRead] {
+            let definition = definitions
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|definition| definition["name"] == tool_name.as_str())
+                .unwrap();
+            let properties = &definition["inputSchema"]["properties"];
+
+            assert_eq!(properties["offset"]["minimum"], 0);
+            assert_eq!(properties["limit"]["minimum"], 1);
+            assert_eq!(properties["limit"]["default"], 100);
+            assert_eq!(properties["include_total"]["default"], false);
+        }
+    }
 }

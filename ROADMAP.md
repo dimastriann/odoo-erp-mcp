@@ -169,7 +169,7 @@ Goal: Provide a production-appropriate read-only deployment mode.
 - [x] S2-06 — Add pagination metadata.
 - [x] S2-07 — Add `has_more` without always running an expensive count.
 - [x] S2-08 — Add an optional total count.
-- [ ] S2-09 — Add pagination contract tests.
+- [x] S2-09 — Add pagination contract tests.
 
 ## 2.2 Field, record, and payload protection
 
@@ -692,7 +692,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
-| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 8/24 | Total counts are available through explicit opt-in. |
+| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 9/24 | Pagination schemas and RPC behavior have contract tests. |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
