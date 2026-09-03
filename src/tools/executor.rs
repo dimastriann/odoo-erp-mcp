@@ -1,8 +1,8 @@
 use crate::domain::validate_domain;
 use crate::odoo::OdooClient;
 use crate::tools::arguments::{
-    CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchDomainArgs,
-    SearchReadArgs, UpdateArgs,
+    CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchArgs,
+    SearchDomainArgs, SearchReadArgs, UpdateArgs,
 };
 use crate::tools::catalog::ToolName;
 use crate::tools::result::ToolExecutionResult;
@@ -106,14 +106,17 @@ pub(crate) async fn execute_tool(
             ToolExecutionResult::from_app_error(odoo.get_metadata(&args.model, args.fields).await)
         }
         ToolName::Search => {
-            let args: SearchDomainArgs = match serde_json::from_value(arguments) {
+            let args: SearchArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("search", error),
             };
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search domain", error);
             }
-            ToolExecutionResult::from_app_error(odoo.search(&args.model, args.domain).await)
+            ToolExecutionResult::from_app_error(
+                odoo.search(&args.model, args.domain, args.offset, args.limit)
+                    .await,
+            )
         }
         ToolName::Read => {
             let args: ReadArgs = match serde_json::from_value(arguments) {

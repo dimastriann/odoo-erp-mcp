@@ -22,6 +22,15 @@ pub(crate) struct SearchDomainArgs {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct SearchArgs {
+    pub(crate) model: String,
+    #[serde(default = "empty_array")]
+    pub(crate) domain: Value,
+    pub(crate) offset: Option<u64>,
+    pub(crate) limit: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct ReadGroupArgs {
     pub(crate) model: String,
     #[serde(default = "empty_array")]
@@ -84,6 +93,20 @@ mod tests {
 
         assert_eq!(search.domain, json!([]));
         assert_eq!(search.fields, json!([]));
+    }
+
+    #[test]
+    fn search_accepts_optional_pagination() {
+        let search: SearchArgs = serde_json::from_value(json!({
+            "model": "res.partner",
+            "offset": 20,
+            "limit": 10
+        }))
+        .unwrap();
+
+        assert_eq!(search.domain, json!([]));
+        assert_eq!(search.offset, Some(20));
+        assert_eq!(search.limit, Some(10));
     }
 
     #[test]

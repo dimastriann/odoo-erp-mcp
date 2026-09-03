@@ -209,7 +209,9 @@ pub(crate) fn tool_definitions() -> Value {
                 "properties": {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
-                    "domain": domain_schema()
+                    "domain": domain_schema(),
+                    "offset": { "type": "integer", "minimum": 0, "description": "Number of matching records to skip" },
+                    "limit": { "type": "integer", "minimum": 1, "description": "Maximum number of record IDs to return" }
                 },
                 "required": ["model", "domain"]
             }

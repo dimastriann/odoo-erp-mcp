@@ -403,7 +403,20 @@ impl OdooClient {
         self.call_rpc(params, OperationClass::ReadOnly).await
     }
 
-    pub async fn search(&self, model: &str, domain: Value) -> Result<Value, AppError> {
+    pub async fn search(
+        &self,
+        model: &str,
+        domain: Value,
+        offset: Option<u64>,
+        limit: Option<u64>,
+    ) -> Result<Value, AppError> {
+        let mut options = serde_json::Map::new();
+        if let Some(offset) = offset {
+            options.insert("offset".to_string(), Value::from(offset));
+        }
+        if let Some(limit) = limit {
+            options.insert("limit".to_string(), Value::from(limit));
+        }
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -413,7 +426,8 @@ impl OdooClient {
                 self.password,
                 model,
                 "search",
-                [domain]
+                [domain],
+                options
             ]
         });
 
