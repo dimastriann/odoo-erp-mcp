@@ -5,7 +5,7 @@ use crate::tools::arguments::{
     SearchDomainArgs, SearchReadArgs, UpdateArgs,
 };
 use crate::tools::catalog::ToolName;
-use crate::tools::pagination::{paginated_result, resolve_limit};
+use crate::tools::pagination::{fetch_limit, paginated_result, resolve_limit};
 use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
 
@@ -41,7 +41,13 @@ pub(crate) async fn execute_tool(
                 }
             };
             let result = odoo
-                .search_read(&args.model, args.domain, args.fields, args.offset, limit)
+                .search_read(
+                    &args.model,
+                    args.domain,
+                    args.fields,
+                    args.offset,
+                    fetch_limit(limit),
+                )
                 .await;
             ToolExecutionResult::from_app_error(paginated_result(result, args.offset, limit))
         }
@@ -128,7 +134,7 @@ pub(crate) async fn execute_tool(
                 }
             };
             let result = odoo
-                .search(&args.model, args.domain, args.offset, limit)
+                .search(&args.model, args.domain, args.offset, fetch_limit(limit))
                 .await;
             ToolExecutionResult::from_app_error(paginated_result(result, args.offset, limit))
         }

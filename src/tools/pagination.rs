@@ -3,6 +3,10 @@ use serde_json::{Value, json};
 
 pub(crate) const DEFAULT_QUERY_LIMIT: u64 = 100;
 
+pub(crate) const fn fetch_limit(limit: u64) -> u64 {
+    limit.saturating_add(1)
+}
+
 pub(crate) fn resolve_limit(limit: Option<u64>, maximum: u64) -> Result<u64, String> {
     match limit {
         Some(0) => Err("query limit must be greater than zero".to_string()),
@@ -19,18 +23,22 @@ pub(crate) fn paginated_result(
     offset: Option<u64>,
     limit: u64,
 ) -> Result<Value, AppError> {
-    let items = result?;
-    let returned = items
-        .as_array()
-        .ok_or_else(|| AppError::protocol("Odoo search result must be an array"))?
-        .len();
+    let mut items = result?;
+    let items_array = items
+        .as_array_mut()
+        .ok_or_else(|| AppError::protocol("Odoo search result must be an array"))?;
+    let requested_limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    let has_more = items_array.len() > requested_limit;
+    items_array.truncate(requested_limit);
+    let returned = items_array.len();
 
     Ok(json!({
         "items": items,
         "pagination": {
             "offset": offset.unwrap_or(0),
             "limit": limit,
-            "returned": returned
+            "returned": returned,
+            "has_more": has_more
         }
     }))
 }
@@ -70,6 +78,17 @@ mod tests {
         assert_eq!(response["pagination"]["offset"], 20);
         assert_eq!(response["pagination"]["limit"], 10);
         assert_eq!(response["pagination"]["returned"], 2);
+        assert_eq!(response["pagination"]["has_more"], false);
+    }
+
+    #[test]
+    fn extra_item_sets_has_more_and_is_not_returned() {
+        let response = paginated_result(Ok(json!([10, 11, 12])), None, 2).unwrap();
+
+        assert_eq!(response["items"], json!([10, 11]));
+        assert_eq!(response["pagination"]["returned"], 2);
+        assert_eq!(response["pagination"]["has_more"], true);
+        assert_eq!(fetch_limit(2), 3);
     }
 
     #[test]
