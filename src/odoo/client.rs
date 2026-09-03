@@ -1,4 +1,5 @@
 use crate::error::AppError;
+use crate::odoo::retry::OperationClass;
 use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -79,7 +80,12 @@ impl OdooClient {
         Ok(odoo)
     }
 
-    async fn call_rpc(&self, params: Value) -> Result<Value, AppError> {
+    async fn call_rpc(
+        &self,
+        params: Value,
+        operation_class: OperationClass,
+    ) -> Result<Value, AppError> {
+        let _retry_safe = operation_class.is_retry_safe();
         let req = RpcRequest {
             jsonrpc: "2.0".into(),
             method: "call".into(),
@@ -166,7 +172,9 @@ impl OdooClient {
             "args": [db, username, password, {}]
         });
 
-        let result = self.call_rpc(params).await?;
+        let result = self
+            .call_rpc(params, OperationClass::Authentication)
+            .await?;
 
         let uid = result.as_i64().ok_or_else(|| {
             AppError::authentication("Authentication failed or returned empty uid")
@@ -194,7 +202,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::ReadOnly).await
     }
 
     pub async fn search_count(&self, model: &str, domain: Value) -> Result<Value, AppError> {
@@ -211,7 +219,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::ReadOnly).await
     }
 
     pub async fn read_group(
@@ -235,7 +243,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::ReadOnly).await
     }
 
     pub async fn create(&self, model: &str, vals: Value) -> Result<Value, AppError> {
@@ -252,7 +260,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::Mutation).await
     }
 
     pub async fn copy(&self, model: &str, id: i64, vals: Value) -> Result<Value, AppError> {
@@ -269,7 +277,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::Mutation).await
     }
 
     pub async fn update(&self, model: &str, ids: Vec<i64>, vals: Value) -> Result<Value, AppError> {
@@ -286,7 +294,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::Mutation).await
     }
 
     pub async fn delete(&self, model: &str, ids: Vec<i64>) -> Result<Value, AppError> {
@@ -303,7 +311,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::Mutation).await
     }
 
     pub async fn get_metadata(&self, model: &str, fields: Value) -> Result<Value, AppError> {
@@ -321,7 +329,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::ReadOnly).await
     }
 
     pub async fn search(&self, model: &str, domain: Value) -> Result<Value, AppError> {
@@ -338,7 +346,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::ReadOnly).await
     }
 
     pub async fn read(&self, model: &str, ids: Vec<i64>, fields: Value) -> Result<Value, AppError> {
@@ -356,7 +364,7 @@ impl OdooClient {
             ]
         });
 
-        self.call_rpc(params).await
+        self.call_rpc(params, OperationClass::ReadOnly).await
     }
 }
 
