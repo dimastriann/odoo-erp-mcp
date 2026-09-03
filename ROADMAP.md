@@ -140,7 +140,7 @@ Goal: Make MCP-to-Odoo communication understandable, classifiable, reliable, and
 ## 1.3 Safe retry foundation
 
 - [x] S1-24 — Create retry classifications by operation class.
-- [ ] S1-25 — Add exponential backoff with jitter.
+- [x] S1-25 — Add exponential backoff with jitter.
 - [ ] S1-26 — Retry only proven-safe read-only operations.
 - [ ] S1-27 — Ensure write operations are never retried automatically.
 - [ ] S1-28 — Add retry event and metrics hooks.
@@ -691,7 +691,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
-| Stage 1 — Structured Errors and RPC Reliability | In progress | 24/29 | Structured errors, RPC hardening, and operation retry classes complete. |
+| Stage 1 — Structured Errors and RPC Reliability | In progress | 25/29 | Retry classification and exponential jittered backoff complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
