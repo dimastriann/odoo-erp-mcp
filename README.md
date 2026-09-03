@@ -119,7 +119,8 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
     "default_mode": "crud",
     "rpc_connection_timeout_secs": 10,
     "rpc_request_timeout_secs": 30,
-    "rpc_max_response_bytes": 10485760
+    "rpc_max_response_bytes": 10485760,
+    "max_query_limit": 1000
   },
   "instances": [
     {

@@ -13,6 +13,7 @@ pub(crate) async fn execute_tool(
     name: ToolName,
     arguments: Value,
     odoo: &OdooClient,
+    max_query_limit: u64,
 ) -> ToolExecutionResult {
     let model = arguments
         .get("model")
@@ -33,15 +34,15 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search-read domain", error);
             }
+            let limit = match resolve_limit(args.limit, max_query_limit) {
+                Ok(limit) => limit,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("search-read limit", error);
+                }
+            };
             ToolExecutionResult::from_app_error(
-                odoo.search_read(
-                    &args.model,
-                    args.domain,
-                    args.fields,
-                    args.offset,
-                    resolve_limit(args.limit),
-                )
-                .await,
+                odoo.search_read(&args.model, args.domain, args.fields, args.offset, limit)
+                    .await,
             )
         }
         ToolName::SearchCount => {
@@ -120,14 +121,15 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search domain", error);
             }
+            let limit = match resolve_limit(args.limit, max_query_limit) {
+                Ok(limit) => limit,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("search limit", error);
+                }
+            };
             ToolExecutionResult::from_app_error(
-                odoo.search(
-                    &args.model,
-                    args.domain,
-                    args.offset,
-                    resolve_limit(args.limit),
-                )
-                .await,
+                odoo.search(&args.model, args.domain, args.offset, limit)
+                    .await,
             )
         }
         ToolName::Read => {

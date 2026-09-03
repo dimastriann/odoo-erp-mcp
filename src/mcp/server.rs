@@ -106,6 +106,7 @@ async fn handle_request(
                 connection_timeout,
                 request_timeout,
                 max_response_bytes,
+                max_query_limit,
             ) = {
                 let conf = config.read().unwrap();
                 let inst = conf.find_instance(instance_target).cloned();
@@ -115,12 +116,14 @@ async fn handle_request(
                 let request_timeout =
                     Duration::from_secs(conf.global_settings.rpc_request_timeout_secs);
                 let max_response_bytes = conf.global_settings.rpc_max_response_bytes;
+                let max_query_limit = conf.global_settings.max_query_limit;
                 (
                     inst,
                     mode,
                     connection_timeout,
                     request_timeout,
                     max_response_bytes,
+                    max_query_limit,
                 )
             };
 
@@ -169,7 +172,7 @@ async fn handle_request(
                 }
             };
 
-            let result = execute_tool(tool_name, arguments, &odoo_client)
+            let result = execute_tool(tool_name, arguments, &odoo_client, max_query_limit)
                 .await
                 .into_mcp_result();
 
