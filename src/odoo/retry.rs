@@ -1,4 +1,5 @@
-use crate::error::AppError;
+use crate::error::{AppError, ErrorCode};
+use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,6 +48,14 @@ impl Default for RetryBackoff {
 }
 
 impl OperationClass {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Authentication => "authentication",
+            Self::ReadOnly => "read_only",
+            Self::Mutation => "mutation",
+        }
+    }
+
     pub(crate) const fn is_retry_safe(self) -> bool {
         matches!(self, Self::ReadOnly)
     }
@@ -54,6 +63,37 @@ impl OperationClass {
     pub(crate) const fn should_retry(self, error: &AppError) -> bool {
         self.is_retry_safe() && error.is_retryable()
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RetryEvent {
+    pub(crate) operation_class: OperationClass,
+    pub(crate) attempt: u32,
+    pub(crate) delay: Duration,
+    pub(crate) error_code: ErrorCode,
+}
+
+pub(crate) trait RetryObserver: Send + Sync {
+    fn on_retry(&self, event: RetryEvent);
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct StderrRetryObserver;
+
+impl RetryObserver for StderrRetryObserver {
+    fn on_retry(&self, event: RetryEvent) {
+        eprintln!(
+            "Retrying Odoo {} operation after {} ms (attempt {}, error: {})",
+            event.operation_class.as_str(),
+            event.delay.as_millis(),
+            event.attempt,
+            event.error_code.as_str()
+        );
+    }
+}
+
+pub(crate) fn default_retry_observer() -> Arc<dyn RetryObserver> {
+    Arc::new(StderrRetryObserver)
 }
 
 #[cfg(test)]
@@ -81,6 +121,13 @@ mod tests {
         let protocol = AppError::protocol("invalid response");
 
         assert!(!OperationClass::ReadOnly.should_retry(&protocol));
+    }
+
+    #[test]
+    fn operation_classes_have_stable_event_labels() {
+        assert_eq!(OperationClass::Authentication.as_str(), "authentication");
+        assert_eq!(OperationClass::ReadOnly.as_str(), "read_only");
+        assert_eq!(OperationClass::Mutation.as_str(), "mutation");
     }
 
     #[test]

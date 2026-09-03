@@ -1,5 +1,7 @@
 use crate::error::AppError;
-use crate::odoo::retry::{OperationClass, RetryBackoff};
+use crate::odoo::retry::{
+    OperationClass, RetryBackoff, RetryEvent, RetryObserver, default_retry_observer,
+};
 use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -17,6 +19,7 @@ pub struct OdooClient {
     client: Client,
     next_request_id: Arc<AtomicI64>,
     max_response_bytes: usize,
+    retry_observer: Arc<dyn RetryObserver>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -28,6 +31,16 @@ struct RpcRequest {
 }
 
 const MAX_READ_RETRIES: u32 = 2;
+
+struct OdooClientOptions {
+    base_url: String,
+    db: String,
+    username: String,
+    password: String,
+    connection_timeout: Duration,
+    request_timeout: Duration,
+    max_response_bytes: usize,
+}
 
 impl OdooClient {
     #[cfg(test)]
@@ -58,6 +71,34 @@ impl OdooClient {
         request_timeout: Duration,
         max_response_bytes: usize,
     ) -> Result<Self, AppError> {
+        Self::new_with_retry_observer(
+            OdooClientOptions {
+                base_url,
+                db,
+                username,
+                password,
+                connection_timeout,
+                request_timeout,
+                max_response_bytes,
+            },
+            default_retry_observer(),
+        )
+        .await
+    }
+
+    async fn new_with_retry_observer(
+        options: OdooClientOptions,
+        retry_observer: Arc<dyn RetryObserver>,
+    ) -> Result<Self, AppError> {
+        let OdooClientOptions {
+            base_url,
+            db,
+            username,
+            password,
+            connection_timeout,
+            request_timeout,
+            max_response_bytes,
+        } = options;
         let client = Client::builder()
             .cookie_store(true)
             .connect_timeout(connection_timeout)
@@ -73,6 +114,7 @@ impl OdooClient {
             client,
             next_request_id: Arc::new(AtomicI64::new(1)),
             max_response_bytes,
+            retry_observer,
         };
 
         let uid = odoo
@@ -92,16 +134,24 @@ impl OdooClient {
 
         loop {
             let result = self.call_rpc_once(params.clone()).await;
-            let should_retry = result
+            let retryable_error = result
                 .as_ref()
-                .is_err_and(|error| operation_class.should_retry(error));
+                .err()
+                .filter(|error| operation_class.should_retry(error));
 
-            if !should_retry || retry_index >= MAX_READ_RETRIES {
+            if retryable_error.is_none() || retry_index >= MAX_READ_RETRIES {
                 return result;
             }
 
             let entropy = self.next_request_id.load(Ordering::Relaxed) as u64;
-            tokio::time::sleep(backoff.delay_for(retry_index, entropy)).await;
+            let delay = backoff.delay_for(retry_index, entropy);
+            self.retry_observer.on_retry(RetryEvent {
+                operation_class,
+                attempt: retry_index + 1,
+                delay,
+                error_code: retryable_error.expect("retryable error was checked").code(),
+            });
+            tokio::time::sleep(delay).await;
             retry_index += 1;
         }
     }
