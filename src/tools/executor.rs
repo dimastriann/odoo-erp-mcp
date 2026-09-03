@@ -5,6 +5,7 @@ use crate::tools::arguments::{
     SearchDomainArgs, SearchReadArgs, UpdateArgs,
 };
 use crate::tools::catalog::ToolName;
+use crate::tools::fields::validate_field_count;
 use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, resolve_limit};
 use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
@@ -14,6 +15,7 @@ pub(crate) async fn execute_tool(
     arguments: Value,
     odoo: &OdooClient,
     max_query_limit: u64,
+    max_requested_fields: usize,
 ) -> ToolExecutionResult {
     let model = arguments
         .get("model")
@@ -33,6 +35,9 @@ pub(crate) async fn execute_tool(
             };
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search-read domain", error);
+            }
+            if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
+                return ToolExecutionResult::invalid_arguments("search-read fields", error);
             }
             let limit = match resolve_limit(args.limit, max_query_limit) {
                 Ok(limit) => limit,
@@ -77,6 +82,9 @@ pub(crate) async fn execute_tool(
             };
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("read-group domain", error);
+            }
+            if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
+                return ToolExecutionResult::invalid_arguments("read-group fields", error);
             }
             ToolExecutionResult::from_app_error(
                 odoo.read_group(&args.model, args.domain, args.fields, args.groupby)
@@ -124,6 +132,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("metadata", error),
             };
+            if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
+                return ToolExecutionResult::invalid_arguments("metadata fields", error);
+            }
             ToolExecutionResult::from_app_error(odoo.get_metadata(&args.model, args.fields).await)
         }
         ToolName::Search => {
@@ -157,6 +168,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("read", error),
             };
+            if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
+                return ToolExecutionResult::invalid_arguments("read fields", error);
+            }
             ToolExecutionResult::from_app_error(odoo.read(&args.model, args.ids, args.fields).await)
         }
     }
@@ -190,6 +204,7 @@ mod tests {
             json!({"model": "res.partner", "limit": 2}),
             &client,
             1_000,
+            100,
         )
         .await;
         let ToolExecutionResult::Success(response) = result else {
@@ -231,6 +246,7 @@ mod tests {
             }),
             &client,
             1_000,
+            100,
         )
         .await;
         let ToolExecutionResult::Success(response) = result else {

@@ -107,6 +107,7 @@ async fn handle_request(
                 request_timeout,
                 max_response_bytes,
                 max_query_limit,
+                max_requested_fields,
             ) = {
                 let conf = config.read().unwrap();
                 let inst = conf.find_instance(instance_target).cloned();
@@ -117,6 +118,7 @@ async fn handle_request(
                     Duration::from_secs(conf.global_settings.rpc_request_timeout_secs);
                 let max_response_bytes = conf.global_settings.rpc_max_response_bytes;
                 let max_query_limit = conf.global_settings.max_query_limit;
+                let max_requested_fields = conf.global_settings.max_requested_fields;
                 (
                     inst,
                     mode,
@@ -124,6 +126,7 @@ async fn handle_request(
                     request_timeout,
                     max_response_bytes,
                     max_query_limit,
+                    max_requested_fields,
                 )
             };
 
@@ -172,9 +175,15 @@ async fn handle_request(
                 }
             };
 
-            let result = execute_tool(tool_name, arguments, &odoo_client, max_query_limit)
-                .await
-                .into_mcp_result();
+            let result = execute_tool(
+                tool_name,
+                arguments,
+                &odoo_client,
+                max_query_limit,
+                max_requested_fields,
+            )
+            .await
+            .into_mcp_result();
 
             Some(json!({"jsonrpc": "2.0", "id": id, "result": result}))
         }

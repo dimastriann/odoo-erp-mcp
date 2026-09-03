@@ -217,6 +217,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
             rpc_request_timeout_secs: 30,
             rpc_max_response_bytes: 10 * 1024 * 1024,
             max_query_limit: 1_000,
+            max_requested_fields: 100,
         },
         instances: vec![
             OdooInstance {
