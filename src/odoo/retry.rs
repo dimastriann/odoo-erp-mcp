@@ -7,14 +7,12 @@ pub(crate) enum OperationClass {
     Mutation,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct RetryBackoff {
     base_delay: Duration,
     max_delay: Duration,
 }
 
-#[allow(dead_code)]
 impl RetryBackoff {
     pub(crate) const fn new(base_delay: Duration, max_delay: Duration) -> Self {
         Self {

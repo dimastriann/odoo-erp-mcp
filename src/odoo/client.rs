@@ -1,5 +1,5 @@
 use crate::error::AppError;
-use crate::odoo::retry::OperationClass;
+use crate::odoo::retry::{OperationClass, RetryBackoff};
 use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -26,6 +26,8 @@ struct RpcRequest {
     params: Value,
     id: i64,
 }
+
+const MAX_READ_RETRIES: u32 = 2;
 
 impl OdooClient {
     #[cfg(test)]
@@ -85,7 +87,26 @@ impl OdooClient {
         params: Value,
         operation_class: OperationClass,
     ) -> Result<Value, AppError> {
-        let _retry_safe = operation_class.is_retry_safe();
+        let backoff = RetryBackoff::default();
+        let mut retry_index = 0;
+
+        loop {
+            let result = self.call_rpc_once(params.clone()).await;
+            let should_retry = result
+                .as_ref()
+                .is_err_and(|error| operation_class.is_retry_safe() && error.is_retryable());
+
+            if !should_retry || retry_index >= MAX_READ_RETRIES {
+                return result;
+            }
+
+            let entropy = self.next_request_id.load(Ordering::Relaxed) as u64;
+            tokio::time::sleep(backoff.delay_for(retry_index, entropy)).await;
+            retry_index += 1;
+        }
+    }
+
+    async fn call_rpc_once(&self, params: Value) -> Result<Value, AppError> {
         let req = RpcRequest {
             jsonrpc: "2.0".into(),
             method: "call".into(),
