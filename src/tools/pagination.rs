@@ -1,3 +1,6 @@
+use crate::error::AppError;
+use serde_json::{Value, json};
+
 pub(crate) const DEFAULT_QUERY_LIMIT: u64 = 100;
 
 pub(crate) fn resolve_limit(limit: Option<u64>, maximum: u64) -> Result<u64, String> {
@@ -9,6 +12,27 @@ pub(crate) fn resolve_limit(limit: Option<u64>, maximum: u64) -> Result<u64, Str
         Some(limit) => Ok(limit),
         None => Ok(DEFAULT_QUERY_LIMIT.min(maximum)),
     }
+}
+
+pub(crate) fn paginated_result(
+    result: Result<Value, AppError>,
+    offset: Option<u64>,
+    limit: u64,
+) -> Result<Value, AppError> {
+    let items = result?;
+    let returned = items
+        .as_array()
+        .ok_or_else(|| AppError::protocol("Odoo search result must be an array"))?
+        .len();
+
+    Ok(json!({
+        "items": items,
+        "pagination": {
+            "offset": offset.unwrap_or(0),
+            "limit": limit,
+            "returned": returned
+        }
+    }))
 }
 
 #[cfg(test)]
@@ -36,5 +60,22 @@ mod tests {
             resolve_limit(Some(0), 1_000),
             Err("query limit must be greater than zero".to_string())
         );
+    }
+
+    #[test]
+    fn pagination_metadata_describes_returned_items() {
+        let response = paginated_result(Ok(json!([10, 11])), Some(20), 10).unwrap();
+
+        assert_eq!(response["items"], json!([10, 11]));
+        assert_eq!(response["pagination"]["offset"], 20);
+        assert_eq!(response["pagination"]["limit"], 10);
+        assert_eq!(response["pagination"]["returned"], 2);
+    }
+
+    #[test]
+    fn pagination_rejects_non_array_odoo_results() {
+        let error = paginated_result(Ok(json!({"unexpected": true})), None, 100).unwrap_err();
+
+        assert!(matches!(error, AppError::Protocol { .. }));
     }
 }

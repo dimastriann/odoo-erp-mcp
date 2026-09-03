@@ -5,7 +5,7 @@ use crate::tools::arguments::{
     SearchDomainArgs, SearchReadArgs, UpdateArgs,
 };
 use crate::tools::catalog::ToolName;
-use crate::tools::pagination::resolve_limit;
+use crate::tools::pagination::{paginated_result, resolve_limit};
 use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
 
@@ -40,10 +40,10 @@ pub(crate) async fn execute_tool(
                     return ToolExecutionResult::invalid_arguments("search-read limit", error);
                 }
             };
-            ToolExecutionResult::from_app_error(
-                odoo.search_read(&args.model, args.domain, args.fields, args.offset, limit)
-                    .await,
-            )
+            let result = odoo
+                .search_read(&args.model, args.domain, args.fields, args.offset, limit)
+                .await;
+            ToolExecutionResult::from_app_error(paginated_result(result, args.offset, limit))
         }
         ToolName::SearchCount => {
             let args: SearchDomainArgs = match serde_json::from_value(arguments) {
@@ -127,10 +127,10 @@ pub(crate) async fn execute_tool(
                     return ToolExecutionResult::invalid_arguments("search limit", error);
                 }
             };
-            ToolExecutionResult::from_app_error(
-                odoo.search(&args.model, args.domain, args.offset, limit)
-                    .await,
-            )
+            let result = odoo
+                .search(&args.model, args.domain, args.offset, limit)
+                .await;
+            ToolExecutionResult::from_app_error(paginated_result(result, args.offset, limit))
         }
         ToolName::Read => {
             let args: ReadArgs = match serde_json::from_value(arguments) {
