@@ -144,14 +144,14 @@ Goal: Make MCP-to-Odoo communication understandable, classifiable, reliable, and
 - [x] S1-26 — Retry only proven-safe read-only operations.
 - [x] S1-27 — Ensure write operations are never retried automatically.
 - [x] S1-28 — Add retry event and metrics hooks.
-- [ ] S1-29 — Add retry-exhaustion and eventual-success tests.
+- [x] S1-29 — Add retry-exhaustion and eventual-success tests.
 
 ## Stage 1 Definition of Done
 
-- [ ] RPC and tool errors use a structured schema.
-- [ ] Connection and request timeouts are configurable.
-- [ ] Automatic retries apply only to operations proven safe.
-- [ ] Secrets never appear in error responses.
+- [x] RPC and tool errors use a structured schema.
+- [x] Connection and request timeouts are configurable.
+- [x] Automatic retries apply only to operations proven safe.
+- [x] Secrets never appear in error responses.
 
 ---
 
@@ -691,7 +691,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage | Status | Completed | Notes |
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
-| Stage 1 — Structured Errors and RPC Reliability | In progress | 28/29 | Retry events expose safe logging and metrics integration hooks. |
+| Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Not started | 0/24 | |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |

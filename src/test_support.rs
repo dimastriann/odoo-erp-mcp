@@ -4,6 +4,7 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, extract::State, routing::post};
 use serde_json::Value;
+use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -54,10 +55,9 @@ pub(crate) struct MockOdooServer {
 
 #[derive(Clone)]
 struct MockOdooState {
-    response: MockResponse,
+    responses: Arc<tokio::sync::Mutex<VecDeque<MockReply>>>,
+    fallback: MockReply,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
-    response_delay: Duration,
-    status: StatusCode,
 }
 
 #[derive(Clone)]
@@ -66,16 +66,29 @@ enum MockResponse {
     Raw(String),
 }
 
+#[derive(Clone)]
+struct MockReply {
+    response: MockResponse,
+    response_delay: Duration,
+    status: StatusCode,
+}
+
 async fn handle_mock_rpc(
     State(state): State<MockOdooState>,
     Json(request): Json<Value>,
 ) -> Response {
     state.requests.lock().await.push(request);
-    tokio::time::sleep(state.response_delay).await;
-    match state.response {
-        MockResponse::Json(value) => (state.status, Json(value)).into_response(),
+    let reply = state
+        .responses
+        .lock()
+        .await
+        .pop_front()
+        .unwrap_or_else(|| state.fallback.clone());
+    tokio::time::sleep(reply.response_delay).await;
+    match reply.response {
+        MockResponse::Json(value) => (reply.status, Json(value)).into_response(),
         MockResponse::Raw(body) => (
-            state.status,
+            reply.status,
             [(header::CONTENT_TYPE, "application/json")],
             body,
         )
@@ -90,6 +103,24 @@ impl MockOdooServer {
 
     pub(crate) async fn start_delayed(response: Value, response_delay: Duration) -> Self {
         Self::start_with_options(MockResponse::Json(response), StatusCode::OK, response_delay).await
+    }
+
+    pub(crate) async fn start_with_delays(response: Value, delays: Vec<Duration>) -> Self {
+        let fallback_delay = delays.last().copied().unwrap_or(Duration::ZERO);
+        let responses = delays
+            .into_iter()
+            .map(|response_delay| MockReply {
+                response: MockResponse::Json(response.clone()),
+                response_delay,
+                status: StatusCode::OK,
+            })
+            .collect();
+        let fallback = MockReply {
+            response: MockResponse::Json(response),
+            response_delay: fallback_delay,
+            status: StatusCode::OK,
+        };
+        Self::start_with_replies(responses, fallback).await
     }
 
     pub(crate) async fn start_with_status(response: Value, status: StatusCode) -> Self {
@@ -110,12 +141,20 @@ impl MockOdooServer {
         status: StatusCode,
         response_delay: Duration,
     ) -> Self {
-        let requests = Arc::new(tokio::sync::Mutex::new(Vec::new()));
-        let state = MockOdooState {
+        let fallback = MockReply {
             response,
-            requests: Arc::clone(&requests),
             response_delay,
             status,
+        };
+        Self::start_with_replies(VecDeque::new(), fallback).await
+    }
+
+    async fn start_with_replies(responses: VecDeque<MockReply>, fallback: MockReply) -> Self {
+        let requests = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let state = MockOdooState {
+            responses: Arc::new(tokio::sync::Mutex::new(responses)),
+            fallback,
+            requests: Arc::clone(&requests),
         };
         let app = Router::new()
             .route("/jsonrpc", post(handle_mock_rpc))

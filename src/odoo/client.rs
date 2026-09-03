@@ -442,8 +442,41 @@ impl OdooClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::odoo::retry::RetryEvent;
     use crate::test_support::{MockOdooServer, authentication_success, json_rpc_success};
     use axum::http::StatusCode;
+    use std::sync::Mutex;
+
+    #[derive(Default)]
+    struct RecordingRetryObserver {
+        events: Mutex<Vec<RetryEvent>>,
+    }
+
+    impl RetryObserver for RecordingRetryObserver {
+        fn on_retry(&self, event: RetryEvent) {
+            self.events.lock().unwrap().push(event);
+        }
+    }
+
+    async fn client_with_observer(
+        server: &MockOdooServer,
+        observer: Arc<RecordingRetryObserver>,
+    ) -> OdooClient {
+        OdooClient::new_with_retry_observer(
+            OdooClientOptions {
+                base_url: server.base_url().to_string(),
+                db: "test-db".to_string(),
+                username: "admin".to_string(),
+                password: "secret".to_string(),
+                connection_timeout: Duration::from_secs(1),
+                request_timeout: Duration::from_millis(20),
+                max_response_bytes: 10 * 1024 * 1024,
+            },
+            observer,
+        )
+        .await
+        .unwrap()
+    }
 
     #[tokio::test]
     async fn assigns_a_unique_id_to_each_json_rpc_request() {
@@ -637,5 +670,75 @@ mod tests {
             error.to_string(),
             "Odoo response exceeds configured size limit"
         );
+    }
+
+    #[tokio::test]
+    async fn read_succeeds_after_retryable_failures() {
+        let server = MockOdooServer::start_with_delays(
+            authentication_success(7),
+            vec![
+                Duration::ZERO,
+                Duration::from_millis(100),
+                Duration::from_millis(100),
+                Duration::ZERO,
+            ],
+        )
+        .await;
+        let observer = Arc::new(RecordingRetryObserver::default());
+        let client = client_with_observer(&server, Arc::clone(&observer)).await;
+
+        let result = client.search_count("res.partner", json!([])).await;
+
+        assert!(result.is_ok());
+        assert_eq!(server.requests().await.len(), 4);
+        let events = observer.events.lock().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].attempt, 1);
+        assert_eq!(events[1].attempt, 2);
+    }
+
+    #[tokio::test]
+    async fn read_returns_last_error_after_retries_are_exhausted() {
+        let server = MockOdooServer::start_with_delays(
+            authentication_success(7),
+            vec![
+                Duration::ZERO,
+                Duration::from_millis(100),
+                Duration::from_millis(100),
+                Duration::from_millis(100),
+            ],
+        )
+        .await;
+        let observer = Arc::new(RecordingRetryObserver::default());
+        let client = client_with_observer(&server, Arc::clone(&observer)).await;
+
+        let error = client
+            .search_count("res.partner", json!([]))
+            .await
+            .expect_err("all delayed read attempts must time out");
+
+        assert!(matches!(error, AppError::Timeout { .. }));
+        assert_eq!(server.requests().await.len(), 4);
+        assert_eq!(observer.events.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn mutation_is_not_retried_after_retryable_failure() {
+        let server = MockOdooServer::start_with_delays(
+            authentication_success(7),
+            vec![Duration::ZERO, Duration::from_millis(100), Duration::ZERO],
+        )
+        .await;
+        let observer = Arc::new(RecordingRetryObserver::default());
+        let client = client_with_observer(&server, Arc::clone(&observer)).await;
+
+        let error = client
+            .create("res.partner", json!({"name": "Do not duplicate"}))
+            .await
+            .expect_err("timed-out mutation must not be retried");
+
+        assert!(matches!(error, AppError::Timeout { .. }));
+        assert_eq!(server.requests().await.len(), 2);
+        assert!(observer.events.lock().unwrap().is_empty());
     }
 }
