@@ -7,7 +7,7 @@ use crate::tools::arguments::{
 use crate::tools::catalog::ToolName;
 use crate::tools::fields::{validate_field_count, validate_field_names};
 use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, resolve_limit};
-use crate::tools::protection::QueryLimits;
+use crate::tools::protection::{QueryLimits, validate_response_record_count};
 use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
@@ -65,7 +65,10 @@ pub(crate) async fn execute_tool(
                     fetch_limit(limit),
                 )
                 .await;
-            let mut page = paginated_result(result, args.offset, limit);
+            let mut page = validate_response_record_count(
+                paginated_result(result, args.offset, limit),
+                limits.max_response_records,
+            );
             if page.is_ok()
                 && let Some(domain) = count_domain
             {
@@ -111,10 +114,13 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_field_names(&args.fields) {
                 return ToolExecutionResult::invalid_arguments("read-group fields", error);
             }
-            ToolExecutionResult::from_app_error(
-                odoo.read_group(&args.model, args.domain, args.fields, args.groupby)
-                    .await,
-            )
+            let result = odoo
+                .read_group(&args.model, args.domain, args.fields, args.groupby)
+                .await;
+            ToolExecutionResult::from_app_error(validate_response_record_count(
+                result,
+                limits.max_response_records,
+            ))
         }
         ToolName::Create => {
             let args: CreateArgs = match serde_json::from_value(arguments) {
@@ -189,7 +195,10 @@ pub(crate) async fn execute_tool(
             let result = odoo
                 .search(&args.model, args.domain, args.offset, fetch_limit(limit))
                 .await;
-            let mut page = paginated_result(result, args.offset, limit);
+            let mut page = validate_response_record_count(
+                paginated_result(result, args.offset, limit),
+                limits.max_response_records,
+            );
             if page.is_ok()
                 && let Some(domain) = count_domain
             {
@@ -211,7 +220,11 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_field_names(&args.fields) {
                 return ToolExecutionResult::invalid_arguments("read fields", error);
             }
-            ToolExecutionResult::from_app_error(odoo.read(&args.model, args.ids, args.fields).await)
+            let result = odoo.read(&args.model, args.ids, args.fields).await;
+            ToolExecutionResult::from_app_error(validate_response_record_count(
+                result,
+                limits.max_response_records,
+            ))
         }
     }
 }
@@ -229,6 +242,7 @@ mod tests {
         max_read_ids: 100,
         max_domain_depth: 8,
         max_domain_terms: 100,
+        max_response_records: 1_000,
     };
 
     #[tokio::test]

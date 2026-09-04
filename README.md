@@ -124,7 +124,8 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
     "max_requested_fields": 100,
     "max_read_ids": 100,
     "max_domain_depth": 8,
-    "max_domain_terms": 100
+    "max_domain_terms": 100,
+    "max_response_records": 1000
   },
   "instances": [
     {

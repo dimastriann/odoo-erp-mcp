@@ -123,6 +123,7 @@ async fn handle_request(
                     max_read_ids: conf.global_settings.max_read_ids,
                     max_domain_depth: conf.global_settings.max_domain_depth,
                     max_domain_terms: conf.global_settings.max_domain_terms,
+                    max_response_records: conf.global_settings.max_response_records,
                 };
                 (
                     inst,
