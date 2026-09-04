@@ -126,6 +126,43 @@ impl Default for GlobalSettings {
     }
 }
 
+impl GlobalSettings {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        let positive_values = [
+            (
+                "rpc_connection_timeout_secs",
+                self.rpc_connection_timeout_secs,
+            ),
+            ("rpc_request_timeout_secs", self.rpc_request_timeout_secs),
+            ("max_query_limit", self.max_query_limit),
+        ];
+        for (name, value) in positive_values {
+            if value == 0 {
+                return Err(format!("{name} must be greater than zero"));
+            }
+        }
+
+        let positive_sizes = [
+            ("rpc_max_response_bytes", self.rpc_max_response_bytes),
+            ("max_requested_fields", self.max_requested_fields),
+            ("max_read_ids", self.max_read_ids),
+            ("max_domain_depth", self.max_domain_depth),
+            ("max_domain_terms", self.max_domain_terms),
+            ("max_response_records", self.max_response_records),
+        ];
+        for (name, value) in positive_sizes {
+            if value == 0 {
+                return Err(format!("{name} must be greater than zero"));
+            }
+        }
+
+        if self.max_query_limit > u64::try_from(self.max_response_records).unwrap_or(u64::MAX) {
+            return Err("max_query_limit cannot exceed max_response_records".to_string());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OdooPrompt {
     pub id: String,
@@ -166,10 +203,17 @@ impl Config {
 
         let content = fs::read_to_string(config_path)?;
         let config: Config = serde_json::from_str(&content)?;
+        config
+            .global_settings
+            .validate()
+            .map_err(anyhow::Error::msg)?;
         Ok(config)
     }
 
     pub fn save(&self) -> Result<()> {
+        self.global_settings
+            .validate()
+            .map_err(anyhow::Error::msg)?;
         let config_path = Self::get_path();
         let content = serde_json::to_string_pretty(self)?;
         fs::write(config_path, content)?;
@@ -214,6 +258,26 @@ pub fn generate_id() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn query_protection_settings_must_be_positive_and_consistent() {
+        let mut settings = GlobalSettings::default();
+        assert!(settings.validate().is_ok());
+
+        settings.max_domain_terms = 0;
+        assert_eq!(
+            settings.validate(),
+            Err("max_domain_terms must be greater than zero".to_string())
+        );
+
+        settings.max_domain_terms = 100;
+        settings.max_query_limit = 1_001;
+        settings.max_response_records = 1_000;
+        assert_eq!(
+            settings.validate(),
+            Err("max_query_limit cannot exceed max_response_records".to_string())
+        );
+    }
 
     #[test]
     fn test_crud_instance_permissions() {

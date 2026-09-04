@@ -128,11 +128,16 @@ async fn logout(State(state): State<AppState>, request: Request) -> Response {
 async fn update_global_settings(
     State(state): State<AppState>,
     Json(settings): Json<crate::config::GlobalSettings>,
-) -> StatusCode {
+) -> Response {
+    if let Err(error) = settings.validate() {
+        return (StatusCode::BAD_REQUEST, error).into_response();
+    }
     let mut config = state.config.write().unwrap();
     config.global_settings = settings;
-    config.save().unwrap();
-    StatusCode::OK
+    match config.save() {
+        Ok(()) => StatusCode::OK.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 async fn toggle_active(State(state): State<AppState>, Path(id): Path<String>) -> StatusCode {
