@@ -101,7 +101,7 @@ pub(crate) fn tool_definitions() -> Value {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
                     "domain": domain_schema(),
-                    "fields": { "type": "array", "items": { "type": "string" }, "description": "List of fields to return" },
+                    "fields": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "List of fields to return" },
                     "offset": { "type": "integer", "minimum": 0, "description": "Number of matching records to skip" },
                     "limit": { "type": "integer", "minimum": 1, "default": 100, "description": "Maximum number of records to return" },
                     "include_total": { "type": "boolean", "default": false, "description": "Run an additional count query and include the total number of matches" }
@@ -131,7 +131,7 @@ pub(crate) fn tool_definitions() -> Value {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string" },
                     "domain": domain_schema(),
-                    "fields": { "type": "array", "items": { "type": "string" } },
+                    "fields": { "type": "array", "minItems": 1, "items": { "type": "string" } },
                     "groupby": { "type": "array", "items": { "type": "string" } }
                 },
                 "required": ["model", "domain", "fields", "groupby"]
@@ -199,9 +199,9 @@ pub(crate) fn tool_definitions() -> Value {
                 "properties": {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string" },
-                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Specific fields to inspect (optional)" }
+                    "fields": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Specific fields to inspect" }
                 },
-                "required": ["model"]
+                "required": ["model", "fields"]
             }
         },
         {
@@ -229,9 +229,9 @@ pub(crate) fn tool_definitions() -> Value {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string", "description": "The Odoo model name (e.g., res.partner)" },
                     "ids": { "type": "array", "items": { "type": "integer" }, "description": "List of record IDs to read" },
-                    "fields": { "type": "array", "items": { "type": "string" }, "description": "List of fields to return (optional)" }
+                    "fields": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "List of fields to return" }
                 },
-                "required": ["model", "ids"]
+                "required": ["model", "ids", "fields"]
             }
         }
     ])

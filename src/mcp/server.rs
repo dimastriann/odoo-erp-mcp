@@ -255,9 +255,9 @@ mod tests {
             ("odoo-copy", &["model", "id", "vals"][..]),
             ("odoo-update", &["model", "ids", "vals"][..]),
             ("odoo-delete", &["model", "ids"][..]),
-            ("odoo-get-metadata", &["model"][..]),
+            ("odoo-get-metadata", &["model", "fields"][..]),
             ("odoo-search", &["model", "domain"][..]),
-            ("odoo-read", &["model", "ids"][..]),
+            ("odoo-read", &["model", "ids", "fields"][..]),
         ];
 
         assert_eq!(tools.len(), expected_contracts.len());

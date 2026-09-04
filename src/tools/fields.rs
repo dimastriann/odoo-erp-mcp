@@ -18,6 +18,9 @@ pub(crate) fn validate_field_names(fields: &Value) -> Result<(), String> {
     let fields = fields
         .as_array()
         .ok_or_else(|| "fields must be an array".to_string())?;
+    if fields.is_empty() {
+        return Err("at least one field must be requested".to_string());
+    }
     let mut unique = HashSet::with_capacity(fields.len());
 
     for field in fields {
@@ -70,6 +73,14 @@ mod tests {
         assert_eq!(
             validate_field_names(&json!(["name", "name"])),
             Err("duplicate requested field \"name\"".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_empty_field_list() {
+        assert_eq!(
+            validate_field_names(&json!([])),
+            Err("at least one field must be requested".to_string())
         );
     }
 
