@@ -63,6 +63,8 @@ pub struct GlobalSettings {
     pub max_read_ids: usize,
     #[serde(default = "default_max_domain_depth")]
     pub max_domain_depth: usize,
+    #[serde(default = "default_max_domain_terms")]
+    pub max_domain_terms: usize,
 }
 
 fn default_global_mode() -> String {
@@ -97,6 +99,10 @@ fn default_max_domain_depth() -> usize {
     8
 }
 
+fn default_max_domain_terms() -> usize {
+    100
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
@@ -108,6 +114,7 @@ impl Default for GlobalSettings {
             max_requested_fields: default_max_requested_fields(),
             max_read_ids: default_max_read_ids(),
             max_domain_depth: default_max_domain_depth(),
+            max_domain_terms: default_max_domain_terms(),
         }
     }
 }

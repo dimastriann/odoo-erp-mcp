@@ -1,4 +1,4 @@
-use crate::domain::{validate_domain, validate_domain_depth};
+use crate::domain::{validate_domain, validate_domain_depth, validate_domain_term_count};
 use crate::odoo::OdooClient;
 use crate::tools::arguments::{
     CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchArgs,
@@ -7,6 +7,7 @@ use crate::tools::arguments::{
 use crate::tools::catalog::ToolName;
 use crate::tools::fields::{validate_field_count, validate_field_names};
 use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, resolve_limit};
+use crate::tools::protection::QueryLimits;
 use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
@@ -15,10 +16,7 @@ pub(crate) async fn execute_tool(
     name: ToolName,
     arguments: Value,
     odoo: &OdooClient,
-    max_query_limit: u64,
-    max_requested_fields: usize,
-    max_read_ids: usize,
-    max_domain_depth: usize,
+    limits: QueryLimits,
 ) -> ToolExecutionResult {
     let model = arguments
         .get("model")
@@ -39,16 +37,19 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search-read domain", error);
             }
-            if let Err(error) = validate_domain_depth(&args.domain, max_domain_depth) {
+            if let Err(error) = validate_domain_depth(&args.domain, limits.max_domain_depth) {
                 return ToolExecutionResult::invalid_arguments("search-read domain", error);
             }
-            if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
+            if let Err(error) = validate_domain_term_count(&args.domain, limits.max_domain_terms) {
+                return ToolExecutionResult::invalid_arguments("search-read domain", error);
+            }
+            if let Err(error) = validate_field_count(&args.fields, limits.max_requested_fields) {
                 return ToolExecutionResult::invalid_arguments("search-read fields", error);
             }
             if let Err(error) = validate_field_names(&args.fields) {
                 return ToolExecutionResult::invalid_arguments("search-read fields", error);
             }
-            let limit = match resolve_limit(args.limit, max_query_limit) {
+            let limit = match resolve_limit(args.limit, limits.max_query_limit) {
                 Ok(limit) => limit,
                 Err(error) => {
                     return ToolExecutionResult::invalid_arguments("search-read limit", error);
@@ -82,7 +83,10 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search-count domain", error);
             }
-            if let Err(error) = validate_domain_depth(&args.domain, max_domain_depth) {
+            if let Err(error) = validate_domain_depth(&args.domain, limits.max_domain_depth) {
+                return ToolExecutionResult::invalid_arguments("search-count domain", error);
+            }
+            if let Err(error) = validate_domain_term_count(&args.domain, limits.max_domain_terms) {
                 return ToolExecutionResult::invalid_arguments("search-count domain", error);
             }
             ToolExecutionResult::from_app_error(odoo.search_count(&args.model, args.domain).await)
@@ -95,10 +99,13 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("read-group domain", error);
             }
-            if let Err(error) = validate_domain_depth(&args.domain, max_domain_depth) {
+            if let Err(error) = validate_domain_depth(&args.domain, limits.max_domain_depth) {
                 return ToolExecutionResult::invalid_arguments("read-group domain", error);
             }
-            if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
+            if let Err(error) = validate_domain_term_count(&args.domain, limits.max_domain_terms) {
+                return ToolExecutionResult::invalid_arguments("read-group domain", error);
+            }
+            if let Err(error) = validate_field_count(&args.fields, limits.max_requested_fields) {
                 return ToolExecutionResult::invalid_arguments("read-group fields", error);
             }
             if let Err(error) = validate_field_names(&args.fields) {
@@ -150,7 +157,7 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("metadata", error),
             };
-            if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
+            if let Err(error) = validate_field_count(&args.fields, limits.max_requested_fields) {
                 return ToolExecutionResult::invalid_arguments("metadata fields", error);
             }
             if let Err(error) = validate_field_names(&args.fields) {
@@ -166,10 +173,13 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_domain(&args.domain) {
                 return ToolExecutionResult::invalid_arguments("search domain", error);
             }
-            if let Err(error) = validate_domain_depth(&args.domain, max_domain_depth) {
+            if let Err(error) = validate_domain_depth(&args.domain, limits.max_domain_depth) {
                 return ToolExecutionResult::invalid_arguments("search domain", error);
             }
-            let limit = match resolve_limit(args.limit, max_query_limit) {
+            if let Err(error) = validate_domain_term_count(&args.domain, limits.max_domain_terms) {
+                return ToolExecutionResult::invalid_arguments("search domain", error);
+            }
+            let limit = match resolve_limit(args.limit, limits.max_query_limit) {
                 Ok(limit) => limit,
                 Err(error) => {
                     return ToolExecutionResult::invalid_arguments("search limit", error);
@@ -192,10 +202,10 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("read", error),
             };
-            if let Err(error) = validate_read_id_count(&args.ids, max_read_ids) {
+            if let Err(error) = validate_read_id_count(&args.ids, limits.max_read_ids) {
                 return ToolExecutionResult::invalid_arguments("read IDs", error);
             }
-            if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
+            if let Err(error) = validate_field_count(&args.fields, limits.max_requested_fields) {
                 return ToolExecutionResult::invalid_arguments("read fields", error);
             }
             if let Err(error) = validate_field_names(&args.fields) {
@@ -212,6 +222,14 @@ mod tests {
     use super::*;
     use crate::test_support::{MockOdooServer, authentication_success, json_rpc_success};
     use serde_json::json;
+
+    const TEST_QUERY_LIMITS: QueryLimits = QueryLimits {
+        max_query_limit: 1_000,
+        max_requested_fields: 100,
+        max_read_ids: 100,
+        max_domain_depth: 8,
+        max_domain_terms: 100,
+    };
 
     #[tokio::test]
     async fn search_pagination_contract_includes_has_more_without_count() {
@@ -233,10 +251,7 @@ mod tests {
             ToolName::Search,
             json!({"model": "res.partner", "limit": 2}),
             &client,
-            1_000,
-            100,
-            100,
-            8,
+            TEST_QUERY_LIMITS,
         )
         .await;
         let ToolExecutionResult::Success(response) = result else {
@@ -277,10 +292,7 @@ mod tests {
                 "include_total": true
             }),
             &client,
-            1_000,
-            100,
-            100,
-            8,
+            TEST_QUERY_LIMITS,
         )
         .await;
         let ToolExecutionResult::Success(response) = result else {

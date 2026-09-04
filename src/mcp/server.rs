@@ -3,6 +3,7 @@ use crate::error::AppError;
 use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
 use crate::tools::executor::execute_tool;
+use crate::tools::protection::QueryLimits;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
@@ -106,10 +107,7 @@ async fn handle_request(
                 connection_timeout,
                 request_timeout,
                 max_response_bytes,
-                max_query_limit,
-                max_requested_fields,
-                max_read_ids,
-                max_domain_depth,
+                query_limits,
             ) = {
                 let conf = config.read().unwrap();
                 let inst = conf.find_instance(instance_target).cloned();
@@ -119,20 +117,20 @@ async fn handle_request(
                 let request_timeout =
                     Duration::from_secs(conf.global_settings.rpc_request_timeout_secs);
                 let max_response_bytes = conf.global_settings.rpc_max_response_bytes;
-                let max_query_limit = conf.global_settings.max_query_limit;
-                let max_requested_fields = conf.global_settings.max_requested_fields;
-                let max_read_ids = conf.global_settings.max_read_ids;
-                let max_domain_depth = conf.global_settings.max_domain_depth;
+                let query_limits = QueryLimits {
+                    max_query_limit: conf.global_settings.max_query_limit,
+                    max_requested_fields: conf.global_settings.max_requested_fields,
+                    max_read_ids: conf.global_settings.max_read_ids,
+                    max_domain_depth: conf.global_settings.max_domain_depth,
+                    max_domain_terms: conf.global_settings.max_domain_terms,
+                };
                 (
                     inst,
                     mode,
                     connection_timeout,
                     request_timeout,
                     max_response_bytes,
-                    max_query_limit,
-                    max_requested_fields,
-                    max_read_ids,
-                    max_domain_depth,
+                    query_limits,
                 )
             };
 
@@ -181,17 +179,9 @@ async fn handle_request(
                 }
             };
 
-            let result = execute_tool(
-                tool_name,
-                arguments,
-                &odoo_client,
-                max_query_limit,
-                max_requested_fields,
-                max_read_ids,
-                max_domain_depth,
-            )
-            .await
-            .into_mcp_result();
+            let result = execute_tool(tool_name, arguments, &odoo_client, query_limits)
+                .await
+                .into_mcp_result();
 
             Some(json!({"jsonrpc": "2.0", "id": id, "result": result}))
         }

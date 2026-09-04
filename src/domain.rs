@@ -42,6 +42,19 @@ pub(crate) fn validate_domain_depth(domain: &Value, maximum: usize) -> Result<()
     Ok(())
 }
 
+pub(crate) fn validate_domain_term_count(domain: &Value, maximum: usize) -> Result<(), String> {
+    let terms = domain
+        .as_array()
+        .ok_or_else(|| "expected an array of domain clauses".to_string())?
+        .len();
+    if terms > maximum {
+        return Err(format!(
+            "domain contains {terms} terms, exceeding the configured maximum of {maximum}"
+        ));
+    }
+    Ok(())
+}
+
 fn value_depth(value: &Value) -> usize {
     match value {
         Value::Array(values) => 1 + values.iter().map(value_depth).max().unwrap_or(0),
@@ -88,6 +101,17 @@ mod tests {
         assert_eq!(
             validate_domain_depth(&domain, 3),
             Err("domain depth 4 exceeds the configured maximum of 3".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_domains_above_maximum_term_count() {
+        let domain = json!(["|", ["name", "=", "Alpha"], ["name", "=", "Beta"]]);
+
+        assert!(validate_domain_term_count(&domain, 3).is_ok());
+        assert_eq!(
+            validate_domain_term_count(&domain, 2),
+            Err("domain contains 3 terms, exceeding the configured maximum of 2".to_string())
         );
     }
 }
