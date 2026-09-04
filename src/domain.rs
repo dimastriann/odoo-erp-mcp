@@ -32,6 +32,24 @@ pub(crate) fn validate_domain(domain: &Value) -> Result<(), String> {
     Ok(())
 }
 
+pub(crate) fn validate_domain_depth(domain: &Value, maximum: usize) -> Result<(), String> {
+    let depth = value_depth(domain);
+    if depth > maximum {
+        return Err(format!(
+            "domain depth {depth} exceeds the configured maximum of {maximum}"
+        ));
+    }
+    Ok(())
+}
+
+fn value_depth(value: &Value) -> usize {
+    match value {
+        Value::Array(values) => 1 + values.iter().map(value_depth).max().unwrap_or(0),
+        Value::Object(values) => 1 + values.values().map(value_depth).max().unwrap_or(0),
+        _ => 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +78,16 @@ mod tests {
 
         assert!(error.contains("filters must be nested"));
         assert!(error.contains("[[\"name\", \"=\", \"S00027\"]]"));
+    }
+
+    #[test]
+    fn rejects_domains_above_maximum_depth() {
+        let domain = json!([["id", "in", [[1, 2]]]]);
+
+        assert!(validate_domain_depth(&domain, 4).is_ok());
+        assert_eq!(
+            validate_domain_depth(&domain, 3),
+            Err("domain depth 4 exceeds the configured maximum of 3".to_string())
+        );
     }
 }

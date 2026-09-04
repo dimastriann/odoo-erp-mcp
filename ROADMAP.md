@@ -177,7 +177,7 @@ Goal: Provide a production-appropriate read-only deployment mode.
 - [x] S2-11 — Reject duplicate and invalid field names.
 - [x] S2-12 — Define behavior when the field list is empty.
 - [x] S2-13 — Add a maximum ID count for `odoo-read`.
-- [ ] S2-14 — Add a maximum domain depth.
+- [x] S2-14 — Add a maximum domain depth.
 - [ ] S2-15 — Add a maximum domain-term count.
 - [ ] S2-16 — Add a maximum response-record count.
 - [ ] S2-17 — Add query-protection configuration validation.
@@ -692,7 +692,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
-| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 13/24 | Direct reads have a configurable record-ID limit. |
+| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 14/24 | Domain JSON nesting has a configurable depth limit. |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |

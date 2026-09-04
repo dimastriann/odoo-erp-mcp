@@ -219,6 +219,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
             max_query_limit: 1_000,
             max_requested_fields: 100,
             max_read_ids: 100,
+            max_domain_depth: 8,
         },
         instances: vec![
             OdooInstance {

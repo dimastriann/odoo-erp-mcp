@@ -109,6 +109,7 @@ async fn handle_request(
                 max_query_limit,
                 max_requested_fields,
                 max_read_ids,
+                max_domain_depth,
             ) = {
                 let conf = config.read().unwrap();
                 let inst = conf.find_instance(instance_target).cloned();
@@ -121,6 +122,7 @@ async fn handle_request(
                 let max_query_limit = conf.global_settings.max_query_limit;
                 let max_requested_fields = conf.global_settings.max_requested_fields;
                 let max_read_ids = conf.global_settings.max_read_ids;
+                let max_domain_depth = conf.global_settings.max_domain_depth;
                 (
                     inst,
                     mode,
@@ -130,6 +132,7 @@ async fn handle_request(
                     max_query_limit,
                     max_requested_fields,
                     max_read_ids,
+                    max_domain_depth,
                 )
             };
 
@@ -185,6 +188,7 @@ async fn handle_request(
                 max_query_limit,
                 max_requested_fields,
                 max_read_ids,
+                max_domain_depth,
             )
             .await
             .into_mcp_result();
