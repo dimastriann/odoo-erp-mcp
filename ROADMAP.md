@@ -174,7 +174,7 @@ Goal: Provide a production-appropriate read-only deployment mode.
 ## 2.2 Field, record, and payload protection
 
 - [x] S2-10 — Add a maximum requested-field count.
-- [ ] S2-11 — Reject duplicate and invalid field names.
+- [x] S2-11 — Reject duplicate and invalid field names.
 - [ ] S2-12 — Define behavior when the field list is empty.
 - [ ] S2-13 — Add a maximum ID count for `odoo-read`.
 - [ ] S2-14 — Add a maximum domain depth.
@@ -692,7 +692,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
-| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 10/24 | Requested field lists have a configurable maximum. |
+| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 11/24 | Duplicate and malformed field names are rejected locally. |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
