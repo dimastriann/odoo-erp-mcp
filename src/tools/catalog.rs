@@ -10,7 +10,10 @@ fn domain_schema() -> Value {
                     "type": "array",
                     "prefixItems": [
                         { "type": "string" },
-                        { "type": "string" },
+                        {
+                            "type": "string",
+                            "enum": ["=", "!=", ">", ">=", "<", "<=", "=?", "=like", "like", "not like", "=ilike", "ilike", "not ilike", "in", "not in", "child_of", "parent_of", "any", "not any", "any!"]
+                        },
                         {}
                     ],
                     "minItems": 3,
@@ -280,6 +283,7 @@ mod tests {
         assert!(domain["items"]["oneOf"].is_array());
         assert_eq!(domain["items"]["oneOf"][0]["minItems"], 3);
         assert_eq!(domain["items"]["oneOf"][0]["maxItems"], 3);
+        assert!(domain["items"]["oneOf"][0]["prefixItems"][1]["enum"].is_array());
     }
 
     #[test]

@@ -25,6 +25,48 @@ pub(crate) struct DomainClause {
     pub(crate) value: Value,
 }
 
+const ALLOWED_DOMAIN_OPERATORS: &[&str] = &[
+    "=",
+    "!=",
+    ">",
+    ">=",
+    "<",
+    "<=",
+    "=?",
+    "=like",
+    "like",
+    "not like",
+    "=ilike",
+    "ilike",
+    "not ilike",
+    "in",
+    "not in",
+    "child_of",
+    "parent_of",
+    "any",
+    "not any",
+    "any!",
+];
+
+impl Domain {
+    fn validate_operators(&self) -> Result<(), String> {
+        for term in &self.terms {
+            match term {
+                DomainTerm::Logical(operator) => {
+                    let _ = operator;
+                }
+                DomainTerm::Clause(clause) => {
+                    if !ALLOWED_DOMAIN_OPERATORS.contains(&clause.operator.as_str()) {
+                        return Err(format!("unsupported domain operator {:?}", clause.operator));
+                    }
+                    let _ = (&clause.field, &clause.value);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl TryFrom<&Value> for Domain {
     type Error = String;
 
@@ -86,17 +128,7 @@ impl TryFrom<&Value> for DomainTerm {
 
 pub(crate) fn validate_domain(domain: &Value) -> Result<(), String> {
     let parsed = Domain::try_from(domain)?;
-    for term in parsed.terms {
-        match term {
-            DomainTerm::Logical(operator) => {
-                let _ = operator;
-            }
-            DomainTerm::Clause(clause) => {
-                let _ = (clause.field, clause.operator, clause.value);
-            }
-        }
-    }
-    Ok(())
+    parsed.validate_operators()
 }
 
 pub(crate) fn validate_domain_depth(domain: &Value, maximum: usize) -> Result<(), String> {
@@ -153,6 +185,22 @@ mod tests {
         assert_eq!(clause.field, "name");
         assert_eq!(clause.operator, "=");
         assert_eq!(clause.value, json!("Alpha"));
+    }
+
+    #[test]
+    fn accepts_supported_odoo_domain_operators() {
+        for operator in ALLOWED_DOMAIN_OPERATORS {
+            let domain = json!([["name", operator, "value"]]);
+            assert!(validate_domain(&domain).is_ok(), "operator {operator}");
+        }
+    }
+
+    #[test]
+    fn rejects_unsupported_domain_operator() {
+        assert_eq!(
+            validate_domain(&json!([["name", "contains", "value"]])),
+            Err("unsupported domain operator \"contains\"".to_string())
+        );
     }
 
     #[test]

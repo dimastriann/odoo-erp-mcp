@@ -186,7 +186,7 @@ Goal: Provide a production-appropriate read-only deployment mode.
 ## 2.3 Domain validation
 
 - [x] S2-19 — Create a typed Odoo domain validator.
-- [ ] S2-20 — Validate allowed domain operators.
+- [x] S2-20 — Validate allowed domain operators.
 - [ ] S2-21 — Validate logical operators and arity.
 - [ ] S2-22 — Limit values supplied to `in` and `not in`.
 - [ ] S2-23 — Reject malformed domains before calling Odoo.
@@ -692,7 +692,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
-| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 19/24 | Domain clauses and logical operators are parsed into typed structures. |
+| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 20/24 | Domain operators are restricted by runtime and schema whitelists. |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
