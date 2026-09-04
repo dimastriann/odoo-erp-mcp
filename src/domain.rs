@@ -1,21 +1,64 @@
 use serde_json::Value;
 
-pub(crate) fn validate_domain(domain: &Value) -> Result<(), String> {
-    let items = domain
-        .as_array()
-        .ok_or_else(|| "expected an array of domain clauses".to_string())?;
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct Domain {
+    terms: Vec<DomainTerm>,
+}
 
-    for item in items {
-        if let Some(operator) = item.as_str() {
-            if matches!(operator, "&" | "|" | "!") {
-                continue;
-            }
-            return Err(format!(
-                "invalid domain item {operator:?}; filters must be nested, for example [[\"name\", \"=\", \"S00027\"]]"
-            ));
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) enum DomainTerm {
+    Logical(LogicalOperator),
+    Clause(DomainClause),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LogicalOperator {
+    And,
+    Or,
+    Not,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct DomainClause {
+    pub(crate) field: String,
+    pub(crate) operator: String,
+    pub(crate) value: Value,
+}
+
+impl TryFrom<&Value> for Domain {
+    type Error = String;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        let items = value
+            .as_array()
+            .ok_or_else(|| "expected an array of domain clauses".to_string())?;
+        let terms = items
+            .iter()
+            .map(DomainTerm::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { terms })
+    }
+}
+
+impl TryFrom<&Value> for DomainTerm {
+    type Error = String;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        if let Some(operator) = value.as_str() {
+            let logical = match operator {
+                "&" => LogicalOperator::And,
+                "|" => LogicalOperator::Or,
+                "!" => LogicalOperator::Not,
+                _ => {
+                    return Err(format!(
+                        "invalid domain item {operator:?}; filters must be nested, for example [[\"name\", \"=\", \"S00027\"]]"
+                    ));
+                }
+            };
+            return Ok(Self::Logical(logical));
         }
 
-        let clause = item.as_array().ok_or_else(|| {
+        let clause = value.as_array().ok_or_else(|| {
             "each domain item must be a three-element clause or a logical operator".to_string()
         })?;
         if clause.len() != 3 {
@@ -24,11 +67,35 @@ pub(crate) fn validate_domain(domain: &Value) -> Result<(), String> {
                 clause.len()
             ));
         }
-        if !clause[0].is_string() || !clause[1].is_string() {
-            return Err("domain clause fields and operators must be strings".to_string());
+        let field = clause[0]
+            .as_str()
+            .ok_or_else(|| "domain clause fields and operators must be strings".to_string())?;
+        let operator = clause[1]
+            .as_str()
+            .ok_or_else(|| "domain clause fields and operators must be strings".to_string())?;
+        if field.is_empty() || operator.is_empty() {
+            return Err("domain clause fields and operators cannot be empty".to_string());
+        }
+        Ok(Self::Clause(DomainClause {
+            field: field.to_string(),
+            operator: operator.to_string(),
+            value: clause[2].clone(),
+        }))
+    }
+}
+
+pub(crate) fn validate_domain(domain: &Value) -> Result<(), String> {
+    let parsed = Domain::try_from(domain)?;
+    for term in parsed.terms {
+        match term {
+            DomainTerm::Logical(operator) => {
+                let _ = operator;
+            }
+            DomainTerm::Clause(clause) => {
+                let _ = (clause.field, clause.operator, clause.value);
+            }
         }
     }
-
     Ok(())
 }
 
@@ -71,6 +138,21 @@ mod tests {
     #[test]
     fn accepts_nested_filter_clauses() {
         assert!(validate_domain(&json!([["name", "=", "S00027"]])).is_ok());
+    }
+
+    #[test]
+    fn parses_typed_clauses_and_logical_operators() {
+        let domain =
+            Domain::try_from(&json!(["|", ["name", "=", "Alpha"], ["active", "=", true]])).unwrap();
+
+        assert_eq!(domain.terms.len(), 3);
+        assert_eq!(domain.terms[0], DomainTerm::Logical(LogicalOperator::Or));
+        let DomainTerm::Clause(clause) = &domain.terms[1] else {
+            panic!("second term must be a clause");
+        };
+        assert_eq!(clause.field, "name");
+        assert_eq!(clause.operator, "=");
+        assert_eq!(clause.value, json!("Alpha"));
     }
 
     #[test]
