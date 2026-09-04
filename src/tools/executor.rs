@@ -7,6 +7,7 @@ use crate::tools::arguments::{
 use crate::tools::catalog::ToolName;
 use crate::tools::fields::{validate_field_count, validate_field_names};
 use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, resolve_limit};
+use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::Value;
 
@@ -16,6 +17,7 @@ pub(crate) async fn execute_tool(
     odoo: &OdooClient,
     max_query_limit: u64,
     max_requested_fields: usize,
+    max_read_ids: usize,
 ) -> ToolExecutionResult {
     let model = arguments
         .get("model")
@@ -177,6 +179,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("read", error),
             };
+            if let Err(error) = validate_read_id_count(&args.ids, max_read_ids) {
+                return ToolExecutionResult::invalid_arguments("read IDs", error);
+            }
             if let Err(error) = validate_field_count(&args.fields, max_requested_fields) {
                 return ToolExecutionResult::invalid_arguments("read fields", error);
             }
@@ -216,6 +221,7 @@ mod tests {
             json!({"model": "res.partner", "limit": 2}),
             &client,
             1_000,
+            100,
             100,
         )
         .await;
@@ -258,6 +264,7 @@ mod tests {
             }),
             &client,
             1_000,
+            100,
             100,
         )
         .await;

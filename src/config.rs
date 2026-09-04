@@ -59,6 +59,8 @@ pub struct GlobalSettings {
     pub max_query_limit: u64,
     #[serde(default = "default_max_requested_fields")]
     pub max_requested_fields: usize,
+    #[serde(default = "default_max_read_ids")]
+    pub max_read_ids: usize,
 }
 
 fn default_global_mode() -> String {
@@ -85,6 +87,10 @@ fn default_max_requested_fields() -> usize {
     100
 }
 
+fn default_max_read_ids() -> usize {
+    100
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
@@ -94,6 +100,7 @@ impl Default for GlobalSettings {
             rpc_max_response_bytes: default_rpc_max_response_bytes(),
             max_query_limit: default_max_query_limit(),
             max_requested_fields: default_max_requested_fields(),
+            max_read_ids: default_max_read_ids(),
         }
     }
 }
