@@ -133,7 +133,11 @@ async fn update_global_settings(
         return (StatusCode::BAD_REQUEST, error).into_response();
     }
     let mut config = state.config.write().unwrap();
-    config.global_settings = settings;
+    let previous_settings = std::mem::replace(&mut config.global_settings, settings);
+    if let Err(error) = config.validate() {
+        config.global_settings = previous_settings;
+        return (StatusCode::BAD_REQUEST, error).into_response();
+    }
     match config.save() {
         Ok(()) => StatusCode::OK.into_response(),
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),

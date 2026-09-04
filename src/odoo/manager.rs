@@ -74,6 +74,7 @@ mod tests {
             active: true,
             mode: None,
             allowed_tools: None,
+            query_limits: None,
         };
 
         let result = manager

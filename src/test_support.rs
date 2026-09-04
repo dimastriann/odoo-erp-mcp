@@ -234,6 +234,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
                 active: true,
                 mode: Some("crud".into()),
                 allowed_tools: None,
+                query_limits: None,
             },
             OdooInstance {
                 id: "2".into(),
@@ -245,6 +246,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
                 active: true,
                 mode: Some("read_only".into()),
                 allowed_tools: None,
+                query_limits: None,
             },
         ],
         prompts: vec![],

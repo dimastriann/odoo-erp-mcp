@@ -137,7 +137,11 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
       "password": "your_password_or_api_key",
       "active": true,
       "mode": "crud",
-      "allowed_tools": null
+      "allowed_tools": null,
+      "query_limits": {
+        "max_query_limit": 250,
+        "max_response_records": 250
+      }
     },
     {
       "id": "2",
@@ -162,6 +166,13 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
 | `inherit` | Use the global default mode |
 | `crud` | Full read & write access |
 | `read_only` | Search, read, and aggregate only — create/update/delete/copy are blocked |
+
+The query-protection defaults are `max_query_limit: 1000`,
+`max_requested_fields: 100`, `max_read_ids: 100`, `max_domain_depth: 8`,
+`max_domain_terms: 100`, and `max_response_records: 1000`. An instance may
+override any subset under `query_limits`; omitted values inherit the global
+setting. Every effective limit must be greater than zero, and
+`max_query_limit` cannot exceed `max_response_records`.
 
 ### MCP Communication Flow
 

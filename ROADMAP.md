@@ -181,7 +181,7 @@ Goal: Provide a production-appropriate read-only deployment mode.
 - [x] S2-15 — Add a maximum domain-term count.
 - [x] S2-16 — Add a maximum response-record count.
 - [x] S2-17 — Add query-protection configuration validation.
-- [ ] S2-18 — Document defaults and per-instance overrides.
+- [x] S2-18 — Document defaults and per-instance overrides.
 
 ## 2.3 Domain validation
 
@@ -692,7 +692,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
-| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 17/24 | Invalid and inconsistent query settings are rejected. |
+| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 18/24 | Global defaults and validated per-instance overrides are documented. |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |

@@ -107,7 +107,7 @@ async fn handle_request(
                 connection_timeout,
                 request_timeout,
                 max_response_bytes,
-                query_limits,
+                global_settings,
             ) = {
                 let conf = config.read().unwrap();
                 let inst = conf.find_instance(instance_target).cloned();
@@ -117,21 +117,14 @@ async fn handle_request(
                 let request_timeout =
                     Duration::from_secs(conf.global_settings.rpc_request_timeout_secs);
                 let max_response_bytes = conf.global_settings.rpc_max_response_bytes;
-                let query_limits = QueryLimits {
-                    max_query_limit: conf.global_settings.max_query_limit,
-                    max_requested_fields: conf.global_settings.max_requested_fields,
-                    max_read_ids: conf.global_settings.max_read_ids,
-                    max_domain_depth: conf.global_settings.max_domain_depth,
-                    max_domain_terms: conf.global_settings.max_domain_terms,
-                    max_response_records: conf.global_settings.max_response_records,
-                };
+                let global_settings = conf.global_settings.clone();
                 (
                     inst,
                     mode,
                     connection_timeout,
                     request_timeout,
                     max_response_bytes,
-                    query_limits,
+                    global_settings,
                 )
             };
 
@@ -150,6 +143,15 @@ async fn handle_request(
                     };
                     return Some(tool_call_response(id, ToolExecutionResult::Failure(error)));
                 }
+            };
+            let effective_settings = instance_obj.effective_query_settings(&global_settings);
+            let query_limits = QueryLimits {
+                max_query_limit: effective_settings.max_query_limit,
+                max_requested_fields: effective_settings.max_requested_fields,
+                max_read_ids: effective_settings.max_read_ids,
+                max_domain_depth: effective_settings.max_domain_depth,
+                max_domain_terms: effective_settings.max_domain_terms,
+                max_response_records: effective_settings.max_response_records,
             };
 
             // Enforce Instance Tool Permissions

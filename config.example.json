@@ -21,7 +21,11 @@
       "password": "your_password_or_api_key",
       "active": true,
       "mode": "crud",
-      "allowed_tools": null
+      "allowed_tools": null,
+      "query_limits": {
+        "max_query_limit": 250,
+        "max_response_records": 250
+      }
     }
   ],
   "prompts": []

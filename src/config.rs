@@ -17,9 +17,44 @@ pub struct OdooInstance {
     pub mode: Option<String>,
     #[serde(default)]
     pub allowed_tools: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_limits: Option<QueryProtectionOverrides>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct QueryProtectionOverrides {
+    pub max_query_limit: Option<u64>,
+    pub max_requested_fields: Option<usize>,
+    pub max_read_ids: Option<usize>,
+    pub max_domain_depth: Option<usize>,
+    pub max_domain_terms: Option<usize>,
+    pub max_response_records: Option<usize>,
 }
 
 impl OdooInstance {
+    pub(crate) fn effective_query_settings(&self, global: &GlobalSettings) -> GlobalSettings {
+        let mut effective = global.clone();
+        if let Some(overrides) = &self.query_limits {
+            effective.max_query_limit = overrides
+                .max_query_limit
+                .unwrap_or(effective.max_query_limit);
+            effective.max_requested_fields = overrides
+                .max_requested_fields
+                .unwrap_or(effective.max_requested_fields);
+            effective.max_read_ids = overrides.max_read_ids.unwrap_or(effective.max_read_ids);
+            effective.max_domain_depth = overrides
+                .max_domain_depth
+                .unwrap_or(effective.max_domain_depth);
+            effective.max_domain_terms = overrides
+                .max_domain_terms
+                .unwrap_or(effective.max_domain_terms);
+            effective.max_response_records = overrides
+                .max_response_records
+                .unwrap_or(effective.max_response_records);
+        }
+        effective
+    }
+
     pub fn get_mode<'a>(&'a self, global_default: &'a str) -> &'a str {
         match &self.mode {
             Some(m) if !m.trim().is_empty() && m != "inherit" => m.as_str(),
@@ -179,6 +214,17 @@ pub struct Config {
 }
 
 impl Config {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        self.global_settings.validate()?;
+        for instance in &self.instances {
+            instance
+                .effective_query_settings(&self.global_settings)
+                .validate()
+                .map_err(|error| format!("instance {:?}: {error}", instance.name))?;
+        }
+        Ok(())
+    }
+
     pub fn get_path() -> std::path::PathBuf {
         if cfg!(debug_assertions) {
             // In debug mode, use the project root
@@ -203,17 +249,12 @@ impl Config {
 
         let content = fs::read_to_string(config_path)?;
         let config: Config = serde_json::from_str(&content)?;
-        config
-            .global_settings
-            .validate()
-            .map_err(anyhow::Error::msg)?;
+        config.validate().map_err(anyhow::Error::msg)?;
         Ok(config)
     }
 
     pub fn save(&self) -> Result<()> {
-        self.global_settings
-            .validate()
-            .map_err(anyhow::Error::msg)?;
+        self.validate().map_err(anyhow::Error::msg)?;
         let config_path = Self::get_path();
         let content = serde_json::to_string_pretty(self)?;
         fs::write(config_path, content)?;
@@ -280,6 +321,32 @@ mod tests {
     }
 
     #[test]
+    fn instance_query_limits_override_only_explicit_values() {
+        let global = GlobalSettings::default();
+        let instance = OdooInstance {
+            id: "limited".into(),
+            name: "Limited".into(),
+            url: "https://odoo.test".into(),
+            db: "db".into(),
+            username: "admin".into(),
+            password: "secret".into(),
+            active: true,
+            mode: None,
+            allowed_tools: None,
+            query_limits: Some(QueryProtectionOverrides {
+                max_query_limit: Some(25),
+                max_response_records: Some(25),
+                ..QueryProtectionOverrides::default()
+            }),
+        };
+
+        let effective = instance.effective_query_settings(&global);
+        assert_eq!(effective.max_query_limit, 25);
+        assert_eq!(effective.max_response_records, 25);
+        assert_eq!(effective.max_requested_fields, global.max_requested_fields);
+    }
+
+    #[test]
     fn test_crud_instance_permissions() {
         let instance = OdooInstance {
             id: "1".into(),
@@ -291,6 +358,7 @@ mod tests {
             active: true,
             mode: Some("crud".into()),
             allowed_tools: None,
+            query_limits: None,
         };
 
         assert!(instance.is_tool_allowed("odoo-search-read", "crud"));
@@ -311,6 +379,7 @@ mod tests {
             active: false,
             mode: Some("read_only".into()),
             allowed_tools: None,
+            query_limits: None,
         };
 
         assert!(instance.is_tool_allowed("odoo-search-read", "crud"));
@@ -333,6 +402,7 @@ mod tests {
             active: false,
             mode: Some("inherit".into()),
             allowed_tools: None,
+            query_limits: None,
         };
 
         assert!(!instance.is_tool_allowed("odoo-create", "read_only"));
