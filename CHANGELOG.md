@@ -5,6 +5,43 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-09-06
+
+### Added
+
+- Added consistent pagination to search and search-read results, including
+  optional total counts through `include_total`.
+- Added configurable global and per-instance limits for query size, requested
+  fields, read IDs, domain depth, domain terms, membership values, and response
+  record counts.
+- Added typed Odoo domain parsing with explicit logical operators and a safe
+  comparison-operator allowlist.
+- Added security regression coverage proving malformed and excessive domains
+  are rejected before any Odoo RPC call.
+
+### Changed
+
+- Applied a safe default limit to search operations when callers omit `limit`.
+- Standardized paginated responses with `items`, `offset`, `limit`, and
+  `has_more` metadata.
+- Enforced logical operator arity and bounded `in` and `not in` operands.
+- Exposed query-protection settings in the administration UI while preserving
+  valid custom settings during configuration updates.
+
+### Fixed
+
+- Prevented malformed flat domains and unsupported operators from reaching
+  Odoo and returning server-side tracebacks.
+- Stabilized retry timeout fixtures under local scheduler contention.
+
+### Compatibility notes
+
+- Existing `0.4.0` configuration files remain compatible; query-protection
+  settings use secure defaults when absent.
+- No MCP tools were removed or renamed.
+- Search and search-read success payloads now use the documented pagination
+  envelope instead of returning an unwrapped array.
+
 ## [0.4.0] — 2026-09-03
 
 ### Added
@@ -87,5 +124,6 @@ changes.
   values must be JSON objects, and domain filters must use nested clauses.
 - No MCP tools were removed or renamed.
 
+[0.5.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.2.0...v0.3.1
