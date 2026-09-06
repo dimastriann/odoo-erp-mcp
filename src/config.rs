@@ -29,6 +29,7 @@ pub struct QueryProtectionOverrides {
     pub max_domain_depth: Option<usize>,
     pub max_domain_terms: Option<usize>,
     pub max_response_records: Option<usize>,
+    pub max_domain_in_values: Option<usize>,
 }
 
 impl OdooInstance {
@@ -51,6 +52,9 @@ impl OdooInstance {
             effective.max_response_records = overrides
                 .max_response_records
                 .unwrap_or(effective.max_response_records);
+            effective.max_domain_in_values = overrides
+                .max_domain_in_values
+                .unwrap_or(effective.max_domain_in_values);
         }
         effective
     }
@@ -102,6 +106,8 @@ pub struct GlobalSettings {
     pub max_domain_terms: usize,
     #[serde(default = "default_max_response_records")]
     pub max_response_records: usize,
+    #[serde(default = "default_max_domain_in_values")]
+    pub max_domain_in_values: usize,
 }
 
 fn default_global_mode() -> String {
@@ -144,6 +150,10 @@ fn default_max_response_records() -> usize {
     1_000
 }
 
+fn default_max_domain_in_values() -> usize {
+    1_000
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
@@ -157,6 +167,7 @@ impl Default for GlobalSettings {
             max_domain_depth: default_max_domain_depth(),
             max_domain_terms: default_max_domain_terms(),
             max_response_records: default_max_response_records(),
+            max_domain_in_values: default_max_domain_in_values(),
         }
     }
 }
@@ -184,6 +195,7 @@ impl GlobalSettings {
             ("max_domain_depth", self.max_domain_depth),
             ("max_domain_terms", self.max_domain_terms),
             ("max_response_records", self.max_response_records),
+            ("max_domain_in_values", self.max_domain_in_values),
         ];
         for (name, value) in positive_sizes {
             if value == 0 {

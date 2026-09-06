@@ -9,7 +9,8 @@
     "max_read_ids": 100,
     "max_domain_depth": 8,
     "max_domain_terms": 100,
-    "max_response_records": 1000
+    "max_response_records": 1000,
+    "max_domain_in_values": 1000
   },
   "instances": [
     {

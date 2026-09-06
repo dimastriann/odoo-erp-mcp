@@ -152,6 +152,7 @@ async fn handle_request(
                 max_domain_depth: effective_settings.max_domain_depth,
                 max_domain_terms: effective_settings.max_domain_terms,
                 max_response_records: effective_settings.max_response_records,
+                max_domain_in_values: effective_settings.max_domain_in_values,
             };
 
             // Enforce Instance Tool Permissions

@@ -184,6 +184,31 @@ pub(crate) fn validate_domain_term_count(domain: &Value, maximum: usize) -> Resu
     Ok(())
 }
 
+pub(crate) fn validate_domain_in_values(domain: &Value, maximum: usize) -> Result<(), String> {
+    let parsed = Domain::try_from(domain)?;
+    for term in parsed.terms {
+        let DomainTerm::Clause(clause) = term else {
+            continue;
+        };
+        if matches!(clause.operator.as_str(), "in" | "not in") {
+            let values = clause.value.as_array().ok_or_else(|| {
+                format!(
+                    "domain operator {:?} requires an array value",
+                    clause.operator
+                )
+            })?;
+            if values.len() > maximum {
+                return Err(format!(
+                    "domain operator {:?} received {} values, exceeding the configured maximum of {maximum}",
+                    clause.operator,
+                    values.len()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn value_depth(value: &Value) -> usize {
     match value {
         Value::Array(values) => 1 + values.iter().map(value_depth).max().unwrap_or(0),
@@ -292,5 +317,12 @@ mod tests {
             validate_domain_term_count(&domain, 2),
             Err("domain contains 3 terms, exceeding the configured maximum of 2".to_string())
         );
+    }
+
+    #[test]
+    fn limits_values_for_in_operators() {
+        assert!(validate_domain_in_values(&json!([["id", "in", [1, 2]]]), 2).is_ok());
+        assert!(validate_domain_in_values(&json!([["id", "not in", [1, 2, 3]]]), 2).is_err());
+        assert!(validate_domain_in_values(&json!([["id", "in", 1]]), 2).is_err());
     }
 }
