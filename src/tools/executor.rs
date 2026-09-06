@@ -338,4 +338,44 @@ mod tests {
         assert_eq!(requests[1]["params"]["args"][5][0], domain);
         assert_eq!(requests[2]["params"]["args"][5][0], domain);
     }
+
+    #[tokio::test]
+    async fn malformed_domains_never_reach_odoo() {
+        let server = MockOdooServer::start(authentication_success(7)).await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let calls = [
+            (
+                ToolName::SearchRead,
+                json!({"model": "res.partner", "domain": ["name", "=", "Alpha"], "fields": ["id"]}),
+            ),
+            (
+                ToolName::SearchCount,
+                json!({"model": "res.partner", "domain": ["name", "=", "Alpha"]}),
+            ),
+            (
+                ToolName::ReadGroup,
+                json!({"model": "res.partner", "domain": ["name", "=", "Alpha"], "fields": ["id"], "groupby": []}),
+            ),
+            (
+                ToolName::Search,
+                json!({"model": "res.partner", "domain": ["name", "=", "Alpha"]}),
+            ),
+        ];
+
+        for (tool, arguments) in calls {
+            let result = execute_tool(tool, arguments, &client, TEST_QUERY_LIMITS).await;
+            let ToolExecutionResult::Failure(AppError::InputValidation { .. }) = result else {
+                panic!("malformed domain must be rejected as invalid input");
+            };
+        }
+
+        assert_eq!(server.requests().await.len(), 1);
+    }
 }
