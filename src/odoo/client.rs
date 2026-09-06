@@ -489,7 +489,7 @@ mod tests {
                 username: "admin".to_string(),
                 password: "secret".to_string(),
                 connection_timeout: Duration::from_secs(1),
-                request_timeout: Duration::from_millis(20),
+                request_timeout: Duration::from_millis(100),
                 max_response_bytes: 10 * 1024 * 1024,
             },
             observer,
@@ -698,8 +698,8 @@ mod tests {
             authentication_success(7),
             vec![
                 Duration::ZERO,
-                Duration::from_millis(100),
-                Duration::from_millis(100),
+                Duration::from_millis(500),
+                Duration::from_millis(500),
                 Duration::ZERO,
             ],
         )
@@ -723,9 +723,9 @@ mod tests {
             authentication_success(7),
             vec![
                 Duration::ZERO,
-                Duration::from_millis(100),
-                Duration::from_millis(100),
-                Duration::from_millis(100),
+                Duration::from_millis(500),
+                Duration::from_millis(500),
+                Duration::from_millis(500),
             ],
         )
         .await;
@@ -746,7 +746,7 @@ mod tests {
     async fn mutation_is_not_retried_after_retryable_failure() {
         let server = MockOdooServer::start_with_delays(
             authentication_success(7),
-            vec![Duration::ZERO, Duration::from_millis(100), Duration::ZERO],
+            vec![Duration::ZERO, Duration::from_millis(500), Duration::ZERO],
         )
         .await;
         let observer = Arc::new(RecordingRetryObserver::default());
