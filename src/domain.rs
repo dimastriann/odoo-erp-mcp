@@ -65,6 +65,35 @@ impl Domain {
         }
         Ok(())
     }
+
+    fn validate_logical_arity(&self) -> Result<(), String> {
+        let mut operands = 0_usize;
+        for term in self.terms.iter().rev() {
+            match term {
+                DomainTerm::Clause(_) => operands += 1,
+                DomainTerm::Logical(LogicalOperator::Not) if operands >= 1 => {}
+                DomainTerm::Logical(LogicalOperator::And | LogicalOperator::Or)
+                    if operands >= 2 =>
+                {
+                    operands -= 1;
+                }
+                DomainTerm::Logical(LogicalOperator::Not) => {
+                    return Err("logical operator \"!\" requires one following operand".to_string());
+                }
+                DomainTerm::Logical(LogicalOperator::And) => {
+                    return Err(
+                        "logical operator \"&\" requires two following operands".to_string()
+                    );
+                }
+                DomainTerm::Logical(LogicalOperator::Or) => {
+                    return Err(
+                        "logical operator \"|\" requires two following operands".to_string()
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl TryFrom<&Value> for Domain {
@@ -128,7 +157,8 @@ impl TryFrom<&Value> for DomainTerm {
 
 pub(crate) fn validate_domain(domain: &Value) -> Result<(), String> {
     let parsed = Domain::try_from(domain)?;
-    parsed.validate_operators()
+    parsed.validate_operators()?;
+    parsed.validate_logical_arity()
 }
 
 pub(crate) fn validate_domain_depth(domain: &Value, maximum: usize) -> Result<(), String> {
@@ -212,6 +242,25 @@ mod tests {
                 ["state", "=", "sale"]
             ]))
             .is_ok()
+        );
+    }
+
+    #[test]
+    fn rejects_logical_operators_without_required_operands() {
+        assert_eq!(
+            validate_domain(&json!(["|", ["name", "=", "Alpha"]])),
+            Err("logical operator \"|\" requires two following operands".to_string())
+        );
+        assert_eq!(
+            validate_domain(&json!(["!"])),
+            Err("logical operator \"!\" requires one following operand".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_infix_logical_operator_placement() {
+        assert!(
+            validate_domain(&json!([["name", "=", "Alpha"], "|", ["name", "=", "Beta"]])).is_err()
         );
     }
 
