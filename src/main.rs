@@ -1,5 +1,4 @@
 mod config;
-mod context;
 mod domain;
 mod error;
 mod mcp;

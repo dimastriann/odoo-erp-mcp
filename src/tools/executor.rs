@@ -1,4 +1,3 @@
-use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
 use crate::odoo::OdooClient;
 use crate::tools::arguments::{
@@ -27,7 +26,6 @@ fn validate_query_domain(domain: &Value, limits: QueryLimits) -> Result<(), Stri
 pub(crate) async fn execute_tool(
     name: ToolName,
     arguments: Value,
-    _context: &RequestContext,
     odoo: &OdooClient,
     limits: QueryLimits,
 ) -> ToolExecutionResult {
@@ -254,7 +252,6 @@ mod tests {
         let result = execute_tool(
             ToolName::Search,
             json!({"model": "res.partner", "limit": 2}),
-            &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
         )
@@ -296,7 +293,6 @@ mod tests {
                 "domain": domain,
                 "include_total": true
             }),
-            &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
         )
@@ -343,14 +339,7 @@ mod tests {
         ];
 
         for (tool, arguments) in calls {
-            let result = execute_tool(
-                tool,
-                arguments,
-                &RequestContext::new(),
-                &client,
-                TEST_QUERY_LIMITS,
-            )
-            .await;
+            let result = execute_tool(tool, arguments, &client, TEST_QUERY_LIMITS).await;
             let ToolExecutionResult::Failure(AppError::InputValidation { .. }) = result else {
                 panic!("malformed domain must be rejected as invalid input");
             };

@@ -1,5 +1,4 @@
 use crate::config::Config;
-use crate::context::RequestContext;
 use crate::error::AppError;
 use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
@@ -184,16 +183,9 @@ async fn handle_request(
                 }
             };
 
-            let request_context = RequestContext::new();
-            let result = execute_tool(
-                tool_name,
-                arguments,
-                &request_context,
-                &odoo_client,
-                query_limits,
-            )
-            .await
-            .into_mcp_result();
+            let result = execute_tool(tool_name, arguments, &odoo_client, query_limits)
+                .await
+                .into_mcp_result();
 
             Some(json!({"jsonrpc": "2.0", "id": id, "result": result}))
         }
