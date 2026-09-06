@@ -1,5 +1,7 @@
 use crate::config::Config;
-use crate::context::RequestContext;
+use crate::context::{
+    ActorIdentity, AgentIdentity, ClientIdentity, IdentitySource, RequestContext,
+};
 use crate::error::AppError;
 use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
@@ -19,10 +21,49 @@ fn tool_call_response(id: Value, result: ToolExecutionResult) -> Value {
     })
 }
 
+fn request_context(client: &ClientIdentity, params: &Value, instance: String) -> RequestContext {
+    let metadata = params.get("_meta");
+    let agent = metadata
+        .and_then(|meta| meta.get("agent"))
+        .map(|identity| {
+            AgentIdentity::claimed(
+                identity
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                identity
+                    .get("version")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                IdentitySource::RequestMetadata,
+            )
+        })
+        .unwrap_or_default();
+    let actor = metadata
+        .and_then(|meta| meta.get("actor"))
+        .map(|identity| {
+            ActorIdentity::claimed(
+                identity
+                    .get("subject")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                identity
+                    .get("displayName")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+                IdentitySource::RequestMetadata,
+            )
+        })
+        .unwrap_or_default();
+
+    RequestContext::identified(client.clone(), agent, actor, instance)
+}
+
 pub async fn run_server(config: Arc<RwLock<Config>>, client_manager: ClientManager) {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut reader = BufReader::new(stdin).lines();
+    let mut client_identity = ClientIdentity::default();
 
     while let Some(line) = reader.next_line().await.unwrap_or(None) {
         if line.trim().is_empty() {
@@ -30,7 +71,13 @@ pub async fn run_server(config: Arc<RwLock<Config>>, client_manager: ClientManag
         }
 
         if let Ok(request) = serde_json::from_str::<Value>(&line) {
-            let response = handle_request(request, &config, &client_manager).await;
+            let response = handle_request_with_identity(
+                request,
+                &config,
+                &client_manager,
+                &mut client_identity,
+            )
+            .await;
             if let Some(resp) = response {
                 let resp_str = serde_json::to_string(&resp).unwrap();
                 let _ = stdout.write_all(format!("{}\n", resp_str).as_bytes()).await;
@@ -50,16 +97,32 @@ pub async fn run_server(config: Arc<RwLock<Config>>, client_manager: ClientManag
     }
 }
 
-async fn handle_request(
+async fn handle_request_with_identity(
     req: Value,
     config: &Arc<RwLock<Config>>,
     client_manager: &ClientManager,
+    client_identity: &mut ClientIdentity,
 ) -> Option<Value> {
     let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let id = req.get("id").cloned().unwrap_or(Value::Null);
 
     match method {
-        "initialize" => Some(json!({
+        "initialize" => {
+            let client_info = req
+                .get("params")
+                .and_then(|params| params.get("clientInfo"));
+            *client_identity = client_info
+                .map(|info| {
+                    ClientIdentity::claimed(
+                        info.get("name").and_then(Value::as_str).map(str::to_owned),
+                        info.get("version")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned),
+                        IdentitySource::McpInitialize,
+                    )
+                })
+                .unwrap_or_default();
+            Some(json!({
             "jsonrpc": "2.0",
             "id": id,
             "result": {
@@ -72,7 +135,8 @@ async fn handle_request(
                     "tools": {}
                 }
             }
-        })),
+            }))
+        }
         "notifications/initialized" => None,
         "tools/list" => Some(json!({
             "jsonrpc": "2.0",
@@ -184,7 +248,8 @@ async fn handle_request(
                 }
             };
 
-            let request_context = RequestContext::new();
+            let request_context =
+                request_context(client_identity, &params, instance_obj.name.clone());
             let result = execute_tool(
                 tool_name,
                 arguments,
@@ -203,6 +268,15 @@ async fn handle_request(
             "error": { "code": -32601, "message": "Method not found" }
         })),
     }
+}
+
+#[cfg(test)]
+async fn handle_request(
+    req: Value,
+    config: &Arc<RwLock<Config>>,
+    client_manager: &ClientManager,
+) -> Option<Value> {
+    handle_request_with_identity(req, config, client_manager, &mut ClientIdentity::default()).await
 }
 
 #[cfg(test)]

@@ -46,6 +46,20 @@ pub(crate) struct ClientIdentity {
     pub(crate) source: IdentitySource,
 }
 
+impl ClientIdentity {
+    pub(crate) fn claimed(
+        name: Option<String>,
+        version: Option<String>,
+        source: IdentitySource,
+    ) -> Self {
+        Self {
+            name,
+            version,
+            source,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct AgentIdentity {
     pub(crate) name: Option<String>,
@@ -53,11 +67,39 @@ pub(crate) struct AgentIdentity {
     pub(crate) source: IdentitySource,
 }
 
+impl AgentIdentity {
+    pub(crate) fn claimed(
+        name: Option<String>,
+        version: Option<String>,
+        source: IdentitySource,
+    ) -> Self {
+        Self {
+            name,
+            version,
+            source,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(crate) struct ActorIdentity {
     pub(crate) subject: Option<String>,
     pub(crate) display_name: Option<String>,
     pub(crate) source: IdentitySource,
+}
+
+impl ActorIdentity {
+    pub(crate) fn claimed(
+        subject: Option<String>,
+        display_name: Option<String>,
+        source: IdentitySource,
+    ) -> Self {
+        Self {
+            subject,
+            display_name,
+            source,
+        }
+    }
 }
 
 /// Identity and tracing metadata associated with one MCP tool request.
@@ -69,15 +111,33 @@ pub(crate) struct RequestContext {
     pub(crate) client: ClientIdentity,
     pub(crate) agent: AgentIdentity,
     pub(crate) actor: ActorIdentity,
+    pub(crate) instance: String,
 }
 
 impl RequestContext {
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
         Self {
             request_id: RequestId::new(),
             client: ClientIdentity::default(),
             agent: AgentIdentity::default(),
             actor: ActorIdentity::default(),
+            instance: String::new(),
+        }
+    }
+
+    pub(crate) fn identified(
+        client: ClientIdentity,
+        agent: AgentIdentity,
+        actor: ActorIdentity,
+        instance: String,
+    ) -> Self {
+        Self {
+            request_id: RequestId::new(),
+            client,
+            agent,
+            actor,
+            instance,
         }
     }
 }
