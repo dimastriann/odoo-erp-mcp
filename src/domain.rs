@@ -25,6 +25,13 @@ pub(crate) struct DomainClause {
     pub(crate) value: Value,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DomainLimits {
+    pub(crate) max_depth: usize,
+    pub(crate) max_terms: usize,
+    pub(crate) max_in_values: usize,
+}
+
 const ALLOWED_DOMAIN_OPERATORS: &[&str] = &[
     "=",
     "!=",
@@ -209,6 +216,13 @@ pub(crate) fn validate_domain_in_values(domain: &Value, maximum: usize) -> Resul
     Ok(())
 }
 
+pub(crate) fn validate_domain_security(domain: &Value, limits: DomainLimits) -> Result<(), String> {
+    validate_domain(domain)?;
+    validate_domain_depth(domain, limits.max_depth)?;
+    validate_domain_term_count(domain, limits.max_terms)?;
+    validate_domain_in_values(domain, limits.max_in_values)
+}
+
 fn value_depth(value: &Value) -> usize {
     match value {
         Value::Array(values) => 1 + values.iter().map(value_depth).max().unwrap_or(0),
@@ -324,5 +338,32 @@ mod tests {
         assert!(validate_domain_in_values(&json!([["id", "in", [1, 2]]]), 2).is_ok());
         assert!(validate_domain_in_values(&json!([["id", "not in", [1, 2, 3]]]), 2).is_err());
         assert!(validate_domain_in_values(&json!([["id", "in", 1]]), 2).is_err());
+    }
+
+    #[test]
+    fn domain_security_regression_matrix_rejects_unsafe_inputs() {
+        let limits = DomainLimits {
+            max_depth: 3,
+            max_terms: 3,
+            max_in_values: 2,
+        };
+        let unsafe_domains = [
+            json!({"name": "Alpha"}),
+            json!(["name", "=", "Alpha"]),
+            json!([["name", "="]]),
+            json!([[7, "=", "Alpha"]]),
+            json!([["name", "contains", "Alpha"]]),
+            json!(["|", ["name", "=", "Alpha"]]),
+            json!([["id", "in", [1, 2, 3]]]),
+            json!([["id", "in", [[1, 2]]]]),
+            json!([["a", "=", 1], ["b", "=", 2], ["c", "=", 3], ["d", "=", 4]]),
+        ];
+
+        for domain in unsafe_domains {
+            assert!(
+                validate_domain_security(&domain, limits).is_err(),
+                "unsafe domain was accepted: {domain}"
+            );
+        }
     }
 }

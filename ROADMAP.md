@@ -190,14 +190,14 @@ Goal: Provide a production-appropriate read-only deployment mode.
 - [x] S2-21 — Validate logical operators and arity.
 - [x] S2-22 — Limit values supplied to `in` and `not in`.
 - [x] S2-23 — Reject malformed domains before calling Odoo.
-- [ ] S2-24 — Add domain security-regression tests.
+- [x] S2-24 — Add domain security-regression tests.
 
 ## Stage 2 Definition of Done
 
-- [ ] No search operation is unlimited.
-- [ ] Excessive queries are rejected before reaching Odoo.
-- [ ] Pagination responses are consistent.
-- [ ] Read-only mode has production-safe limits.
+- [x] No search operation is unlimited.
+- [x] Excessive queries are rejected before reaching Odoo.
+- [x] Pagination responses are consistent.
+- [x] Read-only mode has production-safe limits.
 
 ---
 
@@ -692,7 +692,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 |---|---|---:|---|
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
-| Stage 2 — Query Protection and Safe Read-Only Core | In progress | 23/24 | Every domain-based tool rejects malformed input before RPC. |
+| Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Not started | 0/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
