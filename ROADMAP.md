@@ -209,7 +209,7 @@ Goal: Identify every actor and agent, protect credentials, and enforce granular 
 
 - [x] S3-01 — Create a typed `RequestContext`.
 - [x] S3-02 — Add a correlation/request ID.
-- [ ] S3-03 — Add client and agent identity.
+- [x] S3-03 — Add client and agent identity.
 - [ ] S3-04 — Separate actor identity from agent identity.
 - [ ] S3-05 — Define trusted and untrusted identity sources.
 - [ ] S3-06 — Propagate request context through every executor.
@@ -693,7 +693,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
-| Stage 3 — Identity, Secrets, and Authorization | In progress | 2/29 | |
+| Stage 3 — Identity, Secrets, and Authorization | In progress | 3/29 | |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
