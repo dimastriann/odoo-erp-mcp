@@ -304,6 +304,71 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn initialize_captures_untrusted_client_identity_for_the_session() {
+        let config = multi_instance_config();
+        let client_manager = ClientManager::new();
+        let mut client = ClientIdentity::default();
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "clientInfo": {"name": "codex", "version": "1.2.3"}
+            }
+        });
+
+        handle_request_with_identity(req, &config, &client_manager, &mut client).await;
+
+        assert_eq!(client.name.as_deref(), Some("codex"));
+        assert_eq!(client.version.as_deref(), Some("1.2.3"));
+        assert_eq!(client.source, IdentitySource::McpInitialize);
+        assert_eq!(
+            client.source.trust(),
+            crate::context::IdentityTrust::Untrusted
+        );
+    }
+
+    #[test]
+    fn tool_request_context_propagates_all_identity_dimensions() {
+        let client = ClientIdentity::claimed(
+            Some("desktop-host".to_string()),
+            Some("2.0".to_string()),
+            IdentitySource::McpInitialize,
+        );
+        let params = json!({
+            "_meta": {
+                "agent": {"name": "finance-agent", "version": "4.1"},
+                "actor": {"subject": "user-42", "displayName": "Ada"}
+            }
+        });
+
+        let context = request_context(&client, &params, "production".to_string());
+
+        assert_eq!(context.client, client);
+        assert_eq!(context.agent.name.as_deref(), Some("finance-agent"));
+        assert_eq!(context.agent.version.as_deref(), Some("4.1"));
+        assert_eq!(context.agent.source, IdentitySource::RequestMetadata);
+        assert_eq!(context.actor.subject.as_deref(), Some("user-42"));
+        assert_eq!(context.actor.display_name.as_deref(), Some("Ada"));
+        assert_eq!(context.actor.source, IdentitySource::RequestMetadata);
+        assert_eq!(context.instance, "production");
+    }
+
+    #[test]
+    fn absent_request_claims_remain_explicitly_unavailable() {
+        let context = request_context(
+            &ClientIdentity::default(),
+            &json!({}),
+            "sandbox".to_string(),
+        );
+
+        assert_eq!(context.client.source, IdentitySource::Unavailable);
+        assert_eq!(context.agent.source, IdentitySource::Unavailable);
+        assert_eq!(context.actor.source, IdentitySource::Unavailable);
+        assert_eq!(context.instance, "sandbox");
+    }
+
+    #[tokio::test]
     async fn test_initialized_notification() {
         let config = multi_instance_config();
         let client_manager = ClientManager::new();
