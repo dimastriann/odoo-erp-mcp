@@ -4,6 +4,7 @@ mod domain;
 mod error;
 mod mcp;
 mod odoo;
+mod secret;
 #[cfg(test)]
 mod test_support;
 mod tools;
