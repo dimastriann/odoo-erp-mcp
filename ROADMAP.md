@@ -222,7 +222,7 @@ Goal: Identify every actor and agent, protect credentials, and enforce granular 
 - [x] S3-10 — Prevent debug output and serialization from disclosing secrets.
 - [x] S3-11 — Add an environment-backed secret provider.
 - [x] S3-12 — Retain legacy inline secrets with a migration warning.
-- [ ] S3-13 — Add a local configuration file-permission warning.
+- [x] S3-13 — Add a local configuration file-permission warning.
 - [ ] S3-14 — Document secret configuration and migration.
 - [ ] S3-15 — Add secret-redaction regression tests.
 
@@ -693,7 +693,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
-| Stage 3 — Identity, Secrets, and Authorization | In progress | 12/29 | Legacy inline credentials retained with migration warnings. |
+| Stage 3 — Identity, Secrets, and Authorization | In progress | 13/29 | Local configuration permission warnings added. |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |

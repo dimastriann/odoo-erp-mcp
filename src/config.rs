@@ -264,7 +264,11 @@ impl Config {
             return Ok(default_config);
         }
 
-        let content = fs::read_to_string(config_path)?;
+        if let Some(warning) = config_file_permission_warning(&config_path) {
+            eprintln!("Warning: {warning}");
+        }
+
+        let content = fs::read_to_string(&config_path)?;
         let mut config: Config = serde_json::from_str(&content)?;
         for warning in config.resolve_secrets(&EnvironmentSecretProvider::new())? {
             eprintln!("Warning: {warning}");
@@ -355,6 +359,35 @@ impl Config {
     }
 }
 
+#[cfg(unix)]
+fn config_file_permission_warning(path: &std::path::Path) -> Option<String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mode = fs::metadata(path).ok()?.permissions().mode();
+    (mode & 0o077 != 0).then(|| {
+        format!(
+            "configuration file {:?} is accessible by group or other users; use permissions 0600",
+            path
+        )
+    })
+}
+
+#[cfg(windows)]
+fn config_file_permission_warning(path: &std::path::Path) -> Option<String> {
+    Some(format!(
+        "verify that the Windows ACL for configuration file {:?} grants access only to the service account and administrators",
+        path
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn config_file_permission_warning(path: &std::path::Path) -> Option<String> {
+    Some(format!(
+        "verify that configuration file {:?} is accessible only to the service account",
+        path
+    ))
+}
+
 pub fn generate_id() -> String {
     Uuid::new_v4().to_string()
 }
@@ -411,6 +444,15 @@ mod tests {
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("Legacy"));
         assert!(!warnings[0].contains("inline-password"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reminds_windows_operators_to_restrict_config_acl() {
+        let warning = config_file_permission_warning(std::path::Path::new("config.json")).unwrap();
+
+        assert!(warning.contains("Windows ACL"));
+        assert!(warning.contains("config.json"));
     }
 
     #[test]
