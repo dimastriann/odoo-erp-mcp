@@ -270,9 +270,24 @@ impl Config {
     pub fn save(&self) -> Result<()> {
         self.validate().map_err(anyhow::Error::msg)?;
         let config_path = Self::get_path();
-        let content = serde_json::to_string_pretty(self)?;
+        let content = serde_json::to_string_pretty(&self.storage_value()?)?;
         fs::write(config_path, content)?;
         Ok(())
+    }
+
+    fn storage_value(&self) -> Result<serde_json::Value> {
+        let mut value = serde_json::to_value(self)?;
+        let serialized_instances = value
+            .get_mut("instances")
+            .and_then(serde_json::Value::as_array_mut)
+            .ok_or_else(|| anyhow::anyhow!("serialized configuration is missing instances"))?;
+
+        for (serialized, instance) in serialized_instances.iter_mut().zip(&self.instances) {
+            serialized["password"] =
+                serde_json::Value::String(instance.password.expose_secret().to_string());
+        }
+
+        Ok(value)
     }
 
     // pub fn get_active_instances(&self) -> Vec<&OdooInstance> {
