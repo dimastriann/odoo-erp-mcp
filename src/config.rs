@@ -4,6 +4,8 @@ use std::fs;
 use anyhow::Result;
 use uuid::Uuid;
 
+use crate::secret::SecretString;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OdooInstance {
     pub id: String,
@@ -11,7 +13,7 @@ pub struct OdooInstance {
     pub url: String,
     pub db: String,
     pub username: String,
-    pub password: String,
+    pub password: SecretString,
     pub active: bool,
     #[serde(default)]
     pub mode: Option<String>,

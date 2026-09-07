@@ -2,6 +2,42 @@
 
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
+const REDACTED_SECRET: &str = "[REDACTED]";
+
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub(crate) struct SecretString(String);
+
+impl SecretString {
+    pub(crate) fn expose_secret(&self) -> &str {
+        &self.0
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl fmt::Debug for SecretString {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(REDACTED_SECRET)
+    }
+}
+
+impl From<String> for SecretString {
+    fn from(secret: String) -> Self {
+        Self(secret)
+    }
+}
+
+impl From<&str> for SecretString {
+    fn from(secret: &str) -> Self {
+        Self(secret.to_string())
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct SecretReference(String);
 
@@ -41,6 +77,14 @@ mod tests {
     use super::*;
 
     struct FixedSecretProvider;
+
+    #[test]
+    fn secret_strings_have_redacted_debug_output() {
+        let secret = SecretString::from("do-not-print-me");
+
+        assert_eq!(format!("{secret:?}"), REDACTED_SECRET);
+        assert_eq!(secret.expose_secret(), "do-not-print-me");
+    }
 
     impl SecretProvider for FixedSecretProvider {
         fn resolve(
