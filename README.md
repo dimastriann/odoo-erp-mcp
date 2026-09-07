@@ -66,6 +66,7 @@ src/
 ├── config.rs  # Persistent server and instance configuration
 ├── domain.rs  # Shared domain validation
 ├── error.rs   # Typed application errors and wire error codes
+├── secret.rs  # Redacted secrets and credential providers
 └── main.rs    # Process bootstrap and module composition
 ```
 
@@ -135,7 +136,7 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
       "url": "https://your-odoo-instance.example.com",
       "db": "your_database",
       "username": "admin",
-      "password": "your_password_or_api_key",
+      "password_env": "ODOO_PASSWORD",
       "active": true,
       "mode": "crud",
       "allowed_tools": null,
@@ -150,7 +151,7 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
       "url": "https://staging.example.com",
       "db": "staging_db",
       "username": "admin",
-      "password": "your_password_or_api_key",
+      "password_env": "ODOO_STAGING_PASSWORD",
       "active": true,
       "mode": "read_only",
       "allowed_tools": null
@@ -159,6 +160,34 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
   "prompts": []
 }
 ```
+
+Set each referenced variable in the process environment or in the `.env` file
+next to `config.json`:
+
+```dotenv
+ODOO_PASSWORD=your_production_password_or_api_key
+ODOO_STAGING_PASSWORD=your_staging_password_or_api_key
+```
+
+`password_env` names an environment variable; it never contains the credential
+itself. Startup fails if a referenced variable is missing. Resolved secrets are
+redacted from debug and normal serialized output and are not written back into
+`config.json`. Restrict `.env` and `config.json` to the account running the MCP
+server. On Unix, use mode `0600`; on Windows, restrict their ACLs to the service
+account and administrators.
+
+#### Migrating inline credentials
+
+The legacy `"password": "..."` field remains supported temporarily and emits a
+migration warning at startup. Migrate one instance at a time:
+
+1. Move the current password or API key into an environment variable or `.env`.
+2. Replace `password` in that instance with `"password_env": "VARIABLE_NAME"`.
+3. Restart the server and verify that the instance connects.
+4. Remove the plaintext value from configuration backups and deployment logs.
+
+When both fields are present, `password_env` takes precedence. Never commit
+`.env` or a populated `config.json` to version control.
 
 **`mode` options per instance:**
 

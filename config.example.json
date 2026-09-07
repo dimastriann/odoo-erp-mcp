@@ -19,7 +19,7 @@
       "url": "https://your-odoo-instance.example.com",
       "db": "your_database",
       "username": "admin",
-      "password": "your_password_or_api_key",
+      "password_env": "ODOO_PASSWORD",
       "active": true,
       "mode": "crud",
       "allowed_tools": null,
