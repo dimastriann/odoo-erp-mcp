@@ -139,6 +139,15 @@ mod tests {
         assert_eq!(secret.expose_secret(), "do-not-print-me");
     }
 
+    #[test]
+    fn secret_strings_have_redacted_serialized_output() {
+        let serialized = serde_json::to_string(&SecretString::from("serialization-canary"))
+            .expect("secret should serialize safely");
+
+        assert_eq!(serialized, format!("\"{REDACTED_SECRET}\""));
+        assert!(!serialized.contains("serialization-canary"));
+    }
+
     impl SecretProvider for FixedSecretProvider {
         fn resolve(
             &self,

@@ -175,7 +175,11 @@ async fn version() -> Json<Value> {
 
 async fn get_config(State(state): State<AppState>) -> Json<Value> {
     let config = state.config.read().unwrap();
-    let mut value = serde_json::to_value(&*config).unwrap();
+    Json(redacted_config_value(&config))
+}
+
+fn redacted_config_value(config: &Config) -> Value {
+    let mut value = serde_json::to_value(config).unwrap();
     if let Some(instances) = value["instances"].as_array_mut() {
         for instance in instances {
             let has_password = instance["password"]
@@ -185,7 +189,7 @@ async fn get_config(State(state): State<AppState>) -> Json<Value> {
             instance["has_password"] = Value::Bool(has_password);
         }
     }
-    Json(value)
+    value
 }
 
 async fn add_instance(
@@ -250,4 +254,33 @@ async fn delete_prompt(State(state): State<AppState>, Path(id): Path<String>) ->
     config.prompts.retain(|p| p.id != id);
     config.save().unwrap();
     StatusCode::OK
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn configuration_responses_never_expose_odoo_credentials() {
+        let config: Config = serde_json::from_value(json!({
+            "instances": [{
+                "id": "prod",
+                "name": "Production",
+                "url": "https://odoo.test",
+                "db": "prod",
+                "username": "admin",
+                "password": "response-canary",
+                "active": true
+            }],
+            "prompts": []
+        }))
+        .unwrap();
+
+        let response = redacted_config_value(&config);
+        let serialized = serde_json::to_string(&response).unwrap();
+
+        assert!(!serialized.contains("response-canary"));
+        assert_eq!(response["instances"][0]["password"], "");
+        assert_eq!(response["instances"][0]["has_password"], true);
+    }
 }

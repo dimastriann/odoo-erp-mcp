@@ -293,14 +293,11 @@ impl Config {
             .ok_or_else(|| anyhow::anyhow!("serialized configuration is missing instances"))?;
 
         for (serialized, instance) in serialized_instances.iter_mut().zip(&self.instances) {
-            serialized["password"] = serde_json::Value::String(
-                instance
-                    .password_env
-                    .as_ref()
-                    .map_or_else(String::new, |_| {
-                        instance.password.expose_secret().to_string()
-                    }),
-            );
+            serialized["password"] =
+                serde_json::Value::String(instance.password_env.as_ref().map_or_else(
+                    || instance.password.expose_secret().to_string(),
+                    |_| String::new(),
+                ));
         }
 
         Ok(value)
@@ -444,6 +441,31 @@ mod tests {
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("Legacy"));
         assert!(!warnings[0].contains("inline-password"));
+    }
+
+    #[test]
+    fn environment_credentials_are_not_persisted_or_generically_serialized() {
+        let mut config: Config = serde_json::from_value(serde_json::json!({
+            "instances": [{
+                "id": "environment",
+                "name": "Environment",
+                "url": "https://odoo.test",
+                "db": "db",
+                "username": "admin",
+                "password_env": "ODOO_TEST_PASSWORD",
+                "active": true
+            }],
+            "prompts": []
+        }))
+        .unwrap();
+        config.resolve_secrets(&TestSecretProvider).unwrap();
+
+        let generic = serde_json::to_string(&config).unwrap();
+        let persisted = serde_json::to_string(&config.storage_value().unwrap()).unwrap();
+
+        assert!(!generic.contains("resolved-password"));
+        assert!(!persisted.contains("resolved-password"));
+        assert!(persisted.contains("ODOO_TEST_PASSWORD"));
     }
 
     #[cfg(windows)]
