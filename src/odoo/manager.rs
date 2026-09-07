@@ -71,6 +71,7 @@ mod tests {
             db: "test-db".to_string(),
             username: "admin".to_string(),
             password: "secret".into(),
+            password_env: None,
             active: true,
             mode: None,
             allowed_tools: None,

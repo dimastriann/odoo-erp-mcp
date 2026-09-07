@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 const REDACTED_SECRET: &str = "[REDACTED]";
 
-#[derive(Clone, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Default, Deserialize, Eq, PartialEq)]
 #[serde(transparent)]
 pub(crate) struct SecretString(String);
 

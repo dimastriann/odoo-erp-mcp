@@ -4,7 +4,7 @@ use std::fs;
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::secret::SecretString;
+use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference, SecretString};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OdooInstance {
@@ -13,7 +13,10 @@ pub struct OdooInstance {
     pub url: String,
     pub db: String,
     pub username: String,
+    #[serde(default)]
     pub password: SecretString,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password_env: Option<String>,
     pub active: bool,
     #[serde(default)]
     pub mode: Option<String>,
@@ -262,7 +265,10 @@ impl Config {
         }
 
         let content = fs::read_to_string(config_path)?;
-        let config: Config = serde_json::from_str(&content)?;
+        let mut config: Config = serde_json::from_str(&content)?;
+        for warning in config.resolve_secrets(&EnvironmentSecretProvider::new())? {
+            eprintln!("Warning: {warning}");
+        }
         config.validate().map_err(anyhow::Error::msg)?;
         Ok(config)
     }
@@ -283,11 +289,39 @@ impl Config {
             .ok_or_else(|| anyhow::anyhow!("serialized configuration is missing instances"))?;
 
         for (serialized, instance) in serialized_instances.iter_mut().zip(&self.instances) {
-            serialized["password"] =
-                serde_json::Value::String(instance.password.expose_secret().to_string());
+            serialized["password"] = serde_json::Value::String(
+                instance
+                    .password_env
+                    .as_ref()
+                    .map_or_else(String::new, |_| {
+                        instance.password.expose_secret().to_string()
+                    }),
+            );
         }
 
         Ok(value)
+    }
+
+    fn resolve_secrets(&mut self, provider: &dyn SecretProvider) -> Result<Vec<String>> {
+        let mut warnings = Vec::new();
+        for instance in &mut self.instances {
+            if let Some(variable) = instance.password_env.as_deref() {
+                instance.password = provider
+                    .resolve(&SecretReference::new(variable))?
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "environment variable {variable:?} for Odoo instance {:?} is not set",
+                            instance.name
+                        )
+                    })?;
+            } else if !instance.password.is_empty() {
+                warnings.push(format!(
+                    "Odoo instance {:?} uses legacy inline credentials; migrate to password_env",
+                    instance.name
+                ));
+            }
+        }
+        Ok(warnings)
     }
 
     // pub fn get_active_instances(&self) -> Vec<&OdooInstance> {
@@ -329,6 +363,56 @@ pub fn generate_id() -> String {
 mod tests {
     use super::*;
 
+    struct TestSecretProvider;
+
+    impl SecretProvider for TestSecretProvider {
+        fn resolve(
+            &self,
+            reference: &SecretReference,
+        ) -> Result<Option<SecretString>, crate::secret::SecretProviderError> {
+            Ok((reference.as_str() == "ODOO_TEST_PASSWORD")
+                .then(|| SecretString::from("resolved-password")))
+        }
+    }
+
+    #[test]
+    fn resolves_environment_credentials_and_warns_about_inline_credentials() {
+        let mut config: Config = serde_json::from_value(serde_json::json!({
+            "instances": [
+                {
+                    "id": "environment",
+                    "name": "Environment",
+                    "url": "https://odoo.test",
+                    "db": "db",
+                    "username": "admin",
+                    "password_env": "ODOO_TEST_PASSWORD",
+                    "active": true
+                },
+                {
+                    "id": "legacy",
+                    "name": "Legacy",
+                    "url": "https://odoo.test",
+                    "db": "db",
+                    "username": "admin",
+                    "password": "inline-password",
+                    "active": false
+                }
+            ],
+            "prompts": []
+        }))
+        .unwrap();
+
+        let warnings = config.resolve_secrets(&TestSecretProvider).unwrap();
+
+        assert_eq!(
+            config.instances[0].password.expose_secret(),
+            "resolved-password"
+        );
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("Legacy"));
+        assert!(!warnings[0].contains("inline-password"));
+    }
+
     #[test]
     fn query_protection_settings_must_be_positive_and_consistent() {
         let mut settings = GlobalSettings::default();
@@ -359,6 +443,7 @@ mod tests {
             db: "db".into(),
             username: "admin".into(),
             password: "secret".into(),
+            password_env: None,
             active: true,
             mode: None,
             allowed_tools: None,
@@ -384,6 +469,7 @@ mod tests {
             db: "db".into(),
             username: "admin".into(),
             password: "pass".into(),
+            password_env: None,
             active: true,
             mode: Some("crud".into()),
             allowed_tools: None,
@@ -405,6 +491,7 @@ mod tests {
             db: "db".into(),
             username: "admin".into(),
             password: "pass".into(),
+            password_env: None,
             active: false,
             mode: Some("read_only".into()),
             allowed_tools: None,
@@ -428,6 +515,7 @@ mod tests {
             db: "db".into(),
             username: "admin".into(),
             password: "pass".into(),
+            password_env: None,
             active: false,
             mode: Some("inherit".into()),
             allowed_tools: None,
