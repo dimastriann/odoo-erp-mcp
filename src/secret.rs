@@ -1,6 +1,8 @@
 #![allow(dead_code)] // The provider boundary is integrated by the following secret-handling items.
 
+use std::env::VarError;
 use std::fmt;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize, Serializer};
 
@@ -78,7 +80,49 @@ impl fmt::Display for SecretProviderError {
 impl std::error::Error for SecretProviderError {}
 
 pub(crate) trait SecretProvider: Send + Sync {
-    fn resolve(&self, reference: &SecretReference) -> Result<Option<String>, SecretProviderError>;
+    fn resolve(
+        &self,
+        reference: &SecretReference,
+    ) -> Result<Option<SecretString>, SecretProviderError>;
+}
+
+type EnvironmentLookup = dyn Fn(&str) -> Result<String, VarError> + Send + Sync;
+
+pub(crate) struct EnvironmentSecretProvider {
+    lookup: Arc<EnvironmentLookup>,
+}
+
+impl EnvironmentSecretProvider {
+    pub(crate) fn new() -> Self {
+        Self {
+            lookup: Arc::new(|name| std::env::var(name)),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_lookup(
+        lookup: impl Fn(&str) -> Result<String, VarError> + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            lookup: Arc::new(lookup),
+        }
+    }
+}
+
+impl SecretProvider for EnvironmentSecretProvider {
+    fn resolve(
+        &self,
+        reference: &SecretReference,
+    ) -> Result<Option<SecretString>, SecretProviderError> {
+        match (self.lookup)(reference.as_str()) {
+            Ok(secret) => Ok(Some(secret.into())),
+            Err(VarError::NotPresent) => Ok(None),
+            Err(VarError::NotUnicode(_)) => Err(SecretProviderError::Unavailable(format!(
+                "environment variable {:?} is not valid Unicode",
+                reference.as_str()
+            ))),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -99,8 +143,8 @@ mod tests {
         fn resolve(
             &self,
             reference: &SecretReference,
-        ) -> Result<Option<String>, SecretProviderError> {
-            Ok((reference.as_str() == "odoo/prod").then(|| "resolved-value".to_string()))
+        ) -> Result<Option<SecretString>, SecretProviderError> {
+            Ok((reference.as_str() == "odoo/prod").then(|| SecretString::from("resolved-value")))
         }
     }
 
@@ -112,11 +156,31 @@ mod tests {
             provider
                 .resolve(&SecretReference::new("odoo/prod"))
                 .unwrap(),
-            Some("resolved-value".to_string())
+            Some(SecretString::from("resolved-value"))
         );
         assert_eq!(
             provider
                 .resolve(&SecretReference::new("odoo/missing"))
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn environment_provider_resolves_variable_names() {
+        let provider = EnvironmentSecretProvider::with_lookup(|name| match name {
+            "ODOO_PROD_PASSWORD" => Ok("environment-secret".to_string()),
+            _ => Err(VarError::NotPresent),
+        });
+
+        let resolved = provider
+            .resolve(&SecretReference::new("ODOO_PROD_PASSWORD"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(resolved.expose_secret(), "environment-secret");
+        assert_eq!(
+            provider
+                .resolve(&SecretReference::new("MISSING_PASSWORD"))
                 .unwrap(),
             None
         );
