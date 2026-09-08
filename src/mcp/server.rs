@@ -224,8 +224,9 @@ async fn handle_request_with_identity(
             if !instance_obj.is_tool_allowed(tool_name.as_str(), &global_mode) {
                 let mode_str = instance_obj.get_mode(&global_mode);
                 let error = AppError::authorization(format!(
-                    "Error: Tool '{}' is restricted for Odoo instance '{}' (Mode: '{}'). Permission denied.",
+                    "Error: Tool '{}' requires '{}' capability, which is restricted for Odoo instance '{}' (Mode: '{}'). Permission denied.",
                     tool_name.as_str(),
+                    tool_name.capability(),
                     instance_obj.name,
                     mode_str
                 ));

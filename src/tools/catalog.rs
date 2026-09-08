@@ -1,5 +1,7 @@
 use serde_json::{Value, json};
 
+use crate::policy::Capability;
+
 fn domain_schema() -> Value {
     json!({
         "type": "array",
@@ -69,6 +71,20 @@ impl ToolName {
             Self::GetMetadata => "odoo-get-metadata",
             Self::Search => "odoo-search",
             Self::Read => "odoo-read",
+        }
+    }
+
+    pub(crate) const fn capability(self) -> Capability {
+        match self {
+            Self::Create | Self::Copy => Capability::Create,
+            Self::Update => Capability::Update,
+            Self::Delete => Capability::Delete,
+            Self::SearchRead
+            | Self::SearchCount
+            | Self::ReadGroup
+            | Self::GetMetadata
+            | Self::Search
+            | Self::Read => Capability::Read,
         }
     }
 }
@@ -260,6 +276,15 @@ mod tests {
                 1
             );
         }
+    }
+
+    #[test]
+    fn tools_map_to_typed_core_capabilities() {
+        assert_eq!(ToolName::SearchRead.capability(), Capability::Read);
+        assert_eq!(ToolName::Create.capability(), Capability::Create);
+        assert_eq!(ToolName::Copy.capability(), Capability::Create);
+        assert_eq!(ToolName::Update.capability(), Capability::Update);
+        assert_eq!(ToolName::Delete.capability(), Capability::Delete);
     }
 
     #[test]
