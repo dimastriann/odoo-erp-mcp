@@ -26,6 +26,8 @@ pub(crate) struct CapabilityPermissions {
     pub(crate) deny: Vec<Capability>,
     #[serde(default)]
     pub(crate) models: BTreeMap<String, CapabilityRule>,
+    #[serde(default)]
+    pub(crate) operations: BTreeMap<String, PolicyDecision>,
 }
 
 impl CapabilityPermissions {
@@ -48,6 +50,18 @@ impl CapabilityPermissions {
             .get(model)
             .and_then(|rule| rule.decision_for(capability))
             .or_else(|| self.decision_for(capability))
+    }
+
+    pub(crate) fn decision_for_operation(
+        &self,
+        operation: &str,
+        model: &str,
+        capability: Capability,
+    ) -> Option<PolicyDecision> {
+        self.operations
+            .get(operation)
+            .copied()
+            .or_else(|| self.decision_for_model(model, capability))
     }
 }
 
@@ -91,7 +105,8 @@ impl fmt::Display for Capability {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum PolicyDecision {
     Allow,
     Deny,
@@ -148,6 +163,7 @@ mod tests {
             allow: vec![Capability::Read],
             deny: vec![Capability::Delete],
             models: BTreeMap::new(),
+            operations: BTreeMap::new(),
         };
 
         assert_eq!(
@@ -177,6 +193,30 @@ mod tests {
         );
         assert_eq!(
             permissions.decision_for_model("res.partner", Capability::Read),
+            Some(PolicyDecision::Allow)
+        );
+    }
+
+    #[test]
+    fn operation_permissions_override_broader_rules() {
+        let permissions: CapabilityPermissions = serde_json::from_value(serde_json::json!({
+            "allow": ["read"],
+            "operations": {
+                "odoo-search-read": "deny"
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            permissions.decision_for_operation("odoo-search-read", "res.partner", Capability::Read),
+            Some(PolicyDecision::Deny)
+        );
+        assert_eq!(
+            permissions.decision_for_operation(
+                "odoo-search-count",
+                "res.partner",
+                Capability::Read
+            ),
             Some(PolicyDecision::Allow)
         );
     }

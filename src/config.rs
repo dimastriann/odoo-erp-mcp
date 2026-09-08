@@ -96,11 +96,9 @@ impl OdooInstance {
         model: &str,
         global_default_mode: &str,
     ) -> PolicyDecision {
-        if let Some(decision) = self
-            .permissions
-            .as_ref()
-            .and_then(|permissions| permissions.decision_for_model(model, tool.capability()))
-        {
+        if let Some(decision) = self.permissions.as_ref().and_then(|permissions| {
+            permissions.decision_for_operation(tool.as_str(), model, tool.capability())
+        }) {
             return decision;
         }
 
