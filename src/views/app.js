@@ -59,8 +59,8 @@ createApp({
             formError.value = '';
             const scopedPolicy = item?.permissions ? { models: item.permissions.models || {}, operations: item.permissions.operations || {} } : { models: {}, operations: {} };
             newInstance.value = item
-                ? { ...item, mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2) }
-                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2) };
+                ? { ...item, mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false }
+                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false };
             showInstanceModal.value = true;
         }
 
@@ -79,6 +79,7 @@ createApp({
             delete payload.capability_allow;
             delete payload.capability_deny;
             delete payload.scoped_policy_json;
+            delete payload.confirm_empty_policy;
             if (newInstance.value.credential_source === 'environment') {
                 if (!String(payload.password_env || '').trim()) return void (formError.value = 'Environment variable name is required.');
                 payload.password = '';
@@ -92,6 +93,13 @@ createApp({
                 try { scopedPolicy = JSON.parse(newInstance.value.scoped_policy_json || '{}'); }
                 catch (_) { return void (formError.value = 'Scoped policy must be valid JSON.'); }
                 if (!scopedPolicy || Array.isArray(scopedPolicy) || typeof scopedPolicy !== 'object') return void (formError.value = 'Scoped policy must be a JSON object.');
+                if (scopedPolicy.models && (Array.isArray(scopedPolicy.models) || typeof scopedPolicy.models !== 'object')) return void (formError.value = 'models must be a JSON object.');
+                if (scopedPolicy.operations && (Array.isArray(scopedPolicy.operations) || typeof scopedPolicy.operations !== 'object')) return void (formError.value = 'operations must be a JSON object.');
+                const conflicts = newInstance.value.capability_allow.filter(capability => newInstance.value.capability_deny.includes(capability));
+                if (conflicts.length) return void (formError.value = `Capabilities cannot be both allowed and denied: ${conflicts.join(', ')}.`);
+                const hasScopedRules = Object.keys(scopedPolicy.models || {}).length || Object.keys(scopedPolicy.operations || {}).length;
+                const hasInstanceRules = newInstance.value.capability_allow.length || newInstance.value.capability_deny.length;
+                if (!hasScopedRules && !hasInstanceRules && !newInstance.value.confirm_empty_policy) return void (formError.value = 'Confirm the empty policy before saving a deny-all configuration.');
                 payload.permissions = { ...scopedPolicy, allow: newInstance.value.capability_allow, deny: newInstance.value.capability_deny };
             } else {
                 payload.permissions = null;
@@ -125,7 +133,13 @@ createApp({
         function toggleCapability(listName, capability) {
             const values = newInstance.value[listName];
             const index = values.indexOf(capability);
-            if (index >= 0) values.splice(index, 1); else values.push(capability);
+            if (index >= 0) values.splice(index, 1);
+            else {
+                values.push(capability);
+                const otherName = listName === 'capability_allow' ? 'capability_deny' : 'capability_allow';
+                const otherIndex = newInstance.value[otherName].indexOf(capability);
+                if (otherIndex >= 0) newInstance.value[otherName].splice(otherIndex, 1);
+            }
         }
         function toggleDarkMode() { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light'); document.documentElement.classList.toggle('light', !isDark.value); }
 
