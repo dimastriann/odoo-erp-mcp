@@ -14,6 +14,7 @@ createApp({
         const showPromptModal = ref(false);
         const newInstance = ref({});
         const newPrompt = ref({});
+        const capabilities = ['read', 'create', 'update', 'delete', 'workflow', 'financial', 'admin'];
 
         const activeCount = computed(() => config.value.instances.filter(item => item.active).length);
         const filteredInstances = computed(() => {
@@ -57,8 +58,8 @@ createApp({
         function openInstanceModal(item = null) {
             formError.value = '';
             newInstance.value = item
-                ? { ...item, mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline' }
-                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, mode: 'inherit', credential_source: 'environment' };
+                ? { ...item, mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])] }
+                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [] };
             showInstanceModal.value = true;
         }
 
@@ -73,6 +74,9 @@ createApp({
             const payload = { ...newInstance.value };
             delete payload.has_password;
             delete payload.credential_source;
+            delete payload.policy_enabled;
+            delete payload.capability_allow;
+            delete payload.capability_deny;
             if (newInstance.value.credential_source === 'environment') {
                 if (!String(payload.password_env || '').trim()) return void (formError.value = 'Environment variable name is required.');
                 payload.password = '';
@@ -80,6 +84,11 @@ createApp({
             } else {
                 payload.password_env = null;
                 if (!payload.password && (!newInstance.value.id || newInstance.value.password_env)) return void (formError.value = 'Enter a password or API key when switching to inline credentials.');
+            }
+            if (newInstance.value.policy_enabled) {
+                payload.permissions = { ...(payload.permissions || {}), allow: newInstance.value.capability_allow, deny: newInstance.value.capability_deny };
+            } else {
+                payload.permissions = null;
             }
             const response = await api('/api/instances', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!response.ok) return void (formError.value = 'Could not save this instance. Check all required fields.');
@@ -107,9 +116,14 @@ createApp({
         async function updateGlobalMode(default_mode) { await api('/api/global-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...config.value.global_settings, default_mode }) }); await fetchConfig(); }
         const getInstanceMode = inst => inst.mode && inst.mode !== 'inherit' ? inst.mode : (config.value.global_settings?.default_mode || 'crud');
         const displayMode = mode => mode === 'read_only' ? 'Read only' : 'Full access';
+        function toggleCapability(listName, capability) {
+            const values = newInstance.value[listName];
+            const index = values.indexOf(capability);
+            if (index >= 0) values.splice(index, 1); else values.push(capability);
+        }
         function toggleDarkMode() { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light'); document.documentElement.classList.toggle('light', !isDark.value); }
 
         onMounted(() => { document.documentElement.classList.toggle('light', !isDark.value); fetchVersion(); fetchConfig(); });
-        return { isDark, authenticated, loginForm, loginError, formError, config, serverVersion, instanceSearch, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleDarkMode };
+        return { isDark, authenticated, loginForm, loginError, formError, config, serverVersion, instanceSearch, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, capabilities, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode };
     }
 }).mount('#app');
