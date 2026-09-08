@@ -75,6 +75,7 @@ mod tests {
             active: true,
             mode: None,
             allowed_tools: None,
+            permissions: None,
             query_limits: None,
         };
 

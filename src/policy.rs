@@ -1,6 +1,9 @@
 use std::fmt;
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum Capability {
     Read,
     Create,
@@ -12,6 +15,26 @@ pub(crate) enum Capability {
     Financial,
     #[allow(dead_code)] // Reserved for administrative operations.
     Admin,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct CapabilityPermissions {
+    #[serde(default)]
+    pub(crate) allow: Vec<Capability>,
+    #[serde(default)]
+    pub(crate) deny: Vec<Capability>,
+}
+
+impl CapabilityPermissions {
+    pub(crate) fn decision_for(&self, capability: Capability) -> Option<PolicyDecision> {
+        if self.deny.contains(&capability) {
+            Some(PolicyDecision::Deny)
+        } else if self.allow.contains(&capability) {
+            Some(PolicyDecision::Allow)
+        } else {
+            None
+        }
+    }
 }
 
 impl Capability {
@@ -83,6 +106,24 @@ mod tests {
         assert_eq!(PolicyDecision::from_allowed(false), PolicyDecision::Deny);
         assert!(!PolicyDecision::Allow.is_denied());
         assert!(PolicyDecision::Deny.is_denied());
+    }
+
+    #[test]
+    fn instance_permissions_return_explicit_matches() {
+        let permissions = CapabilityPermissions {
+            allow: vec![Capability::Read],
+            deny: vec![Capability::Delete],
+        };
+
+        assert_eq!(
+            permissions.decision_for(Capability::Read),
+            Some(PolicyDecision::Allow)
+        );
+        assert_eq!(
+            permissions.decision_for(Capability::Delete),
+            Some(PolicyDecision::Deny)
+        );
+        assert_eq!(permissions.decision_for(Capability::Update), None);
     }
 
     #[test]

@@ -4,9 +4,9 @@ use std::fs;
 use anyhow::Result;
 use uuid::Uuid;
 
+use crate::policy::{CapabilityPermissions, PolicyDecision, evaluate_legacy_mode};
 use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference, SecretString};
 use crate::tools::catalog::ToolName;
-use crate::{policy::PolicyDecision, policy::evaluate_legacy_mode};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OdooInstance {
@@ -24,6 +24,8 @@ pub struct OdooInstance {
     pub mode: Option<String>,
     #[serde(default)]
     pub allowed_tools: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<CapabilityPermissions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_limits: Option<QueryProtectionOverrides>,
 }
@@ -85,6 +87,14 @@ impl OdooInstance {
         tool: ToolName,
         global_default_mode: &str,
     ) -> PolicyDecision {
+        if let Some(decision) = self
+            .permissions
+            .as_ref()
+            .and_then(|permissions| permissions.decision_for(tool.capability()))
+        {
+            return decision;
+        }
+
         if let Some(ref allowed) = self.allowed_tools
             && !allowed.is_empty()
         {
@@ -517,6 +527,7 @@ mod tests {
             active: true,
             mode: None,
             allowed_tools: None,
+            permissions: None,
             query_limits: Some(QueryProtectionOverrides {
                 max_query_limit: Some(25),
                 max_response_records: Some(25),
@@ -543,6 +554,7 @@ mod tests {
             active: true,
             mode: Some("crud".into()),
             allowed_tools: None,
+            permissions: None,
             query_limits: None,
         };
 
@@ -565,6 +577,7 @@ mod tests {
             active: false,
             mode: Some("read_only".into()),
             allowed_tools: None,
+            permissions: None,
             query_limits: None,
         };
 
@@ -589,10 +602,43 @@ mod tests {
             active: false,
             mode: Some("inherit".into()),
             allowed_tools: None,
+            permissions: None,
             query_limits: None,
         };
 
         assert!(!instance.is_tool_allowed("odoo-create", "read_only"));
         assert!(instance.is_tool_allowed("odoo-create", "crud"));
+    }
+
+    #[test]
+    fn instance_capabilities_override_legacy_mode() {
+        let instance: OdooInstance = serde_json::from_value(serde_json::json!({
+            "id": "restricted",
+            "name": "Restricted",
+            "url": "https://odoo.test",
+            "db": "db",
+            "username": "admin",
+            "password": "secret",
+            "active": true,
+            "mode": "read_only",
+            "permissions": {
+                "allow": ["create"],
+                "deny": ["read"]
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            instance.policy_decision(ToolName::Create, "crud"),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            instance.policy_decision(ToolName::SearchRead, "crud"),
+            PolicyDecision::Deny
+        );
+        assert_eq!(
+            instance.policy_decision(ToolName::Update, "crud"),
+            PolicyDecision::Deny
+        );
     }
 }
