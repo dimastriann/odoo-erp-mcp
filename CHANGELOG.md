@@ -5,6 +5,53 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-09-08
+
+### Added
+
+- Added typed request context with correlation IDs and distinct client, agent,
+  actor, trust-source, and selected-instance identities.
+- Added redacted Odoo credential types and an environment-backed secret
+  provider configured through `password_env`.
+- Added typed read, create, update, delete, workflow, financial, and
+  administrative capabilities with explicit allow and deny decisions.
+- Added instance, model, operation, field, and method policy scopes with
+  deterministic precedence and default-deny behavior.
+- Added explanatory authorization denials and compatibility-policy regression
+  coverage.
+- Added Web UI controls for credential sources, instance capabilities, scoped
+  policies, default-deny guidance, and policy validation.
+
+### Changed
+
+- Authorization now evaluates typed capabilities and request targets instead
+  of depending only on MCP tool names.
+- New `permissions` configurations fail closed when no rule matches.
+- Odoo passwords and API keys are redacted from debug output, generic
+  serialization, Web UI responses, and policy errors.
+- Environment-backed credential values are resolved at startup and are never
+  persisted into `config.json`.
+
+### Fixed
+
+- Prevented environment-resolved credentials from being written back as
+  plaintext configuration values.
+- Prevented unsafe credential-source changes from silently persisting a
+  previously resolved environment secret as an inline credential.
+- Added local configuration permission warnings and secret-redaction canary
+  tests across storage and browser response boundaries.
+
+### Compatibility notes
+
+- Existing `0.5.0` configurations using `crud`, `read_only`, `allowed_tools`,
+  or inline `password` values remain supported.
+- Inline credentials now emit a migration warning; `password_env` is the
+  recommended configuration.
+- Legacy access settings continue to apply when `permissions` is absent. Once
+  `permissions` is present, it takes precedence and unmatched requests are
+  denied.
+- No MCP tools were removed or renamed.
+
 ## [0.5.0] — 2026-09-06
 
 ### Added
@@ -124,6 +171,7 @@ changes.
   values must be JSON objects, and domain filters must use nested clauses.
 - No MCP tools were removed or renamed.
 
+[0.6.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.2.0...v0.3.1
