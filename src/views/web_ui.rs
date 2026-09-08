@@ -344,4 +344,52 @@ mod tests {
             Err(StatusCode::BAD_REQUEST)
         ));
     }
+
+    #[test]
+    fn configuration_ui_exposes_secret_and_policy_controls() {
+        let html = include_str!("index.html");
+        let javascript = include_str!("app.js");
+
+        for control in [
+            "Credential source",
+            "Environment variable",
+            "Instance capabilities",
+            "Scoped policy",
+            "Default deny is active",
+        ] {
+            assert!(html.contains(control), "missing UI control: {control}");
+        }
+        for behavior in [
+            "payload.password = ''",
+            "delete payload.has_password",
+            "payload.permissions",
+            "confirm_empty_policy",
+        ] {
+            assert!(
+                javascript.contains(behavior),
+                "missing UI behavior: {behavior}"
+            );
+        }
+    }
+
+    #[test]
+    fn environment_secret_values_remain_absent_from_ui_responses() {
+        let config: Config = serde_json::from_value(json!({
+            "instances": [{
+                "id": "prod", "name": "Production", "url": "https://odoo.test",
+                "db": "prod", "username": "admin", "password": "resolved-canary",
+                "password_env": "ODOO_PASSWORD", "active": true
+            }],
+            "prompts": []
+        }))
+        .unwrap();
+
+        let response = redacted_config_value(&config);
+        let serialized = serde_json::to_string(&response).unwrap();
+
+        assert!(!serialized.contains("resolved-canary"));
+        assert_eq!(response["instances"][0]["password"], "");
+        assert_eq!(response["instances"][0]["password_env"], "ODOO_PASSWORD");
+        assert_eq!(response["instances"][0]["has_password"], true);
+    }
 }

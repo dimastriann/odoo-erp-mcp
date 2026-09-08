@@ -41,7 +41,7 @@ The responsive workspace summarizes total and active instances, shows the server
 
 ### Add or Edit an Odoo Instance
 
-Configure the instance URL, database, Odoo username, password or API key, and tool-access mode. Existing secrets can be retained during editing by leaving the password field blank.
+Configure the instance URL, database, Odoo username, credential source, and authorization policy. Environment-backed credentials are recommended; the UI stores only their variable names. Legacy modes remain available, while capability policy controls cover instance-level allow/deny rules and an advanced scoped editor covers models, operations, fields, and methods. The UI warns about default-deny behavior and validates malformed, conflicting, or accidentally empty policies before saving.
 
 ![Add Odoo instance form with connection credentials and tool-access selection](assets/form-add-edit.png)
 
