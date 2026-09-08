@@ -241,14 +241,14 @@ Goal: Identify every actor and agent, protect credentials, and enforce granular 
 - [x] S3-26 — Apply default-deny behavior to the new policy system.
 - [x] S3-27 — Explain denied policy decisions in responses.
 - [x] S3-28 — Add compatibility and policy-matrix tests.
-- [ ] S3-29 — Document configuration migration.
+- [x] S3-29 — Document configuration migration.
 
 ## Stage 3 Definition of Done
 
 - [x] Every operation carries actor, agent, request, and instance identity.
 - [x] Secrets never appear in responses, logs, or debug output.
-- [ ] Authorization no longer depends only on tool names.
-- [ ] Legacy configuration has a documented migration path.
+- [x] Authorization no longer depends only on tool names.
+- [x] Legacy configuration has a documented migration path.
 
 ---
 
@@ -693,7 +693,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
-| Stage 3 — Identity, Secrets, and Authorization | In progress | 28/29 | Legacy compatibility and policy matrix are regression-tested. |
+| Stage 3 — Identity, Secrets, and Authorization | Complete | 29/29 | Identity, secret handling, and capability policy complete. |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |

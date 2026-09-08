@@ -23,6 +23,20 @@
       "active": true,
       "mode": "crud",
       "allowed_tools": null,
+      "permissions": {
+        "allow": ["read", "create", "update", "delete"],
+        "models": {
+          "account.move": {
+            "deny": ["delete"],
+            "fields": {
+              "deny": ["payment_state"]
+            },
+            "methods": {
+              "action_cancel": "deny"
+            }
+          }
+        }
+      },
       "query_limits": {
         "max_query_limit": 250,
         "max_response_records": 250

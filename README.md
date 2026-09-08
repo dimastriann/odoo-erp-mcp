@@ -66,6 +66,7 @@ src/
 ├── config.rs  # Persistent server and instance configuration
 ├── domain.rs  # Shared domain validation
 ├── error.rs   # Typed application errors and wire error codes
+├── policy.rs  # Capability policy evaluation and precedence
 ├── secret.rs  # Redacted secrets and credential providers
 └── main.rs    # Process bootstrap and module composition
 ```
@@ -140,6 +141,20 @@ The server stores its configuration in `config.json` (excluded from git). Use `c
       "active": true,
       "mode": "crud",
       "allowed_tools": null,
+      "permissions": {
+        "allow": ["read", "create", "update", "delete"],
+        "models": {
+          "account.move": {
+            "deny": ["delete"],
+            "fields": {
+              "deny": ["payment_state"]
+            },
+            "methods": {
+              "action_cancel": "deny"
+            }
+          }
+        }
+      },
       "query_limits": {
         "max_query_limit": 250,
         "max_response_records": 250
@@ -204,6 +219,34 @@ The query-protection defaults are `max_query_limit: 1000`,
 override any subset under `query_limits`; omitted values inherit the global
 setting. Every effective limit must be greater than zero, and
 `max_query_limit` cannot exceed `max_response_records`.
+
+#### Capability policy
+
+The optional `permissions` block enables the typed policy system. Supported
+capabilities are `read`, `create`, `update`, `delete`, `workflow`, `financial`,
+and `admin`. Rules can be declared for the whole instance, individual models,
+named operations under `operations`, fields under a model's `fields`, and model
+methods under `methods`.
+
+Once `permissions` is present, unmatched requests are denied. Evaluation uses
+the following order from most to least specific: field denial, method,
+operation, model capability, then instance capability. A deny wins over an
+allow within the same capability scope. Authorization errors state which rule
+caused the denial.
+
+Existing configurations without `permissions` remain compatible:
+
+- `read_only` maps to `allow: [read]`.
+- `crud` maps to `allow: [read, create, update, delete]`.
+- A non-empty `allowed_tools` list continues to override the legacy mode.
+
+To migrate safely, add `permissions` to one instance at a time. Translate its
+current mode using the mappings above, add narrower model, operation, field, or
+method restrictions, restart the server, and test both an allowed read and an
+expected denial. Do not leave an empty `permissions` object unless the intent
+is to deny every operation. After verification, remove `mode` and
+`allowed_tools` in a later cleanup; they may remain during the transition but
+are ignored whenever `permissions` is present.
 
 ### MCP Communication Flow
 
