@@ -182,9 +182,10 @@ fn redacted_config_value(config: &Config) -> Value {
     let mut value = serde_json::to_value(config).unwrap();
     if let Some(instances) = value["instances"].as_array_mut() {
         for instance in instances {
-            let has_password = instance["password"]
-                .as_str()
-                .is_some_and(|value| !value.is_empty());
+            let has_password = instance["password_env"].is_string()
+                || instance["password"]
+                    .as_str()
+                    .is_some_and(|value| !value.is_empty());
             instance["password"] = Value::String(String::new());
             instance["has_password"] = Value::Bool(has_password);
         }
@@ -194,12 +195,21 @@ fn redacted_config_value(config: &Config) -> Value {
 
 async fn add_instance(
     State(state): State<AppState>,
-    Json(mut instance): Json<OdooInstance>,
+    Json(instance): Json<OdooInstance>,
 ) -> StatusCode {
+    let mut config = state.config.write().unwrap();
+    let existing = config
+        .instances
+        .iter()
+        .find(|existing| existing.id == instance.id);
+    let mut instance = match prepare_instance_for_save(instance, existing) {
+        Ok(instance) => instance,
+        Err(status) => return status,
+    };
+
     if instance.id.is_empty() {
         instance.id = generate_id();
     }
-    let mut config = state.config.write().unwrap();
 
     // If first instance, make it active
     if config.instances.is_empty() {
@@ -208,19 +218,38 @@ async fn add_instance(
 
     // Update existing or add new
     if let Some(existing) = config.instances.iter_mut().find(|i| i.id == instance.id) {
-        if instance.password.is_empty() {
-            instance.password = existing.password.clone();
-        }
         *existing = instance;
     } else {
-        if instance.password.is_empty() {
-            return StatusCode::BAD_REQUEST;
-        }
         config.instances.push(instance);
     }
 
     config.save().unwrap();
     StatusCode::OK
+}
+
+fn prepare_instance_for_save(
+    mut instance: OdooInstance,
+    existing: Option<&OdooInstance>,
+) -> Result<OdooInstance, StatusCode> {
+    if instance
+        .password_env
+        .as_ref()
+        .is_some_and(|variable| variable.trim().is_empty())
+    {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if instance.password.is_empty() {
+        match (instance.password_env.is_some(), existing) {
+            (true, Some(existing)) => instance.password = existing.password.clone(),
+            (true, None) => {}
+            (false, Some(existing)) if existing.password_env.is_none() => {
+                instance.password = existing.password.clone();
+            }
+            (false, _) => return Err(StatusCode::BAD_REQUEST),
+        }
+    }
+    Ok(instance)
 }
 
 async fn delete_instance(State(state): State<AppState>, Path(id): Path<String>) -> StatusCode {
@@ -282,5 +311,37 @@ mod tests {
         assert!(!serialized.contains("response-canary"));
         assert_eq!(response["instances"][0]["password"], "");
         assert_eq!(response["instances"][0]["has_password"], true);
+    }
+
+    #[test]
+    fn environment_credentials_can_be_created_without_inline_secrets() {
+        let instance: OdooInstance = serde_json::from_value(json!({
+            "id": "environment", "name": "Environment", "url": "https://odoo.test",
+            "db": "db", "username": "admin", "password_env": "ODOO_PASSWORD", "active": true
+        }))
+        .unwrap();
+
+        let prepared = prepare_instance_for_save(instance, None).unwrap();
+        assert!(prepared.password.is_empty());
+        assert_eq!(prepared.password_env.as_deref(), Some("ODOO_PASSWORD"));
+    }
+
+    #[test]
+    fn switching_from_environment_to_inline_requires_a_new_secret() {
+        let existing: OdooInstance = serde_json::from_value(json!({
+            "id": "environment", "name": "Environment", "url": "https://odoo.test",
+            "db": "db", "username": "admin", "password_env": "ODOO_PASSWORD", "active": true
+        }))
+        .unwrap();
+        let replacement: OdooInstance = serde_json::from_value(json!({
+            "id": "environment", "name": "Environment", "url": "https://odoo.test",
+            "db": "db", "username": "admin", "password": "", "active": true
+        }))
+        .unwrap();
+
+        assert!(matches!(
+            prepare_instance_for_save(replacement, Some(&existing)),
+            Err(StatusCode::BAD_REQUEST)
+        ));
     }
 }

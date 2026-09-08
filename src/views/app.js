@@ -56,7 +56,9 @@ createApp({
 
         function openInstanceModal(item = null) {
             formError.value = '';
-            newInstance.value = item ? { ...item, mode: item.mode || 'inherit' } : { id: '', name: '', url: '', db: '', username: '', password: '', active: false, mode: 'inherit' };
+            newInstance.value = item
+                ? { ...item, mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline' }
+                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, mode: 'inherit', credential_source: 'environment' };
             showInstanceModal.value = true;
         }
 
@@ -70,6 +72,15 @@ createApp({
             formError.value = '';
             const payload = { ...newInstance.value };
             delete payload.has_password;
+            delete payload.credential_source;
+            if (newInstance.value.credential_source === 'environment') {
+                if (!String(payload.password_env || '').trim()) return void (formError.value = 'Environment variable name is required.');
+                payload.password = '';
+                payload.password_env = payload.password_env.trim();
+            } else {
+                payload.password_env = null;
+                if (!payload.password && (!newInstance.value.id || newInstance.value.password_env)) return void (formError.value = 'Enter a password or API key when switching to inline credentials.');
+            }
             const response = await api('/api/instances', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!response.ok) return void (formError.value = 'Could not save this instance. Check all required fields.');
             showInstanceModal.value = false;
