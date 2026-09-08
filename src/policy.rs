@@ -50,6 +50,18 @@ impl PolicyDecision {
     }
 }
 
+pub(crate) fn evaluate_legacy_mode(mode: &str, capability: Capability) -> PolicyDecision {
+    let allowed = match mode {
+        "read_only" => capability == Capability::Read,
+        "crud" => matches!(
+            capability,
+            Capability::Read | Capability::Create | Capability::Update | Capability::Delete
+        ),
+        _ => false,
+    };
+    PolicyDecision::from_allowed(allowed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -71,5 +83,25 @@ mod tests {
         assert_eq!(PolicyDecision::from_allowed(false), PolicyDecision::Deny);
         assert!(!PolicyDecision::Allow.is_denied());
         assert!(PolicyDecision::Deny.is_denied());
+    }
+
+    #[test]
+    fn legacy_modes_map_to_capabilities() {
+        assert_eq!(
+            evaluate_legacy_mode("read_only", Capability::Read),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            evaluate_legacy_mode("read_only", Capability::Create),
+            PolicyDecision::Deny
+        );
+        assert_eq!(
+            evaluate_legacy_mode("crud", Capability::Delete),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            evaluate_legacy_mode("unknown", Capability::Read),
+            PolicyDecision::Deny
+        );
     }
 }

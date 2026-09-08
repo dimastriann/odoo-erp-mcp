@@ -5,6 +5,8 @@ use anyhow::Result;
 use uuid::Uuid;
 
 use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference, SecretString};
+use crate::tools::catalog::ToolName;
+use crate::{policy::PolicyDecision, policy::evaluate_legacy_mode};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OdooInstance {
@@ -71,21 +73,25 @@ impl OdooInstance {
         }
     }
 
+    #[allow(dead_code)] // Retained as the legacy string-based compatibility API.
     pub fn is_tool_allowed(&self, tool_name: &str, global_default_mode: &str) -> bool {
+        ToolName::try_from(tool_name)
+            .map(|tool| !self.policy_decision(tool, global_default_mode).is_denied())
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn policy_decision(
+        &self,
+        tool: ToolName,
+        global_default_mode: &str,
+    ) -> PolicyDecision {
         if let Some(ref allowed) = self.allowed_tools
             && !allowed.is_empty()
         {
-            return allowed.iter().any(|t| t == tool_name);
+            return PolicyDecision::from_allowed(allowed.iter().any(|name| name == tool.as_str()));
         }
 
-        let mode = self.get_mode(global_default_mode);
-        match mode {
-            "read_only" => {
-                let write_tools = ["odoo-create", "odoo-update", "odoo-delete", "odoo-copy"];
-                !write_tools.contains(&tool_name)
-            }
-            _ => true,
-        }
+        evaluate_legacy_mode(self.get_mode(global_default_mode), tool.capability())
     }
 }
 
