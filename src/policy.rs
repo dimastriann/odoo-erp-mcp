@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -23,10 +24,43 @@ pub(crate) struct CapabilityPermissions {
     pub(crate) allow: Vec<Capability>,
     #[serde(default)]
     pub(crate) deny: Vec<Capability>,
+    #[serde(default)]
+    pub(crate) models: BTreeMap<String, CapabilityRule>,
 }
 
 impl CapabilityPermissions {
     pub(crate) fn decision_for(&self, capability: Capability) -> Option<PolicyDecision> {
+        if self.deny.contains(&capability) {
+            Some(PolicyDecision::Deny)
+        } else if self.allow.contains(&capability) {
+            Some(PolicyDecision::Allow)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn decision_for_model(
+        &self,
+        model: &str,
+        capability: Capability,
+    ) -> Option<PolicyDecision> {
+        self.models
+            .get(model)
+            .and_then(|rule| rule.decision_for(capability))
+            .or_else(|| self.decision_for(capability))
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct CapabilityRule {
+    #[serde(default)]
+    pub(crate) allow: Vec<Capability>,
+    #[serde(default)]
+    pub(crate) deny: Vec<Capability>,
+}
+
+impl CapabilityRule {
+    fn decision_for(&self, capability: Capability) -> Option<PolicyDecision> {
         if self.deny.contains(&capability) {
             Some(PolicyDecision::Deny)
         } else if self.allow.contains(&capability) {
@@ -113,6 +147,7 @@ mod tests {
         let permissions = CapabilityPermissions {
             allow: vec![Capability::Read],
             deny: vec![Capability::Delete],
+            models: BTreeMap::new(),
         };
 
         assert_eq!(
@@ -124,6 +159,26 @@ mod tests {
             Some(PolicyDecision::Deny)
         );
         assert_eq!(permissions.decision_for(Capability::Update), None);
+    }
+
+    #[test]
+    fn model_permissions_override_instance_capabilities() {
+        let permissions: CapabilityPermissions = serde_json::from_value(serde_json::json!({
+            "allow": ["read"],
+            "models": {
+                "account.move": { "deny": ["read"] }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            permissions.decision_for_model("account.move", Capability::Read),
+            Some(PolicyDecision::Deny)
+        );
+        assert_eq!(
+            permissions.decision_for_model("res.partner", Capability::Read),
+            Some(PolicyDecision::Allow)
+        );
     }
 
     #[test]

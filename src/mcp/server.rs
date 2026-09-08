@@ -221,7 +221,12 @@ async fn handle_request_with_identity(
             };
 
             // Enforce Instance Tool Permissions
-            let policy_decision = instance_obj.policy_decision(tool_name, &global_mode);
+            let model = arguments
+                .get("model")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let policy_decision =
+                instance_obj.policy_decision_for_model(tool_name, model, &global_mode);
             if policy_decision.is_denied() {
                 let mode_str = instance_obj.get_mode(&global_mode);
                 let error = AppError::authorization(format!(
