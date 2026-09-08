@@ -710,4 +710,100 @@ mod tests {
             PolicyDecision::Deny
         );
     }
+
+    #[test]
+    fn legacy_and_new_policy_compatibility_matrix() {
+        struct Case {
+            name: &'static str,
+            mode: &'static str,
+            allowed_tools: serde_json::Value,
+            permissions: serde_json::Value,
+            tool: ToolName,
+            model: &'static str,
+            expected: PolicyDecision,
+        }
+
+        let cases = [
+            Case {
+                name: "legacy crud allows create",
+                mode: "crud",
+                allowed_tools: serde_json::Value::Null,
+                permissions: serde_json::Value::Null,
+                tool: ToolName::Create,
+                model: "res.partner",
+                expected: PolicyDecision::Allow,
+            },
+            Case {
+                name: "legacy read only denies update",
+                mode: "read_only",
+                allowed_tools: serde_json::Value::Null,
+                permissions: serde_json::Value::Null,
+                tool: ToolName::Update,
+                model: "res.partner",
+                expected: PolicyDecision::Deny,
+            },
+            Case {
+                name: "legacy tool list overrides mode",
+                mode: "read_only",
+                allowed_tools: serde_json::json!(["odoo-create"]),
+                permissions: serde_json::Value::Null,
+                tool: ToolName::Create,
+                model: "res.partner",
+                expected: PolicyDecision::Allow,
+            },
+            Case {
+                name: "new instance rule overrides legacy mode",
+                mode: "read_only",
+                allowed_tools: serde_json::Value::Null,
+                permissions: serde_json::json!({ "allow": ["create"] }),
+                tool: ToolName::Create,
+                model: "res.partner",
+                expected: PolicyDecision::Allow,
+            },
+            Case {
+                name: "new model rule overrides instance rule",
+                mode: "crud",
+                allowed_tools: serde_json::Value::Null,
+                permissions: serde_json::json!({
+                    "allow": ["read"],
+                    "models": { "account.move": { "deny": ["read"] } }
+                }),
+                tool: ToolName::SearchRead,
+                model: "account.move",
+                expected: PolicyDecision::Deny,
+            },
+            Case {
+                name: "new unmatched policy defaults to deny",
+                mode: "crud",
+                allowed_tools: serde_json::Value::Null,
+                permissions: serde_json::json!({ "allow": ["read"] }),
+                tool: ToolName::Delete,
+                model: "res.partner",
+                expected: PolicyDecision::Deny,
+            },
+        ];
+
+        for case in cases {
+            let instance: OdooInstance = serde_json::from_value(serde_json::json!({
+                "id": case.name,
+                "name": case.name,
+                "url": "https://odoo.test",
+                "db": "db",
+                "username": "admin",
+                "password": "secret",
+                "active": true,
+                "mode": case.mode,
+                "allowed_tools": case.allowed_tools,
+                "permissions": case.permissions
+            }))
+            .unwrap();
+
+            assert_eq!(
+                instance.policy_decision_for_model(case.tool, case.model, "crud"),
+                case.expected,
+                "{}",
+                case.name
+            );
+        }
+    }
 }
