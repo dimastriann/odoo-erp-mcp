@@ -57,9 +57,10 @@ createApp({
 
         function openInstanceModal(item = null) {
             formError.value = '';
+            const scopedPolicy = item?.permissions ? { models: item.permissions.models || {}, operations: item.permissions.operations || {} } : { models: {}, operations: {} };
             newInstance.value = item
-                ? { ...item, mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])] }
-                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [] };
+                ? { ...item, mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2) }
+                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2) };
             showInstanceModal.value = true;
         }
 
@@ -77,6 +78,7 @@ createApp({
             delete payload.policy_enabled;
             delete payload.capability_allow;
             delete payload.capability_deny;
+            delete payload.scoped_policy_json;
             if (newInstance.value.credential_source === 'environment') {
                 if (!String(payload.password_env || '').trim()) return void (formError.value = 'Environment variable name is required.');
                 payload.password = '';
@@ -86,7 +88,11 @@ createApp({
                 if (!payload.password && (!newInstance.value.id || newInstance.value.password_env)) return void (formError.value = 'Enter a password or API key when switching to inline credentials.');
             }
             if (newInstance.value.policy_enabled) {
-                payload.permissions = { ...(payload.permissions || {}), allow: newInstance.value.capability_allow, deny: newInstance.value.capability_deny };
+                let scopedPolicy;
+                try { scopedPolicy = JSON.parse(newInstance.value.scoped_policy_json || '{}'); }
+                catch (_) { return void (formError.value = 'Scoped policy must be valid JSON.'); }
+                if (!scopedPolicy || Array.isArray(scopedPolicy) || typeof scopedPolicy !== 'object') return void (formError.value = 'Scoped policy must be a JSON object.');
+                payload.permissions = { ...scopedPolicy, allow: newInstance.value.capability_allow, deny: newInstance.value.capability_deny };
             } else {
                 payload.permissions = null;
             }

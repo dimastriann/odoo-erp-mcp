@@ -247,7 +247,7 @@ Goal: Identify every actor and agent, protect credentials, and enforce granular 
 
 - [x] S3-30 — Add credential-source controls for inline and environment secrets.
 - [x] S3-31 — Add instance capability controls.
-- [ ] S3-32 — Add scoped model, operation, field, and method policy editing.
+- [x] S3-32 — Add scoped model, operation, field, and method policy editing.
 - [ ] S3-33 — Add default-deny guidance and client-side policy validation.
 - [ ] S3-34 — Add UI configuration regression tests and documentation.
 
@@ -701,7 +701,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
-| Stage 3 — Identity, Secrets, and Authorization | In progress | 31/34 | Instance capabilities can be configured through the UI. |
+| Stage 3 — Identity, Secrets, and Authorization | In progress | 32/34 | Scoped policy rules can be edited through the UI. |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
