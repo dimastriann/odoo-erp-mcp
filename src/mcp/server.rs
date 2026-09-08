@@ -226,9 +226,11 @@ async fn handle_request_with_identity(
                 .and_then(Value::as_str)
                 .unwrap_or_default();
             let requested_fields = requested_fields(&arguments);
+            let method = arguments.get("method").and_then(Value::as_str);
             let policy_decision = instance_obj.policy_decision_for_request(
                 tool_name,
                 model,
+                method,
                 &requested_fields,
                 &global_mode,
             );

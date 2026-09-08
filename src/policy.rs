@@ -64,10 +64,11 @@ impl CapabilityPermissions {
             .or_else(|| self.decision_for_model(model, capability))
     }
 
-    pub(crate) fn decision_for_fields(
+    pub(crate) fn decision_for_request(
         &self,
         operation: &str,
         model: &str,
+        method: Option<&str>,
         capability: Capability,
         fields: &[String],
     ) -> Option<PolicyDecision> {
@@ -77,6 +78,11 @@ impl CapabilityPermissions {
             .is_some_and(|rule| rule.fields.denies(fields));
         if field_denied {
             Some(PolicyDecision::Deny)
+        } else if let Some(decision) = method
+            .and_then(|method| self.models.get(model)?.methods.get(method))
+            .copied()
+        {
+            Some(decision)
         } else {
             self.decision_for_operation(operation, model, capability)
         }
@@ -91,6 +97,8 @@ pub(crate) struct CapabilityRule {
     pub(crate) deny: Vec<Capability>,
     #[serde(default)]
     pub(crate) fields: FieldPermissions,
+    #[serde(default)]
+    pub(crate) methods: BTreeMap<String, PolicyDecision>,
 }
 
 impl CapabilityRule {
@@ -273,9 +281,10 @@ mod tests {
 
         for fields in [vec!["bank_ids".into()], vec!["phone".into()]] {
             assert_eq!(
-                permissions.decision_for_fields(
+                permissions.decision_for_request(
                     "odoo-search-read",
                     "res.partner",
+                    None,
                     Capability::Read,
                     &fields
                 ),
@@ -283,13 +292,51 @@ mod tests {
             );
         }
         assert_eq!(
-            permissions.decision_for_fields(
+            permissions.decision_for_request(
                 "odoo-search-read",
                 "res.partner",
+                None,
                 Capability::Read,
                 &["name".into(), "email".into()]
             ),
             Some(PolicyDecision::Allow)
+        );
+    }
+
+    #[test]
+    fn method_and_workflow_rules_are_explicit() {
+        let permissions: CapabilityPermissions = serde_json::from_value(serde_json::json!({
+            "models": {
+                "sale.order": {
+                    "allow": ["workflow"],
+                    "methods": {
+                        "action_confirm": "allow",
+                        "action_cancel": "deny"
+                    }
+                }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            permissions.decision_for_request(
+                "odoo-method",
+                "sale.order",
+                Some("action_confirm"),
+                Capability::Workflow,
+                &[]
+            ),
+            Some(PolicyDecision::Allow)
+        );
+        assert_eq!(
+            permissions.decision_for_request(
+                "odoo-method",
+                "sale.order",
+                Some("action_cancel"),
+                Capability::Workflow,
+                &[]
+            ),
+            Some(PolicyDecision::Deny)
         );
     }
 
