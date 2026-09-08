@@ -107,16 +107,10 @@ impl OdooInstance {
         fields: &[String],
         global_default_mode: &str,
     ) -> PolicyDecision {
-        if let Some(decision) = self.permissions.as_ref().and_then(|permissions| {
-            permissions.decision_for_request(
-                tool.as_str(),
-                model,
-                method,
-                tool.capability(),
-                fields,
-            )
-        }) {
-            return decision;
+        if let Some(permissions) = &self.permissions {
+            return permissions
+                .decision_for_request(tool.as_str(), model, method, tool.capability(), fields)
+                .unwrap_or(PolicyDecision::Deny);
         }
 
         if let Some(ref allowed) = self.allowed_tools
@@ -662,6 +656,31 @@ mod tests {
         );
         assert_eq!(
             instance.policy_decision(ToolName::Update, "crud"),
+            PolicyDecision::Deny
+        );
+    }
+
+    #[test]
+    fn new_policy_defaults_to_deny_without_a_matching_rule() {
+        let instance: OdooInstance = serde_json::from_value(serde_json::json!({
+            "id": "default-deny",
+            "name": "Default deny",
+            "url": "https://odoo.test",
+            "db": "db",
+            "username": "admin",
+            "password": "secret",
+            "active": true,
+            "mode": "crud",
+            "permissions": { "allow": ["read"] }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            instance.policy_decision(ToolName::SearchRead, "crud"),
+            PolicyDecision::Allow
+        );
+        assert_eq!(
+            instance.policy_decision(ToolName::Create, "crud"),
             PolicyDecision::Deny
         );
     }
