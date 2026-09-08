@@ -4,6 +4,7 @@ use crate::context::{
 };
 use crate::error::AppError;
 use crate::odoo::ClientManager;
+use crate::policy::PolicyDecision;
 use crate::tools::catalog::{ToolName, tool_definitions};
 use crate::tools::executor::execute_tool;
 use crate::tools::protection::QueryLimits;
@@ -221,7 +222,10 @@ async fn handle_request_with_identity(
             };
 
             // Enforce Instance Tool Permissions
-            if !instance_obj.is_tool_allowed(tool_name.as_str(), &global_mode) {
+            let policy_decision = PolicyDecision::from_allowed(
+                instance_obj.is_tool_allowed(tool_name.as_str(), &global_mode),
+            );
+            if policy_decision.is_denied() {
                 let mode_str = instance_obj.get_mode(&global_mode);
                 let error = AppError::authorization(format!(
                     "Error: Tool '{}' requires '{}' capability, which is restricted for Odoo instance '{}' (Mode: '{}'). Permission denied.",

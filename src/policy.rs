@@ -34,6 +34,22 @@ impl fmt::Display for Capability {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PolicyDecision {
+    Allow,
+    Deny,
+}
+
+impl PolicyDecision {
+    pub(crate) const fn from_allowed(allowed: bool) -> Self {
+        if allowed { Self::Allow } else { Self::Deny }
+    }
+
+    pub(crate) const fn is_denied(self) -> bool {
+        matches!(self, Self::Deny)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -47,5 +63,13 @@ mod tests {
         assert_eq!(Capability::Workflow.as_str(), "workflow");
         assert_eq!(Capability::Financial.as_str(), "financial");
         assert_eq!(Capability::Admin.as_str(), "admin");
+    }
+
+    #[test]
+    fn policy_decisions_are_explicit() {
+        assert_eq!(PolicyDecision::from_allowed(true), PolicyDecision::Allow);
+        assert_eq!(PolicyDecision::from_allowed(false), PolicyDecision::Deny);
+        assert!(!PolicyDecision::Allow.is_denied());
+        assert!(PolicyDecision::Deny.is_denied());
     }
 }
