@@ -96,8 +96,18 @@ impl OdooInstance {
         model: &str,
         global_default_mode: &str,
     ) -> PolicyDecision {
+        self.policy_decision_for_request(tool, model, &[], global_default_mode)
+    }
+
+    pub(crate) fn policy_decision_for_request(
+        &self,
+        tool: ToolName,
+        model: &str,
+        fields: &[String],
+        global_default_mode: &str,
+    ) -> PolicyDecision {
         if let Some(decision) = self.permissions.as_ref().and_then(|permissions| {
-            permissions.decision_for_operation(tool.as_str(), model, tool.capability())
+            permissions.decision_for_fields(tool.as_str(), model, tool.capability(), fields)
         }) {
             return decision;
         }

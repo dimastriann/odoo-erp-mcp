@@ -225,8 +225,13 @@ async fn handle_request_with_identity(
                 .get("model")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            let policy_decision =
-                instance_obj.policy_decision_for_model(tool_name, model, &global_mode);
+            let requested_fields = requested_fields(&arguments);
+            let policy_decision = instance_obj.policy_decision_for_request(
+                tool_name,
+                model,
+                &requested_fields,
+                &global_mode,
+            );
             if policy_decision.is_denied() {
                 let mode_str = instance_obj.get_mode(&global_mode);
                 let error = AppError::authorization(format!(
@@ -275,6 +280,21 @@ async fn handle_request_with_identity(
             "error": { "code": -32601, "message": "Method not found" }
         })),
     }
+}
+
+fn requested_fields(arguments: &Value) -> Vec<String> {
+    let mut fields = arguments
+        .get("fields")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    if let Some(values) = arguments.get("vals").and_then(Value::as_object) {
+        fields.extend(values.keys().cloned());
+    }
+    fields
 }
 
 #[cfg(test)]

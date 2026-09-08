@@ -63,6 +63,24 @@ impl CapabilityPermissions {
             .copied()
             .or_else(|| self.decision_for_model(model, capability))
     }
+
+    pub(crate) fn decision_for_fields(
+        &self,
+        operation: &str,
+        model: &str,
+        capability: Capability,
+        fields: &[String],
+    ) -> Option<PolicyDecision> {
+        let field_denied = self
+            .models
+            .get(model)
+            .is_some_and(|rule| rule.fields.denies(fields));
+        if field_denied {
+            Some(PolicyDecision::Deny)
+        } else {
+            self.decision_for_operation(operation, model, capability)
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -71,6 +89,8 @@ pub(crate) struct CapabilityRule {
     pub(crate) allow: Vec<Capability>,
     #[serde(default)]
     pub(crate) deny: Vec<Capability>,
+    #[serde(default)]
+    pub(crate) fields: FieldPermissions,
 }
 
 impl CapabilityRule {
@@ -82,6 +102,21 @@ impl CapabilityRule {
         } else {
             None
         }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub(crate) struct FieldPermissions {
+    #[serde(default)]
+    pub(crate) allow: Vec<String>,
+    #[serde(default)]
+    pub(crate) deny: Vec<String>,
+}
+
+impl FieldPermissions {
+    fn denies(&self, requested: &[String]) -> bool {
+        requested.iter().any(|field| self.deny.contains(field))
+            || (!self.allow.is_empty() && requested.iter().any(|field| !self.allow.contains(field)))
     }
 }
 
@@ -216,6 +251,43 @@ mod tests {
                 "odoo-search-count",
                 "res.partner",
                 Capability::Read
+            ),
+            Some(PolicyDecision::Allow)
+        );
+    }
+
+    #[test]
+    fn field_rules_reject_denied_and_unlisted_fields() {
+        let permissions: CapabilityPermissions = serde_json::from_value(serde_json::json!({
+            "allow": ["read"],
+            "models": {
+                "res.partner": {
+                    "fields": {
+                        "allow": ["name", "email"],
+                        "deny": ["bank_ids"]
+                    }
+                }
+            }
+        }))
+        .unwrap();
+
+        for fields in [vec!["bank_ids".into()], vec!["phone".into()]] {
+            assert_eq!(
+                permissions.decision_for_fields(
+                    "odoo-search-read",
+                    "res.partner",
+                    Capability::Read,
+                    &fields
+                ),
+                Some(PolicyDecision::Deny)
+            );
+        }
+        assert_eq!(
+            permissions.decision_for_fields(
+                "odoo-search-read",
+                "res.partner",
+                Capability::Read,
+                &["name".into(), "email".into()]
             ),
             Some(PolicyDecision::Allow)
         );
