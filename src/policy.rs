@@ -64,6 +64,9 @@ impl CapabilityPermissions {
             .or_else(|| self.decision_for_model(model, capability))
     }
 
+    /// Evaluates rules from most to least specific: field denial, method,
+    /// operation, model capability, then instance capability. Within a single
+    /// capability rule, deny takes precedence over allow.
     pub(crate) fn decision_for_request(
         &self,
         operation: &str,
@@ -336,6 +339,81 @@ mod tests {
                 Capability::Workflow,
                 &[]
             ),
+            Some(PolicyDecision::Deny)
+        );
+    }
+
+    #[test]
+    fn policy_precedence_is_narrowest_scope_first() {
+        let permissions: CapabilityPermissions = serde_json::from_value(serde_json::json!({
+            "deny": ["read"],
+            "operations": { "odoo-search-read": "deny" },
+            "models": {
+                "res.partner": {
+                    "allow": ["read"],
+                    "fields": { "deny": ["bank_ids"] },
+                    "methods": { "export_data": "allow" }
+                }
+            }
+        }))
+        .unwrap();
+
+        assert_eq!(
+            permissions.decision_for_request(
+                "odoo-search-read",
+                "res.partner",
+                Some("export_data"),
+                Capability::Read,
+                &["bank_ids".into()]
+            ),
+            Some(PolicyDecision::Deny),
+            "field denial must override a method allow"
+        );
+        assert_eq!(
+            permissions.decision_for_request(
+                "odoo-search-read",
+                "res.partner",
+                Some("export_data"),
+                Capability::Read,
+                &[]
+            ),
+            Some(PolicyDecision::Allow),
+            "method rules must override operation rules"
+        );
+        assert_eq!(
+            permissions.decision_for_request(
+                "odoo-search-read",
+                "res.partner",
+                None,
+                Capability::Read,
+                &[]
+            ),
+            Some(PolicyDecision::Deny),
+            "operation rules must override model rules"
+        );
+        assert_eq!(
+            permissions.decision_for_request(
+                "odoo-search-count",
+                "res.partner",
+                None,
+                Capability::Read,
+                &[]
+            ),
+            Some(PolicyDecision::Allow),
+            "model rules must override instance rules"
+        );
+    }
+
+    #[test]
+    fn deny_wins_over_allow_within_one_scope() {
+        let permissions: CapabilityPermissions = serde_json::from_value(serde_json::json!({
+            "allow": ["delete"],
+            "deny": ["delete"]
+        }))
+        .unwrap();
+
+        assert_eq!(
+            permissions.decision_for(Capability::Delete),
             Some(PolicyDecision::Deny)
         );
     }
