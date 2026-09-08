@@ -239,7 +239,7 @@ Goal: Identify every actor and agent, protect credentials, and enforce granular 
 - [x] S3-24 — Add method and workflow permissions.
 - [x] S3-25 — Define policy precedence.
 - [x] S3-26 — Apply default-deny behavior to the new policy system.
-- [ ] S3-27 — Explain denied policy decisions in responses.
+- [x] S3-27 — Explain denied policy decisions in responses.
 - [ ] S3-28 — Add compatibility and policy-matrix tests.
 - [ ] S3-29 — Document configuration migration.
 
@@ -693,7 +693,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 0 — Baseline Engineering and Testability | Completed | 23/23 | All quality gates pass. |
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
-| Stage 3 — Identity, Secrets, and Authorization | In progress | 26/29 | New policies default to deny when no rule matches. |
+| Stage 3 — Identity, Secrets, and Authorization | In progress | 27/29 | Denied responses explain the matching policy source. |
 | Stage 4 — Safe Mutation Lifecycle | Not started | 0/59 | |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |

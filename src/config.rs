@@ -4,7 +4,9 @@ use std::fs;
 use anyhow::Result;
 use uuid::Uuid;
 
-use crate::policy::{CapabilityPermissions, PolicyDecision, evaluate_legacy_mode};
+use crate::policy::{
+    CapabilityPermissions, PolicyDecision, PolicyEvaluation, evaluate_legacy_mode,
+};
 use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference, SecretString};
 use crate::tools::catalog::ToolName;
 
@@ -107,19 +109,43 @@ impl OdooInstance {
         fields: &[String],
         global_default_mode: &str,
     ) -> PolicyDecision {
+        self.policy_evaluation_for_request(tool, model, method, fields, global_default_mode)
+            .decision
+    }
+
+    pub(crate) fn policy_evaluation_for_request(
+        &self,
+        tool: ToolName,
+        model: &str,
+        method: Option<&str>,
+        fields: &[String],
+        global_default_mode: &str,
+    ) -> PolicyEvaluation {
         if let Some(permissions) = &self.permissions {
             return permissions
-                .decision_for_request(tool.as_str(), model, method, tool.capability(), fields)
-                .unwrap_or(PolicyDecision::Deny);
+                .evaluate_request(tool.as_str(), model, method, tool.capability(), fields)
+                .unwrap_or_else(|| {
+                    PolicyEvaluation::new(
+                        PolicyDecision::Deny,
+                        "no matching rule; new policies default to deny",
+                    )
+                });
         }
 
         if let Some(ref allowed) = self.allowed_tools
             && !allowed.is_empty()
         {
-            return PolicyDecision::from_allowed(allowed.iter().any(|name| name == tool.as_str()));
+            return PolicyEvaluation::new(
+                PolicyDecision::from_allowed(allowed.iter().any(|name| name == tool.as_str())),
+                "legacy allowed_tools compatibility rule",
+            );
         }
 
-        evaluate_legacy_mode(self.get_mode(global_default_mode), tool.capability())
+        let mode = self.get_mode(global_default_mode);
+        PolicyEvaluation::new(
+            evaluate_legacy_mode(mode, tool.capability()),
+            format!("legacy mode {mode:?} compatibility rule"),
+        )
     }
 }
 

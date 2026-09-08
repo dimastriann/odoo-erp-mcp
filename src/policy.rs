@@ -41,6 +41,7 @@ impl CapabilityPermissions {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn decision_for_model(
         &self,
         model: &str,
@@ -52,6 +53,7 @@ impl CapabilityPermissions {
             .or_else(|| self.decision_for(capability))
     }
 
+    #[cfg(test)]
     pub(crate) fn decision_for_operation(
         &self,
         operation: &str,
@@ -67,6 +69,7 @@ impl CapabilityPermissions {
     /// Evaluates rules from most to least specific: field denial, method,
     /// operation, model capability, then instance capability. Within a single
     /// capability rule, deny takes precedence over allow.
+    #[cfg(test)]
     pub(crate) fn decision_for_request(
         &self,
         operation: &str,
@@ -75,19 +78,56 @@ impl CapabilityPermissions {
         capability: Capability,
         fields: &[String],
     ) -> Option<PolicyDecision> {
+        self.evaluate_request(operation, model, method, capability, fields)
+            .map(|evaluation| evaluation.decision)
+    }
+
+    pub(crate) fn evaluate_request(
+        &self,
+        operation: &str,
+        model: &str,
+        method: Option<&str>,
+        capability: Capability,
+        fields: &[String],
+    ) -> Option<PolicyEvaluation> {
         let field_denied = self
             .models
             .get(model)
             .is_some_and(|rule| rule.fields.denies(fields));
         if field_denied {
-            Some(PolicyDecision::Deny)
+            Some(PolicyEvaluation::new(
+                PolicyDecision::Deny,
+                format!("field policy denied requested fields on model {model:?}"),
+            ))
         } else if let Some(decision) = method
             .and_then(|method| self.models.get(model)?.methods.get(method))
             .copied()
         {
-            Some(decision)
+            Some(PolicyEvaluation::new(
+                decision,
+                format!("method policy matched {model:?}.{method:?}"),
+            ))
+        } else if let Some(decision) = self.operations.get(operation).copied() {
+            Some(PolicyEvaluation::new(
+                decision,
+                format!("operation policy matched {operation:?}"),
+            ))
+        } else if let Some(decision) = self
+            .models
+            .get(model)
+            .and_then(|rule| rule.decision_for(capability))
+        {
+            Some(PolicyEvaluation::new(
+                decision,
+                format!("model policy matched {model:?} for capability {capability:?}"),
+            ))
         } else {
-            self.decision_for_operation(operation, model, capability)
+            self.decision_for(capability).map(|decision| {
+                PolicyEvaluation::new(
+                    decision,
+                    format!("instance policy matched capability {capability:?}"),
+                )
+            })
         }
     }
 }
@@ -156,6 +196,21 @@ impl fmt::Display for Capability {
 pub(crate) enum PolicyDecision {
     Allow,
     Deny,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PolicyEvaluation {
+    pub(crate) decision: PolicyDecision,
+    pub(crate) explanation: String,
+}
+
+impl PolicyEvaluation {
+    pub(crate) fn new(decision: PolicyDecision, explanation: impl Into<String>) -> Self {
+        Self {
+            decision,
+            explanation: explanation.into(),
+        }
+    }
 }
 
 impl PolicyDecision {
@@ -416,6 +471,22 @@ mod tests {
             permissions.decision_for(Capability::Delete),
             Some(PolicyDecision::Deny)
         );
+    }
+
+    #[test]
+    fn evaluations_explain_the_rule_that_matched() {
+        let permissions: CapabilityPermissions = serde_json::from_value(serde_json::json!({
+            "operations": { "odoo-delete": "deny" }
+        }))
+        .unwrap();
+
+        let evaluation = permissions
+            .evaluate_request("odoo-delete", "res.partner", None, Capability::Delete, &[])
+            .unwrap();
+
+        assert_eq!(evaluation.decision, PolicyDecision::Deny);
+        assert!(evaluation.explanation.contains("operation policy"));
+        assert!(evaluation.explanation.contains("odoo-delete"));
     }
 
     #[test]

@@ -227,21 +227,22 @@ async fn handle_request_with_identity(
                 .unwrap_or_default();
             let requested_fields = requested_fields(&arguments);
             let method = arguments.get("method").and_then(Value::as_str);
-            let policy_decision = instance_obj.policy_decision_for_request(
+            let policy_evaluation = instance_obj.policy_evaluation_for_request(
                 tool_name,
                 model,
                 method,
                 &requested_fields,
                 &global_mode,
             );
-            if policy_decision.is_denied() {
+            if policy_evaluation.decision.is_denied() {
                 let mode_str = instance_obj.get_mode(&global_mode);
                 let error = AppError::authorization(format!(
-                    "Error: Tool '{}' requires '{}' capability, which is restricted for Odoo instance '{}' (Mode: '{}'). Permission denied.",
+                    "Error: Tool '{}' requires '{}' capability, which is restricted for Odoo instance '{}' (Mode: '{}'). Permission denied: {}.",
                     tool_name.as_str(),
                     tool_name.capability(),
                     instance_obj.name,
-                    mode_str
+                    mode_str,
+                    policy_evaluation.explanation
                 ));
                 return Some(tool_call_response(id, ToolExecutionResult::Failure(error)));
             }
