@@ -6,6 +6,12 @@ pub(crate) enum Capability {
     Create,
     Update,
     Delete,
+    #[allow(dead_code)] // Reserved for explicit workflow tools and method calls.
+    Workflow,
+    #[allow(dead_code)] // Reserved for financially sensitive operations.
+    Financial,
+    #[allow(dead_code)] // Reserved for administrative operations.
+    Admin,
 }
 
 impl Capability {
@@ -15,6 +21,9 @@ impl Capability {
             Self::Create => "create",
             Self::Update => "update",
             Self::Delete => "delete",
+            Self::Workflow => "workflow",
+            Self::Financial => "financial",
+            Self::Admin => "admin",
         }
     }
 }
@@ -35,5 +44,8 @@ mod tests {
         assert_eq!(Capability::Create.as_str(), "create");
         assert_eq!(Capability::Update.as_str(), "update");
         assert_eq!(Capability::Delete.as_str(), "delete");
+        assert_eq!(Capability::Workflow.as_str(), "workflow");
+        assert_eq!(Capability::Financial.as_str(), "financial");
+        assert_eq!(Capability::Admin.as_str(), "admin");
     }
 }
