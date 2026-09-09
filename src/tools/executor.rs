@@ -160,7 +160,12 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("delete", error),
             };
-            ToolExecutionResult::from_app_error(odoo.delete(&args.model, args.ids).await)
+            let payload = OperationPayload::new(json!({ "ids": args.ids }))
+                .expect("delete arguments always form an object payload");
+            let operation = Operation::new(OperationKind::Delete, args.model, payload);
+            ToolExecutionResult::from_app_error(
+                OperationExecutor::new(odoo).execute(&operation).await,
+            )
         }
         ToolName::GetMetadata => {
             let args: ModelFieldsArgs = match serde_json::from_value(arguments) {
@@ -437,5 +442,37 @@ mod tests {
             requests[1]["params"]["args"][5][1],
             json!({"active": false})
         );
+    }
+
+    #[tokio::test]
+    async fn delete_runs_through_the_operation_executor() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!(true)),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Delete,
+            json!({"model": "res.partner", "ids": [9, 10]}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+        )
+        .await;
+
+        assert!(matches!(result, ToolExecutionResult::Success(value) if value == json!(true)));
+        let requests = server.requests().await;
+        assert_eq!(requests[1]["params"]["args"][3], "res.partner");
+        assert_eq!(requests[1]["params"]["args"][4], "unlink");
+        assert_eq!(requests[1]["params"]["args"][5][0], json!([9, 10]));
     }
 }
