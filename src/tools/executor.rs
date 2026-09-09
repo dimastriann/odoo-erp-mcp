@@ -1,6 +1,7 @@
 use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
 use crate::odoo::OdooClient;
+use crate::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
 use crate::tools::arguments::{
     CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchArgs,
     SearchDomainArgs, SearchReadArgs, UpdateArgs,
@@ -11,7 +12,7 @@ use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, r
 use crate::tools::protection::{QueryLimits, validate_response_record_count};
 use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 fn validate_query_domain(domain: &Value, limits: QueryLimits) -> Result<(), String> {
     validate_domain_security(
@@ -122,8 +123,11 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("create", error),
             };
+            let payload = OperationPayload::new(json!({ "vals": args.vals }))
+                .expect("create arguments always form an object payload");
+            let operation = Operation::new(OperationKind::Create, args.model, payload);
             ToolExecutionResult::from_app_error(
-                odoo.create(&args.model, Value::Object(args.vals)).await,
+                OperationExecutor::new(odoo).execute(&operation).await,
             )
         }
         ToolName::Copy => {
@@ -357,5 +361,40 @@ mod tests {
         }
 
         assert_eq!(server.requests().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn create_runs_through_the_operation_executor() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!(42)),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Create,
+            json!({"model": "res.partner", "vals": {"name": "Alpha"}}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+        )
+        .await;
+
+        assert!(matches!(result, ToolExecutionResult::Success(value) if value == json!(42)));
+        let requests = server.requests().await;
+        assert_eq!(requests[1]["params"]["args"][3], "res.partner");
+        assert_eq!(requests[1]["params"]["args"][4], "create");
+        assert_eq!(
+            requests[1]["params"]["args"][5][0],
+            json!({"name": "Alpha"})
+        );
     }
 }
