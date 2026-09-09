@@ -270,7 +270,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 - [x] S4-02 — Add a unique operation ID.
 - [x] S4-03 — Add read, write, workflow, financial, and admin operation classes.
 - [x] S4-04 — Add a normalized operation payload.
-- [ ] S4-05 — Add an immutable payload hash.
+- [x] S4-05 — Add an immutable payload hash.
 - [ ] S4-06 — Create a central `OperationExecutor`.
 - [ ] S4-07 — Migrate create operations to the executor.
 - [ ] S4-08 — Migrate update operations to the executor.
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 4/59 | Typed envelope now includes IDs, classes, and normalized payloads. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 5/59 | Operation envelopes include normalized payloads and immutable SHA-256 hashes. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

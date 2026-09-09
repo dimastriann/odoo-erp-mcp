@@ -1,6 +1,7 @@
 #![allow(dead_code)] // The envelope is integrated incrementally through S4-06.
 
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
 use std::fmt;
 use uuid::Uuid;
 
@@ -54,6 +55,29 @@ impl OperationPayload {
     pub(crate) fn as_value(&self) -> &Value {
         &self.0
     }
+
+    fn hash(&self) -> PayloadHash {
+        let bytes = serde_json::to_vec(&self.0).expect("normalized JSON must serialize");
+        PayloadHash(Sha256::digest(bytes).into())
+    }
+}
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub(crate) struct PayloadHash([u8; 32]);
+
+impl fmt::Debug for PayloadHash {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "PayloadHash({self})")
+    }
+}
+
+impl fmt::Display for PayloadHash {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for byte in self.0 {
+            write!(formatter, "{byte:02x}")?;
+        }
+        Ok(())
+    }
 }
 
 fn normalize_json(value: Value) -> Value {
@@ -83,6 +107,7 @@ pub(crate) struct Operation {
     pub(crate) class: OperationClass,
     pub(crate) model: String,
     pub(crate) payload: OperationPayload,
+    pub(crate) payload_hash: PayloadHash,
 }
 
 impl Operation {
@@ -91,12 +116,14 @@ impl Operation {
         model: impl Into<String>,
         payload: OperationPayload,
     ) -> Self {
+        let payload_hash = payload.hash();
         Self {
             id: OperationId::new(),
             kind,
             class: OperationClass::Write,
             model: model.into(),
             payload,
+            payload_hash,
         }
     }
 }
@@ -172,5 +199,29 @@ mod tests {
             OperationPayload::new(json!([1, 2, 3])),
             Err("operation payload must be a JSON object")
         );
+    }
+
+    #[test]
+    fn normalized_payloads_have_stable_sha256_hashes() {
+        let first = OperationPayload::new(json!({"vals": {"name": "Alpha"}, "ids": [7]})).unwrap();
+        let reordered =
+            OperationPayload::new(json!({"ids": [7], "vals": {"name": "Alpha"}})).unwrap();
+        let changed =
+            OperationPayload::new(json!({"ids": [8], "vals": {"name": "Alpha"}})).unwrap();
+
+        assert_eq!(first.hash(), reordered.hash());
+        assert_ne!(first.hash(), changed.hash());
+        assert_eq!(first.hash().to_string().len(), 64);
+    }
+
+    #[test]
+    fn operation_captures_hash_when_it_is_created() {
+        let operation = Operation::new(
+            OperationKind::Delete,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [42]})).unwrap(),
+        );
+
+        assert_eq!(operation.payload_hash, operation.payload.hash());
     }
 }
