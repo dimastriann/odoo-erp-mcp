@@ -27,11 +27,22 @@ pub(crate) enum OperationKind {
     Delete,
 }
 
+/// Security and risk category applied to an operation before execution.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OperationClass {
+    Read,
+    Write,
+    Workflow,
+    Financial,
+    Admin,
+}
+
 /// Stable, typed metadata shared by every stage of a mutation lifecycle.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Operation {
     pub(crate) id: OperationId,
     pub(crate) kind: OperationKind,
+    pub(crate) class: OperationClass,
     pub(crate) model: String,
 }
 
@@ -40,6 +51,7 @@ impl Operation {
         Self {
             id: OperationId::new(),
             kind,
+            class: OperationClass::Write,
             model: model.into(),
         }
     }
@@ -54,6 +66,7 @@ mod tests {
         let operation = Operation::new(OperationKind::Create, "res.partner");
 
         assert_eq!(operation.kind, OperationKind::Create);
+        assert_eq!(operation.class, OperationClass::Write);
         assert_eq!(operation.model, "res.partner");
         assert!(!operation.id.to_string().is_empty());
     }
@@ -70,5 +83,20 @@ mod tests {
         let second = Operation::new(OperationKind::Update, "res.partner");
 
         assert_ne!(first.id, second.id);
+    }
+
+    #[test]
+    fn operation_classes_cover_lifecycle_risk_boundaries() {
+        let classes = [
+            OperationClass::Read,
+            OperationClass::Write,
+            OperationClass::Workflow,
+            OperationClass::Financial,
+            OperationClass::Admin,
+        ];
+
+        assert_eq!(classes.len(), 5);
+        assert_ne!(OperationClass::Read, OperationClass::Write);
+        assert_ne!(OperationClass::Workflow, OperationClass::Financial);
     }
 }
