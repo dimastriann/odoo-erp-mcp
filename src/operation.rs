@@ -211,6 +211,9 @@ fn invalid_operation_payload(message: impl fmt::Display) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{
+        MockOdooServer, authentication_success, json_rpc_success, validation_error,
+    };
     use serde_json::json;
 
     fn empty_payload() -> OperationPayload {
@@ -314,5 +317,104 @@ mod tests {
 
         assert!(matches!(error, AppError::Internal { .. }));
         assert!(error.to_string().contains("missing 'ids'"));
+    }
+
+    #[tokio::test]
+    async fn invalid_lifecycle_payloads_never_reach_odoo() {
+        let server = MockOdooServer::start(authentication_success(7)).await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let operations = [
+            Operation::new(OperationKind::Create, "res.partner", empty_payload()),
+            Operation::new(
+                OperationKind::Copy,
+                "res.partner",
+                OperationPayload::new(json!({"vals": {}})).unwrap(),
+            ),
+            Operation::new(
+                OperationKind::Update,
+                "res.partner",
+                OperationPayload::new(json!({"ids": ["invalid"], "vals": {}})).unwrap(),
+            ),
+            Operation::new(
+                OperationKind::Delete,
+                "res.partner",
+                OperationPayload::new(json!({"ids": "invalid"})).unwrap(),
+            ),
+        ];
+        let executor = OperationExecutor::new(&client);
+
+        for operation in &operations {
+            let result = executor.execute(operation).await;
+            assert!(matches!(result, Err(AppError::Internal { .. })));
+        }
+
+        assert_eq!(server.requests().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_preserves_envelope_and_odoo_error_category() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            validation_error("Duplicate reference"),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let operation = Operation::new(
+            OperationKind::Create,
+            "res.partner",
+            OperationPayload::new(json!({"vals": {"name": "Alpha"}})).unwrap(),
+        );
+        let before_execution = operation.clone();
+
+        let result = OperationExecutor::new(&client).execute(&operation).await;
+
+        assert!(matches!(result, Err(AppError::OdooValidation { .. })));
+        assert_eq!(operation, before_execution);
+        assert_eq!(server.requests().await.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_returns_success_without_rewriting_the_envelope() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!(42)),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let operation = Operation::new(
+            OperationKind::Create,
+            "res.partner",
+            OperationPayload::new(json!({"vals": {"name": "Alpha"}})).unwrap(),
+        );
+        let before_execution = operation.clone();
+
+        let result = OperationExecutor::new(&client)
+            .execute(&operation)
+            .await
+            .unwrap();
+
+        assert_eq!(result, json!(42));
+        assert_eq!(operation, before_execution);
     }
 }
