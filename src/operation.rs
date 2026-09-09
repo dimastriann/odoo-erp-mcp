@@ -1,5 +1,7 @@
 #![allow(dead_code)] // The envelope is integrated incrementally through S4-06.
 
+use crate::error::AppError;
+use crate::odoo::OdooClient;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -128,6 +130,84 @@ impl Operation {
     }
 }
 
+/// Single execution boundary for mutations that have passed lifecycle checks.
+pub(crate) struct OperationExecutor<'a> {
+    odoo: &'a OdooClient,
+}
+
+impl<'a> OperationExecutor<'a> {
+    pub(crate) fn new(odoo: &'a OdooClient) -> Self {
+        Self { odoo }
+    }
+
+    pub(crate) async fn execute(&self, operation: &Operation) -> Result<Value, AppError> {
+        let payload = operation
+            .payload
+            .as_value()
+            .as_object()
+            .expect("operation payloads always have an object root");
+
+        match operation.kind {
+            OperationKind::Create => {
+                self.odoo
+                    .create(&operation.model, required_value(payload, "vals")?.clone())
+                    .await
+            }
+            OperationKind::Copy => {
+                self.odoo
+                    .copy(
+                        &operation.model,
+                        required_i64(payload, "id")?,
+                        required_value(payload, "vals")?.clone(),
+                    )
+                    .await
+            }
+            OperationKind::Update => {
+                self.odoo
+                    .update(
+                        &operation.model,
+                        required_ids(payload)?,
+                        required_value(payload, "vals")?.clone(),
+                    )
+                    .await
+            }
+            OperationKind::Delete => {
+                self.odoo
+                    .delete(&operation.model, required_ids(payload)?)
+                    .await
+            }
+        }
+    }
+}
+
+fn required_value<'a>(payload: &'a Map<String, Value>, key: &str) -> Result<&'a Value, AppError> {
+    payload
+        .get(key)
+        .ok_or_else(|| invalid_operation_payload(format!("missing '{key}'")))
+}
+
+fn required_i64(payload: &Map<String, Value>, key: &str) -> Result<i64, AppError> {
+    required_value(payload, key)?
+        .as_i64()
+        .ok_or_else(|| invalid_operation_payload(format!("'{key}' must be an integer")))
+}
+
+fn required_ids(payload: &Map<String, Value>) -> Result<Vec<i64>, AppError> {
+    required_value(payload, "ids")?
+        .as_array()
+        .ok_or_else(|| invalid_operation_payload("'ids' must be an array"))?
+        .iter()
+        .map(|id| {
+            id.as_i64()
+                .ok_or_else(|| invalid_operation_payload("'ids' must contain only integers"))
+        })
+        .collect()
+}
+
+fn invalid_operation_payload(message: impl fmt::Display) -> AppError {
+    AppError::internal(format!("Invalid operation payload: {message}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -223,5 +303,16 @@ mod tests {
         );
 
         assert_eq!(operation.payload_hash, operation.payload.hash());
+    }
+
+    #[test]
+    fn executor_rejects_incomplete_internal_payloads_before_rpc() {
+        let payload = OperationPayload::new(json!({})).unwrap();
+        let payload = payload.as_value().as_object().unwrap();
+
+        let error = required_ids(payload).unwrap_err();
+
+        assert!(matches!(error, AppError::Internal { .. }));
+        assert!(error.to_string().contains("missing 'ids'"));
     }
 }
