@@ -145,9 +145,14 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("update", error),
             };
+            let payload = OperationPayload::new(json!({
+                "ids": args.ids,
+                "vals": args.vals,
+            }))
+            .expect("update arguments always form an object payload");
+            let operation = Operation::new(OperationKind::Update, args.model, payload);
             ToolExecutionResult::from_app_error(
-                odoo.update(&args.model, args.ids, Value::Object(args.vals))
-                    .await,
+                OperationExecutor::new(odoo).execute(&operation).await,
             )
         }
         ToolName::Delete => {
@@ -395,6 +400,42 @@ mod tests {
         assert_eq!(
             requests[1]["params"]["args"][5][0],
             json!({"name": "Alpha"})
+        );
+    }
+
+    #[tokio::test]
+    async fn update_runs_through_the_operation_executor() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!(true)),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Update,
+            json!({"model": "res.partner", "ids": [7, 8], "vals": {"active": false}}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+        )
+        .await;
+
+        assert!(matches!(result, ToolExecutionResult::Success(value) if value == json!(true)));
+        let requests = server.requests().await;
+        assert_eq!(requests[1]["params"]["args"][3], "res.partner");
+        assert_eq!(requests[1]["params"]["args"][4], "write");
+        assert_eq!(requests[1]["params"]["args"][5][0], json!([7, 8]));
+        assert_eq!(
+            requests[1]["params"]["args"][5][1],
+            json!({"active": false})
         );
     }
 }
