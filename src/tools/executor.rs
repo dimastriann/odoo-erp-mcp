@@ -135,9 +135,14 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("copy", error),
             };
+            let payload = OperationPayload::new(json!({
+                "id": args.id,
+                "vals": args.vals,
+            }))
+            .expect("copy arguments always form an object payload");
+            let operation = Operation::new(OperationKind::Copy, args.model, payload);
             ToolExecutionResult::from_app_error(
-                odoo.copy(&args.model, args.id, Value::Object(args.vals))
-                    .await,
+                OperationExecutor::new(odoo).execute(&operation).await,
             )
         }
         ToolName::Update => {
@@ -474,5 +479,41 @@ mod tests {
         assert_eq!(requests[1]["params"]["args"][3], "res.partner");
         assert_eq!(requests[1]["params"]["args"][4], "unlink");
         assert_eq!(requests[1]["params"]["args"][5][0], json!([9, 10]));
+    }
+
+    #[tokio::test]
+    async fn copy_runs_through_the_operation_executor() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!(84)),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Copy,
+            json!({"model": "res.partner", "id": 42, "vals": {"name": "Alpha copy"}}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+        )
+        .await;
+
+        assert!(matches!(result, ToolExecutionResult::Success(value) if value == json!(84)));
+        let requests = server.requests().await;
+        assert_eq!(requests[1]["params"]["args"][3], "res.partner");
+        assert_eq!(requests[1]["params"]["args"][4], "copy");
+        assert_eq!(requests[1]["params"]["args"][5][0], 42);
+        assert_eq!(
+            requests[1]["params"]["args"][5][1],
+            json!({"name": "Alpha copy"})
+        );
     }
 }

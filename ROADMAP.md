@@ -275,7 +275,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 - [x] S4-07 — Migrate create operations to the executor.
 - [x] S4-08 — Migrate update operations to the executor.
 - [x] S4-09 — Migrate delete operations to the executor.
-- [ ] S4-10 — Migrate copy operations to the executor.
+- [x] S4-10 — Migrate copy operations to the executor.
 - [ ] S4-11 — Add operation-lifecycle tests.
 
 ## 4.2 Risk assessment
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 9/59 | Create, update, and delete mutations pass through the central executor. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 10/59 | All existing CRUD mutations pass through the central executor. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |
