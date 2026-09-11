@@ -19,6 +19,7 @@ pub(crate) enum RiskLevel {
 #[serde(default)]
 pub(crate) struct RiskPolicy {
     pub(crate) models: BTreeMap<String, RiskLevel>,
+    pub(crate) fields: BTreeMap<String, BTreeMap<String, RiskLevel>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -32,7 +33,8 @@ impl RiskEvaluator {
     }
 
     pub(crate) fn classify(&self, operation: &Operation) -> RiskLevel {
-        self.policy
+        let default = self
+            .policy
             .models
             .get(&operation.model)
             .copied()
@@ -40,7 +42,21 @@ impl RiskEvaluator {
                 OperationKind::Create | OperationKind::Copy => RiskLevel::Low,
                 OperationKind::Update => RiskLevel::Medium,
                 OperationKind::Delete => RiskLevel::High,
-            })
+            });
+
+        self.field_override(operation).unwrap_or(default)
+    }
+
+    fn field_override(&self, operation: &Operation) -> Option<RiskLevel> {
+        let configured = self.policy.fields.get(&operation.model)?;
+        operation
+            .payload
+            .as_value()
+            .get("vals")?
+            .as_object()?
+            .keys()
+            .filter_map(|field| configured.get(field).copied())
+            .max()
     }
 }
 
@@ -107,6 +123,7 @@ mod tests {
                 ("res.partner".to_string(), RiskLevel::High),
                 ("mail.message".to_string(), RiskLevel::Low),
             ]),
+            ..RiskPolicy::default()
         });
         let create = operation(OperationKind::Create);
         let delete = Operation::new(
@@ -117,5 +134,30 @@ mod tests {
 
         assert_eq!(evaluator.classify(&create), RiskLevel::High);
         assert_eq!(evaluator.classify(&delete), RiskLevel::Low);
+    }
+
+    #[test]
+    fn highest_matching_field_override_wins() {
+        let evaluator = RiskEvaluator::new(RiskPolicy {
+            models: BTreeMap::from([("res.partner".to_string(), RiskLevel::Low)]),
+            fields: BTreeMap::from([(
+                "res.partner".to_string(),
+                BTreeMap::from([
+                    ("name".to_string(), RiskLevel::Medium),
+                    ("credit_limit".to_string(), RiskLevel::Critical),
+                ]),
+            )]),
+        });
+        let operation = Operation::new(
+            OperationKind::Update,
+            "res.partner",
+            OperationPayload::new(json!({
+                "ids": [7],
+                "vals": {"name": "Alpha", "credit_limit": 5000}
+            }))
+            .unwrap(),
+        );
+
+        assert_eq!(evaluator.classify(&operation), RiskLevel::Critical);
     }
 }
