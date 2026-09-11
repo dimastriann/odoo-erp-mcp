@@ -282,7 +282,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 
 - [x] S4-12 — Define low, medium, high, and critical risk levels.
 - [x] S4-13 — Classify risk by operation type.
-- [ ] S4-14 — Add model-specific risk overrides.
+- [x] S4-14 — Add model-specific risk overrides.
 - [ ] S4-15 — Add field-specific risk overrides.
 - [ ] S4-16 — Add bulk-operation thresholds.
 - [ ] S4-17 — Classify financial workflows as high or critical risk.
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 13/59 | Mutation types receive conservative default risk levels. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 14/59 | Model-specific policy can override default operation risk. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

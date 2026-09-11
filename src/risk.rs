@@ -1,6 +1,7 @@
 #![allow(dead_code)] // Risk evaluation is integrated incrementally through S4-19.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::operation::{Operation, OperationKind};
 
@@ -14,16 +15,32 @@ pub(crate) enum RiskLevel {
     Critical,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub(crate) struct RiskPolicy {
+    pub(crate) models: BTreeMap<String, RiskLevel>,
+}
+
 #[derive(Clone, Debug, Default)]
-pub(crate) struct RiskEvaluator;
+pub(crate) struct RiskEvaluator {
+    policy: RiskPolicy,
+}
 
 impl RiskEvaluator {
+    pub(crate) fn new(policy: RiskPolicy) -> Self {
+        Self { policy }
+    }
+
     pub(crate) fn classify(&self, operation: &Operation) -> RiskLevel {
-        match operation.kind {
-            OperationKind::Create | OperationKind::Copy => RiskLevel::Low,
-            OperationKind::Update => RiskLevel::Medium,
-            OperationKind::Delete => RiskLevel::High,
-        }
+        self.policy
+            .models
+            .get(&operation.model)
+            .copied()
+            .unwrap_or(match operation.kind {
+                OperationKind::Create | OperationKind::Copy => RiskLevel::Low,
+                OperationKind::Update => RiskLevel::Medium,
+                OperationKind::Delete => RiskLevel::High,
+            })
     }
 }
 
@@ -63,7 +80,7 @@ mod tests {
 
     #[test]
     fn mutation_types_have_conservative_default_risk() {
-        let evaluator = RiskEvaluator;
+        let evaluator = RiskEvaluator::default();
 
         assert_eq!(
             evaluator.classify(&operation(OperationKind::Create)),
@@ -81,5 +98,24 @@ mod tests {
             evaluator.classify(&operation(OperationKind::Delete)),
             RiskLevel::High
         );
+    }
+
+    #[test]
+    fn model_overrides_replace_operation_defaults() {
+        let evaluator = RiskEvaluator::new(RiskPolicy {
+            models: BTreeMap::from([
+                ("res.partner".to_string(), RiskLevel::High),
+                ("mail.message".to_string(), RiskLevel::Low),
+            ]),
+        });
+        let create = operation(OperationKind::Create);
+        let delete = Operation::new(
+            OperationKind::Delete,
+            "mail.message",
+            OperationPayload::new(json!({})).unwrap(),
+        );
+
+        assert_eq!(evaluator.classify(&create), RiskLevel::High);
+        assert_eq!(evaluator.classify(&delete), RiskLevel::Low);
     }
 }
