@@ -112,7 +112,7 @@ impl RiskEvaluator {
                 operation_default.as_str()
             ),
         };
-        let class_level = match operation.class {
+        let class_floor = match operation.class {
             OperationClass::Write => None,
             OperationClass::Read => Some(RiskLevel::Low),
             OperationClass::Workflow => Some(RiskLevel::High),
@@ -122,17 +122,6 @@ impl RiskEvaluator {
             OperationClass::Financial => Some(RiskLevel::High),
             OperationClass::Admin => Some(RiskLevel::Critical),
         };
-        if let Some(level) = class_level {
-            assessment = RiskAssessment {
-                level,
-                source: RiskSource::OperationClass,
-                reason: format!(
-                    "operation class '{}' requires {} risk",
-                    operation_class_name(operation.class),
-                    level.as_str()
-                ),
-            };
-        }
         if let Some(level) = self.policy.models.get(&operation.model).copied() {
             assessment = RiskAssessment {
                 level,
@@ -152,6 +141,19 @@ impl RiskEvaluator {
                     "field override '{}.{}' sets {} risk",
                     operation.model,
                     field,
+                    level.as_str()
+                ),
+            };
+        }
+        if let Some(level) = class_floor
+            && level > assessment.level
+        {
+            assessment = RiskAssessment {
+                level,
+                source: RiskSource::OperationClass,
+                reason: format!(
+                    "operation class '{}' requires at least {} risk",
+                    operation_class_name(operation.class),
                     level.as_str()
                 ),
             };
@@ -421,6 +423,120 @@ mod tests {
         assert_eq!(
             assessment.reason,
             "field override 'res.partner.credit_limit' sets critical risk"
+        );
+    }
+
+    #[test]
+    fn risk_matrix_covers_defaults_and_protected_class_floors() {
+        struct Case {
+            kind: OperationKind,
+            class: OperationClass,
+            expected_level: RiskLevel,
+            expected_source: RiskSource,
+        }
+
+        let cases = [
+            Case {
+                kind: OperationKind::Create,
+                class: OperationClass::Write,
+                expected_level: RiskLevel::Low,
+                expected_source: RiskSource::OperationType,
+            },
+            Case {
+                kind: OperationKind::Update,
+                class: OperationClass::Write,
+                expected_level: RiskLevel::Medium,
+                expected_source: RiskSource::OperationType,
+            },
+            Case {
+                kind: OperationKind::Delete,
+                class: OperationClass::Write,
+                expected_level: RiskLevel::High,
+                expected_source: RiskSource::OperationType,
+            },
+            Case {
+                kind: OperationKind::Create,
+                class: OperationClass::Workflow,
+                expected_level: RiskLevel::High,
+                expected_source: RiskSource::OperationClass,
+            },
+            Case {
+                kind: OperationKind::Update,
+                class: OperationClass::Financial,
+                expected_level: RiskLevel::High,
+                expected_source: RiskSource::OperationClass,
+            },
+            Case {
+                kind: OperationKind::Delete,
+                class: OperationClass::Financial,
+                expected_level: RiskLevel::Critical,
+                expected_source: RiskSource::OperationClass,
+            },
+            Case {
+                kind: OperationKind::Create,
+                class: OperationClass::Admin,
+                expected_level: RiskLevel::Critical,
+                expected_source: RiskSource::OperationClass,
+            },
+        ];
+        let low_override = RiskEvaluator::new(RiskPolicy {
+            models: BTreeMap::from([("res.partner".to_string(), RiskLevel::Low)]),
+            ..RiskPolicy::default()
+        });
+        let defaults = RiskEvaluator::default();
+
+        for case in cases {
+            let operation = operation(case.kind).classified(case.class);
+            let evaluator = if case.class == OperationClass::Write {
+                &defaults
+            } else {
+                &low_override
+            };
+            let assessment = evaluator.assess(&operation);
+
+            assert_eq!(assessment.level, case.expected_level);
+            assert_eq!(assessment.source, case.expected_source);
+            assert!(!assessment.reason.is_empty());
+        }
+    }
+
+    #[test]
+    fn risk_matrix_honors_scope_and_bulk_precedence() {
+        let evaluator = RiskEvaluator::new(RiskPolicy {
+            models: BTreeMap::from([("res.partner".to_string(), RiskLevel::High)]),
+            fields: BTreeMap::from([(
+                "res.partner".to_string(),
+                BTreeMap::from([("name".to_string(), RiskLevel::Medium)]),
+            )]),
+            bulk: BulkRiskThresholds {
+                medium: 2,
+                high: 3,
+                critical: 4,
+            },
+        });
+        let make_update = |ids: Vec<i64>, vals| {
+            Operation::new(
+                OperationKind::Update,
+                "res.partner",
+                OperationPayload::new(json!({"ids": ids, "vals": vals})).unwrap(),
+            )
+        };
+
+        let model = evaluator.assess(&make_update(vec![1], json!({"active": false})));
+        let field = evaluator.assess(&make_update(vec![1], json!({"name": "Alpha"})));
+        let bulk = evaluator.assess(&make_update(vec![1, 2, 3, 4], json!({"name": "Alpha"})));
+
+        assert_eq!(
+            (model.level, model.source),
+            (RiskLevel::High, RiskSource::ModelOverride)
+        );
+        assert_eq!(
+            (field.level, field.source),
+            (RiskLevel::Medium, RiskSource::FieldOverride)
+        );
+        assert_eq!(
+            (bulk.level, bulk.source),
+            (RiskLevel::Critical, RiskSource::BulkThreshold)
         );
     }
 }
