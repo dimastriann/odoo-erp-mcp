@@ -128,6 +128,11 @@ impl Operation {
             payload_hash,
         }
     }
+
+    pub(crate) fn classified(mut self, class: OperationClass) -> Self {
+        self.class = class;
+        self
+    }
 }
 
 /// Single execution boundary for mutations that have passed lifecycle checks.

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use crate::operation::{Operation, OperationKind};
+use crate::operation::{Operation, OperationClass, OperationKind};
 
 /// Ordered severity assigned to an operation before execution.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -66,16 +66,27 @@ impl RiskEvaluator {
     }
 
     pub(crate) fn classify(&self, operation: &Operation) -> RiskLevel {
+        let operation_default = match operation.kind {
+            OperationKind::Create | OperationKind::Copy => RiskLevel::Low,
+            OperationKind::Update => RiskLevel::Medium,
+            OperationKind::Delete => RiskLevel::High,
+        };
+        let class_default = match operation.class {
+            OperationClass::Read => RiskLevel::Low,
+            OperationClass::Write => operation_default,
+            OperationClass::Workflow => RiskLevel::High,
+            OperationClass::Financial if operation.kind == OperationKind::Delete => {
+                RiskLevel::Critical
+            }
+            OperationClass::Financial => RiskLevel::High,
+            OperationClass::Admin => RiskLevel::Critical,
+        };
         let default = self
             .policy
             .models
             .get(&operation.model)
             .copied()
-            .unwrap_or(match operation.kind {
-                OperationKind::Create | OperationKind::Copy => RiskLevel::Low,
-                OperationKind::Update => RiskLevel::Medium,
-                OperationKind::Delete => RiskLevel::High,
-            });
+            .unwrap_or(class_default);
 
         let scoped = self.field_override(operation).unwrap_or(default);
         scoped.max(self.policy.bulk.classify(affected_record_count(operation)))
@@ -252,5 +263,35 @@ mod tests {
         );
 
         assert_eq!(evaluator.classify(&operation), RiskLevel::Critical);
+    }
+
+    #[test]
+    fn financial_workflows_are_high_or_critical_risk() {
+        let evaluator = RiskEvaluator::default();
+        let post = Operation::new(
+            OperationKind::Update,
+            "account.move",
+            OperationPayload::new(json!({"ids": [7], "vals": {"state": "posted"}})).unwrap(),
+        )
+        .classified(OperationClass::Financial);
+        let remove = Operation::new(
+            OperationKind::Delete,
+            "account.move",
+            OperationPayload::new(json!({"ids": [7]})).unwrap(),
+        )
+        .classified(OperationClass::Financial);
+
+        assert_eq!(evaluator.classify(&post), RiskLevel::High);
+        assert_eq!(evaluator.classify(&remove), RiskLevel::Critical);
+    }
+
+    #[test]
+    fn admin_operations_are_always_critical_by_default() {
+        let operation = operation(OperationKind::Create).classified(OperationClass::Admin);
+
+        assert_eq!(
+            RiskEvaluator::default().classify(&operation),
+            RiskLevel::Critical
+        );
     }
 }
