@@ -20,6 +20,39 @@ pub(crate) enum RiskLevel {
 pub(crate) struct RiskPolicy {
     pub(crate) models: BTreeMap<String, RiskLevel>,
     pub(crate) fields: BTreeMap<String, BTreeMap<String, RiskLevel>>,
+    pub(crate) bulk: BulkRiskThresholds,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub(crate) struct BulkRiskThresholds {
+    pub(crate) medium: usize,
+    pub(crate) high: usize,
+    pub(crate) critical: usize,
+}
+
+impl Default for BulkRiskThresholds {
+    fn default() -> Self {
+        Self {
+            medium: 10,
+            high: 100,
+            critical: 1_000,
+        }
+    }
+}
+
+impl BulkRiskThresholds {
+    fn classify(&self, record_count: usize) -> RiskLevel {
+        if record_count >= self.critical {
+            RiskLevel::Critical
+        } else if record_count >= self.high {
+            RiskLevel::High
+        } else if record_count >= self.medium {
+            RiskLevel::Medium
+        } else {
+            RiskLevel::Low
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -44,7 +77,8 @@ impl RiskEvaluator {
                 OperationKind::Delete => RiskLevel::High,
             });
 
-        self.field_override(operation).unwrap_or(default)
+        let scoped = self.field_override(operation).unwrap_or(default);
+        scoped.max(self.policy.bulk.classify(affected_record_count(operation)))
     }
 
     fn field_override(&self, operation: &Operation) -> Option<RiskLevel> {
@@ -57,6 +91,18 @@ impl RiskEvaluator {
             .keys()
             .filter_map(|field| configured.get(field).copied())
             .max()
+    }
+}
+
+fn affected_record_count(operation: &Operation) -> usize {
+    match operation.kind {
+        OperationKind::Create | OperationKind::Copy => 1,
+        OperationKind::Update | OperationKind::Delete => operation
+            .payload
+            .as_value()
+            .get("ids")
+            .and_then(|ids| ids.as_array())
+            .map_or(0, Vec::len),
     }
 }
 
@@ -147,6 +193,7 @@ mod tests {
                     ("credit_limit".to_string(), RiskLevel::Critical),
                 ]),
             )]),
+            ..RiskPolicy::default()
         });
         let operation = Operation::new(
             OperationKind::Update,
@@ -156,6 +203,52 @@ mod tests {
                 "vals": {"name": "Alpha", "credit_limit": 5000}
             }))
             .unwrap(),
+        );
+
+        assert_eq!(evaluator.classify(&operation), RiskLevel::Critical);
+    }
+
+    #[test]
+    fn bulk_thresholds_escalate_multi_record_mutations() {
+        let evaluator = RiskEvaluator::new(RiskPolicy {
+            bulk: BulkRiskThresholds {
+                medium: 2,
+                high: 5,
+                critical: 10,
+            },
+            ..RiskPolicy::default()
+        });
+        let update = |count| {
+            Operation::new(
+                OperationKind::Update,
+                "res.partner",
+                OperationPayload::new(json!({
+                    "ids": (1..=count).collect::<Vec<i64>>(),
+                    "vals": {"active": false}
+                }))
+                .unwrap(),
+            )
+        };
+
+        assert_eq!(evaluator.classify(&update(1)), RiskLevel::Medium);
+        assert_eq!(evaluator.classify(&update(2)), RiskLevel::Medium);
+        assert_eq!(evaluator.classify(&update(5)), RiskLevel::High);
+        assert_eq!(evaluator.classify(&update(10)), RiskLevel::Critical);
+    }
+
+    #[test]
+    fn bulk_risk_never_downgrades_a_scoped_override() {
+        let evaluator = RiskEvaluator::new(RiskPolicy {
+            fields: BTreeMap::from([(
+                "res.partner".to_string(),
+                BTreeMap::from([("credit_limit".to_string(), RiskLevel::Critical)]),
+            )]),
+            ..RiskPolicy::default()
+        });
+        let operation = Operation::new(
+            OperationKind::Update,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [7], "vals": {"credit_limit": 1}})).unwrap(),
         );
 
         assert_eq!(evaluator.classify(&operation), RiskLevel::Critical);
