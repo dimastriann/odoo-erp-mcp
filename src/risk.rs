@@ -15,6 +15,34 @@ pub(crate) enum RiskLevel {
     Critical,
 }
 
+impl RiskLevel {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Critical => "critical",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RiskSource {
+    OperationType,
+    OperationClass,
+    ModelOverride,
+    FieldOverride,
+    BulkThreshold,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct RiskAssessment {
+    pub(crate) level: RiskLevel,
+    pub(crate) source: RiskSource,
+    pub(crate) reason: String,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub(crate) struct RiskPolicy {
@@ -66,33 +94,85 @@ impl RiskEvaluator {
     }
 
     pub(crate) fn classify(&self, operation: &Operation) -> RiskLevel {
+        self.assess(operation).level
+    }
+
+    pub(crate) fn assess(&self, operation: &Operation) -> RiskAssessment {
         let operation_default = match operation.kind {
             OperationKind::Create | OperationKind::Copy => RiskLevel::Low,
             OperationKind::Update => RiskLevel::Medium,
             OperationKind::Delete => RiskLevel::High,
         };
-        let class_default = match operation.class {
-            OperationClass::Read => RiskLevel::Low,
-            OperationClass::Write => operation_default,
-            OperationClass::Workflow => RiskLevel::High,
-            OperationClass::Financial if operation.kind == OperationKind::Delete => {
-                RiskLevel::Critical
-            }
-            OperationClass::Financial => RiskLevel::High,
-            OperationClass::Admin => RiskLevel::Critical,
+        let mut assessment = RiskAssessment {
+            level: operation_default,
+            source: RiskSource::OperationType,
+            reason: format!(
+                "operation type '{}' defaults to {} risk",
+                operation_kind_name(operation.kind),
+                operation_default.as_str()
+            ),
         };
-        let default = self
-            .policy
-            .models
-            .get(&operation.model)
-            .copied()
-            .unwrap_or(class_default);
+        let class_level = match operation.class {
+            OperationClass::Write => None,
+            OperationClass::Read => Some(RiskLevel::Low),
+            OperationClass::Workflow => Some(RiskLevel::High),
+            OperationClass::Financial if operation.kind == OperationKind::Delete => {
+                Some(RiskLevel::Critical)
+            }
+            OperationClass::Financial => Some(RiskLevel::High),
+            OperationClass::Admin => Some(RiskLevel::Critical),
+        };
+        if let Some(level) = class_level {
+            assessment = RiskAssessment {
+                level,
+                source: RiskSource::OperationClass,
+                reason: format!(
+                    "operation class '{}' requires {} risk",
+                    operation_class_name(operation.class),
+                    level.as_str()
+                ),
+            };
+        }
+        if let Some(level) = self.policy.models.get(&operation.model).copied() {
+            assessment = RiskAssessment {
+                level,
+                source: RiskSource::ModelOverride,
+                reason: format!(
+                    "model override '{}' sets {} risk",
+                    operation.model,
+                    level.as_str()
+                ),
+            };
+        }
+        if let Some((field, level)) = self.field_override(operation) {
+            assessment = RiskAssessment {
+                level,
+                source: RiskSource::FieldOverride,
+                reason: format!(
+                    "field override '{}.{}' sets {} risk",
+                    operation.model,
+                    field,
+                    level.as_str()
+                ),
+            };
+        }
+        let record_count = affected_record_count(operation);
+        let bulk_level = self.policy.bulk.classify(record_count);
+        if bulk_level > assessment.level {
+            assessment = RiskAssessment {
+                level: bulk_level,
+                source: RiskSource::BulkThreshold,
+                reason: format!(
+                    "bulk operation affecting {record_count} records requires {} risk",
+                    bulk_level.as_str()
+                ),
+            };
+        }
 
-        let scoped = self.field_override(operation).unwrap_or(default);
-        scoped.max(self.policy.bulk.classify(affected_record_count(operation)))
+        assessment
     }
 
-    fn field_override(&self, operation: &Operation) -> Option<RiskLevel> {
+    fn field_override(&self, operation: &Operation) -> Option<(String, RiskLevel)> {
         let configured = self.policy.fields.get(&operation.model)?;
         operation
             .payload
@@ -100,8 +180,32 @@ impl RiskEvaluator {
             .get("vals")?
             .as_object()?
             .keys()
-            .filter_map(|field| configured.get(field).copied())
-            .max()
+            .filter_map(|field| configured.get(field).copied().map(|level| (field, level)))
+            .max_by(|(left_field, left_level), (right_field, right_level)| {
+                left_level
+                    .cmp(right_level)
+                    .then_with(|| right_field.cmp(left_field))
+            })
+            .map(|(field, level)| (field.clone(), level))
+    }
+}
+
+const fn operation_kind_name(kind: OperationKind) -> &'static str {
+    match kind {
+        OperationKind::Create => "create",
+        OperationKind::Copy => "copy",
+        OperationKind::Update => "update",
+        OperationKind::Delete => "delete",
+    }
+}
+
+const fn operation_class_name(class: OperationClass) -> &'static str {
+    match class {
+        OperationClass::Read => "read",
+        OperationClass::Write => "write",
+        OperationClass::Workflow => "workflow",
+        OperationClass::Financial => "financial",
+        OperationClass::Admin => "admin",
     }
 }
 
@@ -292,6 +396,31 @@ mod tests {
         assert_eq!(
             RiskEvaluator::default().classify(&operation),
             RiskLevel::Critical
+        );
+    }
+
+    #[test]
+    fn assessments_explain_the_rule_that_won() {
+        let evaluator = RiskEvaluator::new(RiskPolicy {
+            fields: BTreeMap::from([(
+                "res.partner".to_string(),
+                BTreeMap::from([("credit_limit".to_string(), RiskLevel::Critical)]),
+            )]),
+            ..RiskPolicy::default()
+        });
+        let operation = Operation::new(
+            OperationKind::Update,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [7], "vals": {"credit_limit": 5000}})).unwrap(),
+        );
+
+        let assessment = evaluator.assess(&operation);
+
+        assert_eq!(assessment.level, RiskLevel::Critical);
+        assert_eq!(assessment.source, RiskSource::FieldOverride);
+        assert_eq!(
+            assessment.reason,
+            "field override 'res.partner.credit_limit' sets critical risk"
         );
     }
 }

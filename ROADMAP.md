@@ -286,7 +286,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 - [x] S4-15 — Add field-specific risk overrides.
 - [x] S4-16 — Add bulk-operation thresholds.
 - [x] S4-17 — Classify financial workflows as high or critical risk.
-- [ ] S4-18 — Return the reason for each risk classification.
+- [x] S4-18 — Return the reason for each risk classification.
 - [ ] S4-19 — Add risk-matrix tests.
 
 ## 4.3 Preview and validation
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 17/59 | Financial workflows are high risk and destructive financial actions are critical. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 18/59 | Every risk assessment identifies the winning rule and explains its decision. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |
