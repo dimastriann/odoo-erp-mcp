@@ -293,7 +293,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 
 - [x] S4-20 — Define the preview-response schema.
 - [x] S4-21 — Add create preview without writing to Odoo.
-- [ ] S4-22 — Add update preview with current and proposed values.
+- [x] S4-22 — Add update preview with current and proposed values.
 - [ ] S4-23 — Add delete preview with affected records.
 - [ ] S4-24 — Add bulk-operation summary preview.
 - [ ] S4-25 — Validate write payloads against model metadata.
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 21/59 | Create previews describe proposed values without a write request. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 22/59 | Update previews read current records and present proposed values without writing. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

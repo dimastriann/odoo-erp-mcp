@@ -1,6 +1,7 @@
 #![allow(dead_code)] // Preview generation is integrated incrementally through S4-28.
 
 use crate::operation::{Operation, OperationKind};
+use crate::{error::AppError, odoo::OdooClient};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -66,6 +67,48 @@ pub(crate) fn preview_create(operation: &Operation) -> PreviewResponse {
     preview
 }
 
+pub(crate) async fn preview_update(
+    odoo: &OdooClient,
+    operation: &Operation,
+) -> Result<PreviewResponse, AppError> {
+    debug_assert_eq!(operation.kind, OperationKind::Update);
+    let payload = operation.payload.as_value();
+    let ids = payload["ids"]
+        .as_array()
+        .expect("update operations always include ids")
+        .iter()
+        .map(|id| id.as_i64().expect("update operation IDs are integers"))
+        .collect::<Vec<_>>();
+    let vals = payload["vals"]
+        .as_object()
+        .expect("update operations always include vals");
+    let fields = Value::Array(
+        std::iter::once("id".to_string())
+            .chain(vals.keys().cloned())
+            .map(Value::String)
+            .collect(),
+    );
+    let current = odoo.read(&operation.model, ids.clone(), fields).await?;
+    let current = current.as_array().ok_or_else(|| {
+        AppError::protocol("Odoo update preview returned a non-array record list")
+    })?;
+    let mut preview = PreviewResponse::empty(operation);
+
+    for id in ids {
+        let existing = current
+            .iter()
+            .find(|record| record.get("id").and_then(Value::as_i64) == Some(id))
+            .cloned();
+        preview.affected_records.push(PreviewRecord {
+            id: Some(id),
+            current: existing,
+            proposed: Some(Value::Object(vals.clone())),
+        });
+    }
+    preview.summary.affected_count = preview.affected_records.len();
+    Ok(preview)
+}
+
 pub(crate) const fn operation_name(kind: OperationKind) -> &'static str {
     match kind {
         OperationKind::Create => "create",
@@ -79,6 +122,7 @@ pub(crate) const fn operation_name(kind: OperationKind) -> &'static str {
 mod tests {
     use super::*;
     use crate::operation::OperationPayload;
+    use crate::test_support::{MockOdooServer, authentication_success, json_rpc_success};
     use serde_json::json;
 
     #[test]
@@ -122,5 +166,42 @@ mod tests {
             preview.affected_records[0].proposed,
             Some(json!({"name": "Alpha"}))
         );
+    }
+
+    #[tokio::test]
+    async fn update_preview_reads_current_records_without_writing() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!([{"id": 7, "name": "Before"}])),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let operation = Operation::new(
+            OperationKind::Update,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [7], "vals": {"name": "After"}})).unwrap(),
+        );
+
+        let preview = preview_update(&client, &operation).await.unwrap();
+
+        assert_eq!(preview.affected_records[0].id, Some(7));
+        assert_eq!(
+            preview.affected_records[0].current,
+            Some(json!({"id": 7, "name": "Before"}))
+        );
+        assert_eq!(
+            preview.affected_records[0].proposed,
+            Some(json!({"name": "After"}))
+        );
+        let requests = server.requests().await;
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[1]["params"]["args"][4], "read");
     }
 }
