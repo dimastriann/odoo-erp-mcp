@@ -6,6 +6,7 @@ mod mcp;
 mod odoo;
 mod operation;
 mod policy;
+mod preview;
 mod risk;
 mod secret;
 #[cfg(test)]
