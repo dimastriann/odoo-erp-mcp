@@ -47,6 +47,25 @@ impl PreviewResponse {
     }
 }
 
+pub(crate) fn preview_create(operation: &Operation) -> PreviewResponse {
+    debug_assert_eq!(operation.kind, OperationKind::Create);
+    let mut preview = PreviewResponse::empty(operation);
+    let vals = operation
+        .payload
+        .as_value()
+        .get("vals")
+        .cloned()
+        .expect("create operations always include vals");
+
+    preview.affected_records.push(PreviewRecord {
+        id: None,
+        current: None,
+        proposed: Some(vals),
+    });
+    preview.summary.affected_count = 1;
+    preview
+}
+
 pub(crate) const fn operation_name(kind: OperationKind) -> &'static str {
     match kind {
         OperationKind::Create => "create",
@@ -83,6 +102,25 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("not a transactional dry run")
+        );
+    }
+
+    #[test]
+    fn create_preview_describes_values_without_a_record_id() {
+        let operation = Operation::new(
+            OperationKind::Create,
+            "res.partner",
+            OperationPayload::new(json!({"vals": {"name": "Alpha"}})).unwrap(),
+        );
+
+        let preview = preview_create(&operation);
+
+        assert_eq!(preview.summary.affected_count, 1);
+        assert_eq!(preview.affected_records[0].id, None);
+        assert_eq!(preview.affected_records[0].current, None);
+        assert_eq!(
+            preview.affected_records[0].proposed,
+            Some(json!({"name": "Alpha"}))
         );
     }
 }
