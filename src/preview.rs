@@ -13,6 +13,8 @@ pub(crate) struct PreviewResponse {
     pub(crate) model: String,
     pub(crate) affected_records: Vec<PreviewRecord>,
     pub(crate) summary: PreviewSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) bulk_summary: Option<BulkPreviewSummary>,
     pub(crate) warnings: Vec<String>,
 }
 
@@ -29,6 +31,13 @@ pub(crate) struct PreviewSummary {
     pub(crate) estimated: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct BulkPreviewSummary {
+    pub(crate) requested_count: usize,
+    pub(crate) found_count: usize,
+    pub(crate) missing_count: usize,
+}
+
 impl PreviewResponse {
     pub(crate) fn empty(operation: &Operation) -> Self {
         Self {
@@ -40,6 +49,7 @@ impl PreviewResponse {
                 affected_count: 0,
                 estimated: true,
             },
+            bulk_summary: None,
             warnings: vec![
                 "Preview is not a transactional dry run; Odoo state may change before execution."
                     .to_string(),
@@ -106,6 +116,7 @@ pub(crate) async fn preview_update(
         });
     }
     preview.summary.affected_count = preview.affected_records.len();
+    add_bulk_summary(&mut preview);
     Ok(preview)
 }
 
@@ -144,7 +155,26 @@ pub(crate) async fn preview_delete(
         });
     }
     preview.summary.affected_count = preview.affected_records.len();
+    add_bulk_summary(&mut preview);
     Ok(preview)
+}
+
+fn add_bulk_summary(preview: &mut PreviewResponse) {
+    let requested_count = preview.affected_records.len();
+    if requested_count <= 1 {
+        return;
+    }
+
+    let found_count = preview
+        .affected_records
+        .iter()
+        .filter(|record| record.current.is_some())
+        .count();
+    preview.bulk_summary = Some(BulkPreviewSummary {
+        requested_count,
+        found_count,
+        missing_count: requested_count - found_count,
+    });
 }
 
 pub(crate) const fn operation_name(kind: OperationKind) -> &'static str {
@@ -276,5 +306,43 @@ mod tests {
         let requests = server.requests().await;
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[1]["params"]["args"][4], "read");
+    }
+
+    #[test]
+    fn bulk_preview_summarizes_found_and_missing_records() {
+        let operation = Operation::new(
+            OperationKind::Delete,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [7, 8, 9]})).unwrap(),
+        );
+        let mut preview = PreviewResponse::empty(&operation);
+        preview.affected_records = vec![
+            PreviewRecord {
+                id: Some(7),
+                current: Some(json!({"id": 7})),
+                proposed: None,
+            },
+            PreviewRecord {
+                id: Some(8),
+                current: None,
+                proposed: None,
+            },
+            PreviewRecord {
+                id: Some(9),
+                current: Some(json!({"id": 9})),
+                proposed: None,
+            },
+        ];
+
+        add_bulk_summary(&mut preview);
+
+        assert_eq!(
+            preview.bulk_summary,
+            Some(BulkPreviewSummary {
+                requested_count: 3,
+                found_count: 2,
+                missing_count: 1,
+            })
+        );
     }
 }
