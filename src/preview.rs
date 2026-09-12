@@ -109,6 +109,44 @@ pub(crate) async fn preview_update(
     Ok(preview)
 }
 
+pub(crate) async fn preview_delete(
+    odoo: &OdooClient,
+    operation: &Operation,
+) -> Result<PreviewResponse, AppError> {
+    debug_assert_eq!(operation.kind, OperationKind::Delete);
+    let ids = operation.payload.as_value()["ids"]
+        .as_array()
+        .expect("delete operations always include ids")
+        .iter()
+        .map(|id| id.as_i64().expect("delete operation IDs are integers"))
+        .collect::<Vec<_>>();
+    let current = odoo
+        .read(
+            &operation.model,
+            ids.clone(),
+            serde_json::json!(["id", "display_name"]),
+        )
+        .await?;
+    let current = current.as_array().ok_or_else(|| {
+        AppError::protocol("Odoo delete preview returned a non-array record list")
+    })?;
+    let mut preview = PreviewResponse::empty(operation);
+
+    for id in ids {
+        let existing = current
+            .iter()
+            .find(|record| record.get("id").and_then(Value::as_i64) == Some(id))
+            .cloned();
+        preview.affected_records.push(PreviewRecord {
+            id: Some(id),
+            current: existing,
+            proposed: None,
+        });
+    }
+    preview.summary.affected_count = preview.affected_records.len();
+    Ok(preview)
+}
+
 pub(crate) const fn operation_name(kind: OperationKind) -> &'static str {
     match kind {
         OperationKind::Create => "create",
@@ -200,6 +238,41 @@ mod tests {
             preview.affected_records[0].proposed,
             Some(json!({"name": "After"}))
         );
+        let requests = server.requests().await;
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[1]["params"]["args"][4], "read");
+    }
+
+    #[tokio::test]
+    async fn delete_preview_reads_affected_records_without_writing() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!([{"id": 9, "display_name": "Alpha"}])),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let operation = Operation::new(
+            OperationKind::Delete,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [9]})).unwrap(),
+        );
+
+        let preview = preview_delete(&client, &operation).await.unwrap();
+
+        assert_eq!(preview.summary.affected_count, 1);
+        assert_eq!(preview.affected_records[0].id, Some(9));
+        assert_eq!(
+            preview.affected_records[0].current,
+            Some(json!({"id": 9, "display_name": "Alpha"}))
+        );
+        assert_eq!(preview.affected_records[0].proposed, None);
         let requests = server.requests().await;
         assert_eq!(requests.len(), 2);
         assert_eq!(requests[1]["params"]["args"][4], "read");
