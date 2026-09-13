@@ -31,6 +31,7 @@ pub(crate) enum ApprovalState {
     Approved,
     Rejected,
     Expired,
+    Consumed,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -174,6 +175,16 @@ impl ApprovalRequest {
         self.state = ApprovalState::Rejected;
         Ok(())
     }
+
+    pub(crate) fn consume(&mut self) -> Result<(), AppError> {
+        if self.state != ApprovalState::Approved {
+            return Err(AppError::authorization(
+                "Only approved approvals can be consumed",
+            ));
+        }
+        self.state = ApprovalState::Consumed;
+        Ok(())
+    }
 }
 
 fn _path_is_supported(path: &Path) -> bool {
@@ -258,5 +269,7 @@ mod tests {
         request.approve().unwrap();
         assert_eq!(request.state, ApprovalState::Approved);
         assert!(request.reject().is_err());
+        request.consume().unwrap();
+        assert!(request.consume().is_err());
     }
 }
