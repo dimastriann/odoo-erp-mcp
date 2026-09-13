@@ -299,7 +299,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 - [x] S4-25 — Validate write payloads against model metadata.
 - [x] S4-26 — Mark computed and default values as estimates.
 - [x] S4-27 — Document that preview is not a transactional dry run.
-- [ ] S4-28 — Add preview and validation tests.
+- [x] S4-28 — Add preview and validation tests.
 
 ## 4.4 Durable approval protocol
 
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 27/59 | Preview documentation explains non-transactional behavior and estimate limits. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 28/59 | Section 4.3 complete with preview, metadata validation, and regression coverage. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

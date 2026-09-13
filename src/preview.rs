@@ -299,6 +299,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn create_preview_marks_computed_fields_and_never_calls_create() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!({"total": {"compute": true, "default": null}})),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let operation = Operation::new(
+            OperationKind::Create,
+            "sale.order",
+            OperationPayload::new(json!({"vals": {"total": 100}})).unwrap(),
+        );
+
+        let preview = preview_create(&client, &operation).await.unwrap();
+
+        assert_eq!(preview.estimated_fields, vec!["total"]);
+        assert!(
+            preview
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("estimates"))
+        );
+        let requests = server.requests().await;
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[1]["params"]["args"][4], "fields_get");
+    }
+
+    #[tokio::test]
     async fn update_preview_reads_current_records_without_writing() {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
