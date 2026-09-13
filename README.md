@@ -248,6 +248,20 @@ is to deny every operation. After verification, remove `mode` and
 `allowed_tools` in a later cleanup; they may remain during the transition but
 are ignored whenever `permissions` is present.
 
+#### Mutation preview semantics
+
+Mutation previews describe the values and records that the server expects an
+operation to affect. They are useful for review and future approval flows, but
+they are **not transactional dry runs**: Odoo can change between preview and
+execution because another user, automation, scheduled job, or business rule may
+modify the same records. A preview therefore never guarantees that execution
+will succeed, affect the same records, or yield identical computed/default
+values. Review high-risk previews immediately before approving an operation.
+
+Computed and defaulted fields are explicitly marked as estimates. The server
+retrieves metadata and existing records read-only when needed, but a preview
+never performs the requested create, update, copy, or delete mutation.
+
 ### MCP Communication Flow
 
 ```mermaid
