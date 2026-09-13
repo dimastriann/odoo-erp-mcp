@@ -8,6 +8,7 @@ createApp({
         const loginError = ref('');
         const formError = ref('');
         const config = ref({ global_settings: { default_mode: 'crud' }, instances: [], prompts: [] });
+        const approvals = ref([]);
         const serverVersion = ref('—');
         const instanceSearch = ref('');
         const showInstanceModal = ref(false);
@@ -34,6 +35,8 @@ createApp({
             const response = await api('/api/config');
             if (!response.ok) return;
             config.value = await response.json();
+            const approvalResponse = await api('/api/approvals');
+            if (approvalResponse.ok) approvals.value = (await approvalResponse.json()).approvals || [];
             authenticated.value = true;
         }
 
@@ -144,6 +147,6 @@ createApp({
         function toggleDarkMode() { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light'); document.documentElement.classList.toggle('light', !isDark.value); }
 
         onMounted(() => { document.documentElement.classList.toggle('light', !isDark.value); fetchVersion(); fetchConfig(); });
-        return { isDark, authenticated, loginForm, loginError, formError, config, serverVersion, instanceSearch, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, capabilities, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode };
+        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, serverVersion, instanceSearch, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, capabilities, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode };
     }
 }).mount('#app');

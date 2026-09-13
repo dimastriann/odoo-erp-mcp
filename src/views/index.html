@@ -32,6 +32,7 @@
             <nav>
                 <a href="#instances">Instances <span>{{ config.instances.length }}</span></a>
                 <a href="#prompts">Prompts <span>{{ config.prompts.length }}</span></a>
+                <a href="#approvals">Approvals <span>{{ approvals.length }}</span></a>
             </nav>
             <div class="sidebar-footer">
                 <span class="version-label">Version {{ serverVersion }}</span>
@@ -76,6 +77,11 @@
                 <div class="section-heading"><div><h2>AI prompts</h2><p class="muted text-sm">Reusable instructions exposed through MCP.</p></div><button @click="openPromptModal()" class="button primary">+ Add prompt</button></div>
                 <div class="prompt-grid"><article v-for="p in config.prompts" :key="p.id" class="panel prompt-card"><div><h3>{{ p.name }}</h3><p class="muted prompt-preview">{{ p.content }}</p></div><div class="actions"><button @click="openPromptModal(p)" class="button ghost">Edit</button><button @click="deletePrompt(p.id)" class="button danger">Delete</button></div></article></div>
                 <div v-if="!config.prompts.length" class="empty panel"><h3>No prompts yet</h3><p class="muted">Create a reusable prompt for your MCP clients.</p></div>
+            </section>
+            <section id="approvals" class="section-block">
+                <div class="section-heading"><div><p class="eyebrow">Safety</p><h2>Approval inbox</h2></div></div>
+                <div v-if="!approvals.length" class="empty panel"><h3>No pending approvals</h3><p class="muted">Approved mutation requests will appear here for review.</p></div>
+                <div v-else class="prompt-grid"><article v-for="approval in approvals" :key="approval.id" class="panel prompt-card"><h3>{{ approval.operation_id }}</h3><p class="muted">{{ approval.state }}</p></article></div>
             </section>
         </main>
 

@@ -47,6 +47,7 @@ pub async fn start_ui(config: SharedConfig) {
 
     let protected = Router::new()
         .route("/api/config", get(get_config))
+        .route("/api/approvals", get(get_approvals))
         .route("/api/global-settings", post(update_global_settings))
         .route("/api/instances", post(add_instance))
         .route("/api/instances/{id}", delete(delete_instance))
@@ -176,6 +177,10 @@ async fn version() -> Json<Value> {
 async fn get_config(State(state): State<AppState>) -> Json<Value> {
     let config = state.config.read().unwrap();
     Json(redacted_config_value(&config))
+}
+
+async fn get_approvals() -> Json<Value> {
+    Json(json!({"approvals": []}))
 }
 
 fn redacted_config_value(config: &Config) -> Value {
