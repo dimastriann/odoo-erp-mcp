@@ -13,6 +13,7 @@ pub(crate) struct PreviewResponse {
     pub(crate) model: String,
     pub(crate) affected_records: Vec<PreviewRecord>,
     pub(crate) summary: PreviewSummary,
+    pub(crate) estimated_fields: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) bulk_summary: Option<BulkPreviewSummary>,
     pub(crate) warnings: Vec<String>,
@@ -49,6 +50,7 @@ impl PreviewResponse {
                 affected_count: 0,
                 estimated: true,
             },
+            estimated_fields: Vec::new(),
             bulk_summary: None,
             warnings: vec![
                 "Preview is not a transactional dry run; Odoo state may change before execution."
@@ -58,7 +60,10 @@ impl PreviewResponse {
     }
 }
 
-pub(crate) fn preview_create(operation: &Operation) -> PreviewResponse {
+pub(crate) async fn preview_create(
+    odoo: &OdooClient,
+    operation: &Operation,
+) -> Result<PreviewResponse, AppError> {
     debug_assert_eq!(operation.kind, OperationKind::Create);
     let mut preview = PreviewResponse::empty(operation);
     let vals = operation
@@ -74,7 +79,8 @@ pub(crate) fn preview_create(operation: &Operation) -> PreviewResponse {
         proposed: Some(vals),
     });
     preview.summary.affected_count = 1;
-    preview
+    apply_metadata_estimates(odoo, operation, &mut preview).await?;
+    Ok(preview)
 }
 
 pub(crate) async fn preview_update(
@@ -117,7 +123,50 @@ pub(crate) async fn preview_update(
     }
     preview.summary.affected_count = preview.affected_records.len();
     add_bulk_summary(&mut preview);
+    apply_metadata_estimates(odoo, operation, &mut preview).await?;
     Ok(preview)
+}
+
+async fn apply_metadata_estimates(
+    odoo: &OdooClient,
+    operation: &Operation,
+    preview: &mut PreviewResponse,
+) -> Result<(), AppError> {
+    let Some(vals) = operation
+        .payload
+        .as_value()
+        .get("vals")
+        .and_then(Value::as_object)
+    else {
+        return Ok(());
+    };
+    let fields = Value::Array(vals.keys().cloned().map(Value::String).collect());
+    let metadata = odoo.get_metadata(&operation.model, fields).await?;
+    let metadata = metadata.as_object().ok_or_else(|| {
+        AppError::protocol("Odoo preview metadata returned a non-object field definition")
+    })?;
+
+    preview.estimated_fields = vals
+        .keys()
+        .filter(|field| metadata.get(*field).is_some_and(field_is_estimated))
+        .cloned()
+        .collect();
+    if !preview.estimated_fields.is_empty() {
+        preview.warnings.push(
+            "Computed or defaulted fields are estimates and may differ after Odoo applies business logic."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn field_is_estimated(definition: &Value) -> bool {
+    definition
+        .get("compute")
+        .is_some_and(|value| value.as_bool().unwrap_or(!value.is_null()))
+        || definition
+            .get("default")
+            .is_some_and(|value| !value.is_null())
 }
 
 pub(crate) async fn preview_delete(
@@ -217,15 +266,28 @@ mod tests {
         );
     }
 
-    #[test]
-    fn create_preview_describes_values_without_a_record_id() {
+    #[tokio::test]
+    async fn create_preview_describes_values_without_a_record_id() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!({"name": {"compute": false, "default": null}})),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
         let operation = Operation::new(
             OperationKind::Create,
             "res.partner",
             OperationPayload::new(json!({"vals": {"name": "Alpha"}})).unwrap(),
         );
 
-        let preview = preview_create(&operation);
+        let preview = preview_create(&client, &operation).await.unwrap();
 
         assert_eq!(preview.summary.affected_count, 1);
         assert_eq!(preview.affected_records[0].id, None);
@@ -241,6 +303,7 @@ mod tests {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
             json_rpc_success(json!([{"id": 7, "name": "Before"}])),
+            json_rpc_success(json!({"name": {"compute": true, "default": null}})),
         ])
         .await;
         let client = OdooClient::new(
@@ -268,9 +331,11 @@ mod tests {
             preview.affected_records[0].proposed,
             Some(json!({"name": "After"}))
         );
+        assert_eq!(preview.estimated_fields, vec!["name"]);
         let requests = server.requests().await;
-        assert_eq!(requests.len(), 2);
+        assert_eq!(requests.len(), 3);
         assert_eq!(requests[1]["params"]["args"][4], "read");
+        assert_eq!(requests[2]["params"]["args"][4], "fields_get");
     }
 
     #[tokio::test]
