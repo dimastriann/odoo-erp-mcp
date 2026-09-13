@@ -404,7 +404,7 @@ impl OdooClient {
                 model,
                 "fields_get",
                 [fields],
-                { "attributes": ["string", "help", "type", "relation", "selection", "required"] }
+                { "attributes": ["string", "help", "type", "relation", "selection", "required", "readonly"] }
             ]
         });
 

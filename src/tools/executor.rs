@@ -382,6 +382,7 @@ mod tests {
     async fn create_runs_through_the_operation_executor() {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
+            json_rpc_success(json!({"name": {"readonly": false}})),
             json_rpc_success(json!(42)),
         ])
         .await;
@@ -405,10 +406,10 @@ mod tests {
 
         assert!(matches!(result, ToolExecutionResult::Success(value) if value == json!(42)));
         let requests = server.requests().await;
-        assert_eq!(requests[1]["params"]["args"][3], "res.partner");
-        assert_eq!(requests[1]["params"]["args"][4], "create");
+        assert_eq!(requests[2]["params"]["args"][3], "res.partner");
+        assert_eq!(requests[2]["params"]["args"][4], "create");
         assert_eq!(
-            requests[1]["params"]["args"][5][0],
+            requests[2]["params"]["args"][5][0],
             json!({"name": "Alpha"})
         );
     }
@@ -417,6 +418,7 @@ mod tests {
     async fn update_runs_through_the_operation_executor() {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
+            json_rpc_success(json!({"active": {"readonly": false}})),
             json_rpc_success(json!(true)),
         ])
         .await;
@@ -440,11 +442,11 @@ mod tests {
 
         assert!(matches!(result, ToolExecutionResult::Success(value) if value == json!(true)));
         let requests = server.requests().await;
-        assert_eq!(requests[1]["params"]["args"][3], "res.partner");
-        assert_eq!(requests[1]["params"]["args"][4], "write");
-        assert_eq!(requests[1]["params"]["args"][5][0], json!([7, 8]));
+        assert_eq!(requests[2]["params"]["args"][3], "res.partner");
+        assert_eq!(requests[2]["params"]["args"][4], "write");
+        assert_eq!(requests[2]["params"]["args"][5][0], json!([7, 8]));
         assert_eq!(
-            requests[1]["params"]["args"][5][1],
+            requests[2]["params"]["args"][5][1],
             json!({"active": false})
         );
     }
@@ -485,6 +487,7 @@ mod tests {
     async fn copy_runs_through_the_operation_executor() {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
+            json_rpc_success(json!({"name": {"readonly": false}})),
             json_rpc_success(json!(84)),
         ])
         .await;
@@ -508,11 +511,11 @@ mod tests {
 
         assert!(matches!(result, ToolExecutionResult::Success(value) if value == json!(84)));
         let requests = server.requests().await;
-        assert_eq!(requests[1]["params"]["args"][3], "res.partner");
-        assert_eq!(requests[1]["params"]["args"][4], "copy");
-        assert_eq!(requests[1]["params"]["args"][5][0], 42);
+        assert_eq!(requests[2]["params"]["args"][3], "res.partner");
+        assert_eq!(requests[2]["params"]["args"][4], "copy");
+        assert_eq!(requests[2]["params"]["args"][5][0], 42);
         assert_eq!(
-            requests[1]["params"]["args"][5][1],
+            requests[2]["params"]["args"][5][1],
             json!({"name": "Alpha copy"})
         );
     }

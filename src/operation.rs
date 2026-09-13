@@ -151,27 +151,31 @@ impl<'a> OperationExecutor<'a> {
             .as_value()
             .as_object()
             .expect("operation payloads always have an object root");
-
         match operation.kind {
             OperationKind::Create => {
+                self.validate_write_payload(operation, payload).await?;
                 self.odoo
                     .create(&operation.model, required_value(payload, "vals")?.clone())
                     .await
             }
             OperationKind::Copy => {
+                let id = required_i64(payload, "id")?;
+                self.validate_write_payload(operation, payload).await?;
                 self.odoo
                     .copy(
                         &operation.model,
-                        required_i64(payload, "id")?,
+                        id,
                         required_value(payload, "vals")?.clone(),
                     )
                     .await
             }
             OperationKind::Update => {
+                let ids = required_ids(payload)?;
+                self.validate_write_payload(operation, payload).await?;
                 self.odoo
                     .update(
                         &operation.model,
-                        required_ids(payload)?,
+                        ids,
                         required_value(payload, "vals")?.clone(),
                     )
                     .await
@@ -182,6 +186,45 @@ impl<'a> OperationExecutor<'a> {
                     .await
             }
         }
+    }
+
+    async fn validate_write_payload(
+        &self,
+        operation: &Operation,
+        payload: &Map<String, Value>,
+    ) -> Result<(), AppError> {
+        let Some(vals) = payload.get("vals").and_then(Value::as_object) else {
+            return Ok(());
+        };
+        let fields = Value::Array(vals.keys().cloned().map(Value::String).collect());
+        let metadata = self.odoo.get_metadata(&operation.model, fields).await?;
+        let metadata = metadata.as_object().ok_or_else(|| {
+            AppError::protocol("Odoo write validation returned a non-object field definition")
+        })?;
+
+        for field in vals.keys() {
+            let definition = metadata
+                .get(field)
+                .and_then(Value::as_object)
+                .ok_or_else(|| {
+                    AppError::input_validation(format!(
+                        "Unknown field '{field}' for model '{}'",
+                        operation.model
+                    ))
+                })?;
+            if definition
+                .get("readonly")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                return Err(AppError::input_validation(format!(
+                    "Field '{field}' on model '{}' is read-only",
+                    operation.model
+                )));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -325,6 +368,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn executor_rejects_unknown_and_read_only_fields_before_writing() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!({"name": {"readonly": true}})),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let operation = Operation::new(
+            OperationKind::Create,
+            "res.partner",
+            OperationPayload::new(json!({"vals": {"name": "Alpha"}})).unwrap(),
+        );
+
+        let result = OperationExecutor::new(&client).execute(&operation).await;
+
+        assert!(matches!(result, Err(AppError::InputValidation { .. })));
+        assert!(result.unwrap_err().to_string().contains("read-only"));
+        assert_eq!(server.requests().await.len(), 2);
+    }
+
+    #[tokio::test]
     async fn invalid_lifecycle_payloads_never_reach_odoo() {
         let server = MockOdooServer::start(authentication_success(7)).await;
         let client = OdooClient::new(
@@ -367,6 +438,7 @@ mod tests {
     async fn lifecycle_preserves_envelope_and_odoo_error_category() {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
+            json_rpc_success(json!({"name": {"readonly": false}})),
             validation_error("Duplicate reference"),
         ])
         .await;
@@ -389,13 +461,14 @@ mod tests {
 
         assert!(matches!(result, Err(AppError::OdooValidation { .. })));
         assert_eq!(operation, before_execution);
-        assert_eq!(server.requests().await.len(), 2);
+        assert_eq!(server.requests().await.len(), 3);
     }
 
     #[tokio::test]
     async fn lifecycle_returns_success_without_rewriting_the_envelope() {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
+            json_rpc_success(json!({"name": {"readonly": false}})),
             json_rpc_success(json!(42)),
         ])
         .await;
