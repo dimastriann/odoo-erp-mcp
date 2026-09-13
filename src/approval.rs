@@ -74,6 +74,15 @@ impl ApprovalRequest {
         now >= self.expires_at
     }
 
+    pub(crate) fn expire_if_due(&mut self, now: i64) -> bool {
+        if self.state == ApprovalState::Pending && self.is_expired(now) {
+            self.state = ApprovalState::Expired;
+            true
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn ensure_matches(
         &self,
         operation: &Operation,
@@ -279,5 +288,16 @@ mod tests {
         assert!(request.reject().is_err());
         request.consume().unwrap();
         assert!(request.consume().is_err());
+    }
+
+    #[test]
+    fn pending_approval_expires_once_deadline_is_reached() {
+        let mut request =
+            ApprovalRequest::for_operation(&operation(), &context(None, "prod"), 1, 10).unwrap();
+        assert!(!request.expire_if_due(10));
+        assert!(request.expire_if_due(11));
+        assert_eq!(request.state, ApprovalState::Expired);
+        assert!(!request.expire_if_due(11));
+        assert!(request.approve().is_err());
     }
 }
