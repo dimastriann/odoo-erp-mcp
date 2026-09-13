@@ -58,7 +58,7 @@ impl OperationPayload {
         &self.0
     }
 
-    fn hash(&self) -> PayloadHash {
+    pub(crate) fn hash(&self) -> PayloadHash {
         let bytes = serde_json::to_vec(&self.0).expect("normalized JSON must serialize");
         PayloadHash(Sha256::digest(bytes).into())
     }

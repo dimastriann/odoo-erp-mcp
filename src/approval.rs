@@ -84,7 +84,9 @@ impl ApprovalRequest {
                 "Approval is bound to another operation",
             ));
         }
-        if self.payload_hash != operation.payload_hash.to_string() {
+        if self.payload_hash != operation.payload.hash().to_string()
+            || self.payload_hash != operation.payload_hash.to_string()
+        {
             return Err(AppError::authorization(
                 "Operation payload changed after approval",
             ));
@@ -235,7 +237,13 @@ mod tests {
         let owner = context(Some("u1"), "prod");
         let request = ApprovalRequest::for_operation(&op, &owner, 100, 60).unwrap();
         assert!(request.ensure_matches(&op, &owner).is_ok());
-        assert!(request.ensure_matches(&operation(), &owner).is_err());
+        let mut changed = op.clone();
+        changed.payload = OperationPayload::new(json!({
+            "ids": [1],
+            "vals": {"name": "B"}
+        }))
+        .unwrap();
+        assert!(request.ensure_matches(&changed, &owner).is_err());
         assert!(
             request
                 .ensure_matches(&op, &context(Some("u2"), "prod"))
