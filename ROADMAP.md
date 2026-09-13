@@ -309,7 +309,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 - [x] S4-32 — Bind approval to the operation payload hash.
 - [x] S4-33 — Bind approval to the actor and instance.
 - [x] S4-34 — Add approval expiration.
-- [ ] S4-35 — Add approved and rejected states.
+- [x] S4-35 — Add approved and rejected states.
 - [ ] S4-36 — Enforce single-use execution.
 - [ ] S4-37 — Reject payload modifications after approval.
 - [ ] S4-38 — Add approval-timeout handling.
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 34/59 | Sections 4.1–4.3 complete; durable approval schema, storage, binding, and expiration are in place. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 35/59 | Sections 4.1–4.3 complete; approval protocol state transitions are underway. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

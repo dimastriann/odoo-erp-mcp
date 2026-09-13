@@ -100,6 +100,7 @@ impl ApprovalRequest {
 pub(crate) trait ApprovalStorage {
     fn insert(&mut self, request: ApprovalRequest) -> Result<(), AppError>;
     fn get(&self, id: ApprovalId) -> Result<Option<ApprovalRequest>, AppError>;
+    fn update(&mut self, request: ApprovalRequest) -> Result<(), AppError>;
 }
 
 #[derive(Debug)]
@@ -140,6 +141,38 @@ impl ApprovalStorage for LocalApprovalStorage {
 
     fn get(&self, id: ApprovalId) -> Result<Option<ApprovalRequest>, AppError> {
         Ok(self.records.get(&id).cloned())
+    }
+
+    fn update(&mut self, request: ApprovalRequest) -> Result<(), AppError> {
+        if !self.records.contains_key(&request.id) {
+            return Err(AppError::input_validation(
+                "Approval request does not exist",
+            ));
+        }
+        self.records.insert(request.id, request);
+        self.persist()
+    }
+}
+
+impl ApprovalRequest {
+    pub(crate) fn approve(&mut self) -> Result<(), AppError> {
+        if self.state != ApprovalState::Pending {
+            return Err(AppError::authorization(
+                "Only pending approvals can be approved",
+            ));
+        }
+        self.state = ApprovalState::Approved;
+        Ok(())
+    }
+
+    pub(crate) fn reject(&mut self) -> Result<(), AppError> {
+        if self.state != ApprovalState::Pending {
+            return Err(AppError::authorization(
+                "Only pending approvals can be rejected",
+            ));
+        }
+        self.state = ApprovalState::Rejected;
+        Ok(())
     }
 }
 
@@ -216,5 +249,14 @@ mod tests {
         let reopened = LocalApprovalStorage::open(&path).unwrap();
         assert_eq!(reopened.get(id).unwrap(), Some(request));
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn approval_state_transitions_are_guarded() {
+        let mut request =
+            ApprovalRequest::for_operation(&operation(), &context(None, "prod"), 1, 10).unwrap();
+        request.approve().unwrap();
+        assert_eq!(request.state, ApprovalState::Approved);
+        assert!(request.reject().is_err());
     }
 }
