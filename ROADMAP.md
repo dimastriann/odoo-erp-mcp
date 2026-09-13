@@ -313,7 +313,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 - [x] S4-36 — Enforce single-use execution.
 - [x] S4-37 — Reject payload modifications after approval.
 - [x] S4-38 — Add approval-timeout handling.
-- [ ] S4-39 — Add concurrency and replay tests.
+- [x] S4-39 — Add concurrency and replay tests.
 - [ ] S4-40 — Integrate an approval inbox into the admin UI.
 
 ## 4.5 Idempotency
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 38/59 | Approval state, single-use consumption, payload integrity, and timeout handling are implemented. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 39/59 | Approval protocol guards are covered by state, integrity, timeout, replay, and concurrency tests. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

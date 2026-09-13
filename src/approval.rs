@@ -300,4 +300,24 @@ mod tests {
         assert!(!request.expire_if_due(11));
         assert!(request.approve().is_err());
     }
+
+    #[test]
+    fn concurrent_consumers_allow_only_one_replay() {
+        use std::sync::{Arc, Mutex};
+        let mut request =
+            ApprovalRequest::for_operation(&operation(), &context(None, "prod"), 1, 10).unwrap();
+        request.approve().unwrap();
+        let shared = Arc::new(Mutex::new(request));
+        let first = Arc::clone(&shared);
+        let second = Arc::clone(&shared);
+        let handles = [first, second].into_iter().map(|candidate| {
+            std::thread::spawn(move || candidate.lock().unwrap().consume().is_ok())
+        });
+        let successes = handles
+            .map(|handle| handle.join().unwrap())
+            .filter(|success| *success)
+            .count();
+        assert_eq!(successes, 1);
+        assert_eq!(shared.lock().unwrap().state, ApprovalState::Consumed);
+    }
 }
