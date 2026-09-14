@@ -1,6 +1,8 @@
 #![allow(dead_code)] // Idempotency is integrated incrementally through Section 4.5.
 
+use crate::context::RequestContext;
 use crate::error::AppError;
+use crate::operation::Operation;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -48,6 +50,34 @@ pub(crate) struct IdempotencyRecord {
 }
 
 impl IdempotencyRecord {
+    pub(crate) fn for_operation(
+        key: IdempotencyKey,
+        operation: &Operation,
+        context: &RequestContext,
+        now: i64,
+        ttl_seconds: i64,
+    ) -> Result<Self, AppError> {
+        if ttl_seconds <= 0 {
+            return Err(AppError::input_validation(
+                "Idempotency TTL must be greater than zero",
+            ));
+        }
+        Ok(Self {
+            key,
+            actor_subject: context.actor.subject.clone(),
+            instance: context.instance.clone(),
+            payload_hash: operation.payload_hash.to_string(),
+            state: IdempotencyState::Pending,
+            result: None,
+            created_at: now,
+            expires_at: now.saturating_add(ttl_seconds),
+        })
+    }
+
+    pub(crate) fn scope_matches(&self, context: &RequestContext) -> bool {
+        self.actor_subject == context.actor.subject && self.instance == context.instance
+    }
+
     pub(crate) fn is_expired(&self, now: i64) -> bool {
         now >= self.expires_at
     }
@@ -62,6 +92,8 @@ pub(crate) trait IdempotencyStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::{ActorIdentity, ClientIdentity, IdentitySource};
+    use crate::operation::{OperationKind, OperationPayload};
     use std::collections::BTreeMap;
 
     struct MemoryStorage(BTreeMap<IdempotencyKey, IdempotencyRecord>);
@@ -127,5 +159,43 @@ mod tests {
         let mut storage = MemoryStorage(BTreeMap::new());
         storage.insert(record.clone()).unwrap();
         assert_eq!(storage.get(&key).unwrap(), Some(record));
+    }
+
+    #[test]
+    fn record_scope_is_bound_to_actor_and_instance() {
+        let context = RequestContext::identified(
+            ClientIdentity::default(),
+            Default::default(),
+            ActorIdentity::claimed(
+                Some("user-1".to_string()),
+                None,
+                IdentitySource::AuthenticatedTransport,
+            ),
+            "production".to_string(),
+        );
+        let operation = Operation::new(
+            OperationKind::Delete,
+            "res.partner",
+            OperationPayload::new(serde_json::json!({"ids": [1]})).unwrap(),
+        );
+        let record = IdempotencyRecord::for_operation(
+            IdempotencyKey::new("request-1").unwrap(),
+            &operation,
+            &context,
+            100,
+            60,
+        )
+        .unwrap();
+        assert!(record.scope_matches(&context));
+        assert!(!record.scope_matches(&RequestContext::identified(
+            ClientIdentity::default(),
+            Default::default(),
+            ActorIdentity::claimed(
+                Some("other".to_string()),
+                None,
+                IdentitySource::AuthenticatedTransport
+            ),
+            "production".to_string(),
+        )));
     }
 }
