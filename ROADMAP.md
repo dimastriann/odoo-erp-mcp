@@ -324,7 +324,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 - [x] S4-44 — Scope keys by actor and instance.
 - [x] S4-45 — Bind keys to payload hashes.
 - [x] S4-46 — Add pending, succeeded, failed, and unknown states.
-- [ ] S4-47 — Return stored results for completed requests.
+- [x] S4-47 — Return stored results for completed requests.
 - [ ] S4-48 — Reject key reuse with a different payload.
 - [ ] S4-49 — Add configurable TTL.
 - [ ] S4-50 — Add expired-record cleanup.
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 46/59 | Idempotency lifecycle states now enforce one terminal transition and retain results. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 47/59 | Idempotency records retain and replay successful results for completed requests. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

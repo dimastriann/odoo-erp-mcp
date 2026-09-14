@@ -95,6 +95,12 @@ impl IdempotencyRecord {
         self.transition_from_pending(IdempotencyState::Unknown, None)
     }
 
+    pub(crate) fn stored_result(&self) -> Option<&Value> {
+        (self.state == IdempotencyState::Succeeded)
+            .then_some(self.result.as_ref())
+            .flatten()
+    }
+
     fn transition_from_pending(
         &mut self,
         state: IdempotencyState,
@@ -250,6 +256,7 @@ mod tests {
         record.succeed(serde_json::json!({"id": 42})).unwrap();
         assert_eq!(record.state, IdempotencyState::Succeeded);
         assert_eq!(record.result, Some(serde_json::json!({"id": 42})));
+        assert_eq!(record.stored_result(), Some(&serde_json::json!({"id": 42})));
         assert!(record.mark_unknown().is_err());
     }
 }
