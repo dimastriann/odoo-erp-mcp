@@ -83,6 +83,33 @@ impl IdempotencyRecord {
             && self.payload_hash == operation.payload_hash.to_string()
     }
 
+    pub(crate) fn succeed(&mut self, result: Value) -> Result<(), AppError> {
+        self.transition_from_pending(IdempotencyState::Succeeded, Some(result))
+    }
+
+    pub(crate) fn fail(&mut self, result: Value) -> Result<(), AppError> {
+        self.transition_from_pending(IdempotencyState::Failed, Some(result))
+    }
+
+    pub(crate) fn mark_unknown(&mut self) -> Result<(), AppError> {
+        self.transition_from_pending(IdempotencyState::Unknown, None)
+    }
+
+    fn transition_from_pending(
+        &mut self,
+        state: IdempotencyState,
+        result: Option<Value>,
+    ) -> Result<(), AppError> {
+        if self.state != IdempotencyState::Pending {
+            return Err(AppError::authorization(
+                "Idempotency record is no longer pending",
+            ));
+        }
+        self.state = state;
+        self.result = result;
+        Ok(())
+    }
+
     pub(crate) fn is_expired(&self, now: i64) -> bool {
         now >= self.expires_at
     }
@@ -206,5 +233,23 @@ mod tests {
         let mut changed = operation.clone();
         changed.payload = OperationPayload::new(serde_json::json!({"ids": [2]})).unwrap();
         assert!(!record.payload_matches(&changed));
+    }
+
+    #[test]
+    fn idempotency_states_allow_one_terminal_transition() {
+        let mut record = IdempotencyRecord {
+            key: IdempotencyKey::new("request-1").unwrap(),
+            actor_subject: None,
+            instance: "test".to_string(),
+            payload_hash: "hash".to_string(),
+            state: IdempotencyState::Pending,
+            result: None,
+            created_at: 1,
+            expires_at: 2,
+        };
+        record.succeed(serde_json::json!({"id": 42})).unwrap();
+        assert_eq!(record.state, IdempotencyState::Succeeded);
+        assert_eq!(record.result, Some(serde_json::json!({"id": 42})));
+        assert!(record.mark_unknown().is_err());
     }
 }
