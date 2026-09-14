@@ -4,7 +4,7 @@ use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub(crate) struct IdempotencyKey(String);
 
 impl IdempotencyKey {
@@ -53,9 +53,34 @@ impl IdempotencyRecord {
     }
 }
 
+pub(crate) trait IdempotencyStorage {
+    fn insert(&mut self, record: IdempotencyRecord) -> Result<(), AppError>;
+    fn get(&self, key: &IdempotencyKey) -> Result<Option<IdempotencyRecord>, AppError>;
+    fn update(&mut self, record: IdempotencyRecord) -> Result<(), AppError>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
+
+    struct MemoryStorage(BTreeMap<IdempotencyKey, IdempotencyRecord>);
+
+    impl IdempotencyStorage for MemoryStorage {
+        fn insert(&mut self, record: IdempotencyRecord) -> Result<(), AppError> {
+            self.0.insert(record.key.clone(), record);
+            Ok(())
+        }
+
+        fn get(&self, key: &IdempotencyKey) -> Result<Option<IdempotencyRecord>, AppError> {
+            Ok(self.0.get(key).cloned())
+        }
+
+        fn update(&mut self, record: IdempotencyRecord) -> Result<(), AppError> {
+            self.0.insert(record.key.clone(), record);
+            Ok(())
+        }
+    }
 
     #[test]
     fn schema_preserves_state_scope_and_result() {
@@ -84,5 +109,23 @@ mod tests {
             IdempotencyKey::new("request-1").unwrap().to_string(),
             "request-1"
         );
+    }
+
+    #[test]
+    fn storage_contract_round_trips_records() {
+        let key = IdempotencyKey::new("request-1").unwrap();
+        let record = IdempotencyRecord {
+            key: key.clone(),
+            actor_subject: None,
+            instance: "test".to_string(),
+            payload_hash: "hash".to_string(),
+            state: IdempotencyState::Pending,
+            result: None,
+            created_at: 1,
+            expires_at: 2,
+        };
+        let mut storage = MemoryStorage(BTreeMap::new());
+        storage.insert(record.clone()).unwrap();
+        assert_eq!(storage.get(&key).unwrap(), Some(record));
     }
 }
