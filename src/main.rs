@@ -3,6 +3,7 @@ mod config;
 mod context;
 mod domain;
 mod error;
+mod idempotency;
 mod mcp;
 mod odoo;
 mod operation;
