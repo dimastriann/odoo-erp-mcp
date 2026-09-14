@@ -78,6 +78,11 @@ impl IdempotencyRecord {
         self.actor_subject == context.actor.subject && self.instance == context.instance
     }
 
+    pub(crate) fn payload_matches(&self, operation: &Operation) -> bool {
+        self.payload_hash == operation.payload.hash().to_string()
+            && self.payload_hash == operation.payload_hash.to_string()
+    }
+
     pub(crate) fn is_expired(&self, now: i64) -> bool {
         now >= self.expires_at
     }
@@ -197,5 +202,9 @@ mod tests {
             ),
             "production".to_string(),
         )));
+        assert!(record.payload_matches(&operation));
+        let mut changed = operation.clone();
+        changed.payload = OperationPayload::new(serde_json::json!({"ids": [2]})).unwrap();
+        assert!(!record.payload_matches(&changed));
     }
 }
