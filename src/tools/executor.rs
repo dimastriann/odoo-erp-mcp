@@ -1,5 +1,6 @@
 use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
+use crate::idempotency::IdempotencyKey;
 use crate::odoo::OdooClient;
 use crate::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
 use crate::tools::arguments::{
@@ -13,6 +14,13 @@ use crate::tools::protection::{QueryLimits, validate_response_record_count};
 use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::{Value, json};
+
+fn validate_idempotency_key(key: Option<&str>) -> Result<(), String> {
+    key.map(IdempotencyKey::new)
+        .transpose()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
 
 fn validate_query_domain(domain: &Value, limits: QueryLimits) -> Result<(), String> {
     validate_domain_security(
@@ -123,6 +131,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("create", error),
             };
+            if let Err(error) = validate_idempotency_key(args.idempotency_key.as_deref()) {
+                return ToolExecutionResult::invalid_arguments("create", error);
+            }
             let payload = OperationPayload::new(json!({ "vals": args.vals }))
                 .expect("create arguments always form an object payload");
             let operation = Operation::new(OperationKind::Create, args.model, payload);
@@ -135,6 +146,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("copy", error),
             };
+            if let Err(error) = validate_idempotency_key(args.idempotency_key.as_deref()) {
+                return ToolExecutionResult::invalid_arguments("copy", error);
+            }
             let payload = OperationPayload::new(json!({
                 "id": args.id,
                 "vals": args.vals,
@@ -150,6 +164,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("update", error),
             };
+            if let Err(error) = validate_idempotency_key(args.idempotency_key.as_deref()) {
+                return ToolExecutionResult::invalid_arguments("update", error);
+            }
             let payload = OperationPayload::new(json!({
                 "ids": args.ids,
                 "vals": args.vals,
@@ -165,6 +182,9 @@ pub(crate) async fn execute_tool(
                 Ok(args) => args,
                 Err(error) => return ToolExecutionResult::invalid_arguments("delete", error),
             };
+            if let Err(error) = validate_idempotency_key(args.idempotency_key.as_deref()) {
+                return ToolExecutionResult::invalid_arguments("delete", error);
+            }
             let payload = OperationPayload::new(json!({ "ids": args.ids }))
                 .expect("delete arguments always form an object payload");
             let operation = Operation::new(OperationKind::Delete, args.model, payload);

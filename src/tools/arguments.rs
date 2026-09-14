@@ -66,6 +66,8 @@ pub(crate) struct ReadArgs {
 pub(crate) struct CreateArgs {
     pub(crate) model: String,
     pub(crate) vals: Map<String, Value>,
+    #[serde(default)]
+    pub(crate) idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +75,8 @@ pub(crate) struct CopyArgs {
     pub(crate) model: String,
     pub(crate) id: i64,
     pub(crate) vals: Map<String, Value>,
+    #[serde(default)]
+    pub(crate) idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -80,12 +84,16 @@ pub(crate) struct UpdateArgs {
     pub(crate) model: String,
     pub(crate) ids: Vec<i64>,
     pub(crate) vals: Map<String, Value>,
+    #[serde(default)]
+    pub(crate) idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct DeleteArgs {
     pub(crate) model: String,
     pub(crate) ids: Vec<i64>,
+    #[serde(default)]
+    pub(crate) idempotency_key: Option<String>,
 }
 
 #[cfg(test)]
@@ -161,5 +169,22 @@ mod tests {
         }));
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn mutation_arguments_accept_optional_idempotency_keys() {
+        let create: CreateArgs = serde_json::from_value(json!({
+            "model": "res.partner",
+            "vals": {"name": "A"},
+            "idempotency_key": "retry-1"
+        }))
+        .unwrap();
+        assert_eq!(create.idempotency_key.as_deref(), Some("retry-1"));
+        let delete: DeleteArgs = serde_json::from_value(json!({
+            "model": "res.partner",
+            "ids": [1]
+        }))
+        .unwrap();
+        assert_eq!(delete.idempotency_key, None);
     }
 }

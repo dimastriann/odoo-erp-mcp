@@ -164,7 +164,8 @@ pub(crate) fn tool_definitions() -> Value {
                 "properties": {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string", "description": "The Odoo model name" },
-                    "vals": { "type": "object", "description": "Dictionary of fields to set" }
+                    "vals": { "type": "object", "description": "Dictionary of fields to set" },
+                    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Client key used to safely retry this mutation" }
                 },
                 "required": ["model", "vals"]
             }
@@ -178,7 +179,8 @@ pub(crate) fn tool_definitions() -> Value {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string" },
                     "id": { "type": "integer" },
-                    "vals": { "type": "object", "description": "Fields to override in the copy" }
+                    "vals": { "type": "object", "description": "Fields to override in the copy" },
+                    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Client key used to safely retry this mutation" }
                 },
                 "required": ["model", "id", "vals"]
             }
@@ -192,7 +194,8 @@ pub(crate) fn tool_definitions() -> Value {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string", "description": "The Odoo model name" },
                     "ids": { "type": "array", "items": { "type": "integer" }, "description": "List of record IDs to update" },
-                    "vals": { "type": "object", "description": "Dictionary of fields to update" }
+                    "vals": { "type": "object", "description": "Dictionary of fields to update" },
+                    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Client key used to safely retry this mutation" }
                 },
                 "required": ["model", "ids", "vals"]
             }
@@ -205,7 +208,8 @@ pub(crate) fn tool_definitions() -> Value {
                 "properties": {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "model": { "type": "string" },
-                    "ids": { "type": "array", "items": { "type": "integer" } }
+                    "ids": { "type": "array", "items": { "type": "integer" } },
+                    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256, "description": "Client key used to safely retry this mutation" }
                 },
                 "required": ["model", "ids"]
             }
