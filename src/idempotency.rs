@@ -135,6 +135,10 @@ impl IdempotencyRecord {
         self.transition_from_pending(IdempotencyState::Unknown, None)
     }
 
+    pub(crate) fn mark_post_send_timeout(&mut self) -> Result<(), AppError> {
+        self.mark_unknown()
+    }
+
     pub(crate) fn stored_result(&self) -> Option<&Value> {
         (self.state == IdempotencyState::Succeeded)
             .then_some(self.result.as_ref())
@@ -334,6 +338,22 @@ mod tests {
         assert_eq!(record.result, Some(serde_json::json!({"id": 42})));
         assert_eq!(record.stored_result(), Some(&serde_json::json!({"id": 42})));
         assert!(record.mark_unknown().is_err());
+    }
+
+    #[test]
+    fn post_send_timeout_is_recorded_as_unknown() {
+        let mut record = IdempotencyRecord {
+            key: IdempotencyKey::new("timeout").unwrap(),
+            actor_subject: None,
+            instance: "test".to_string(),
+            payload_hash: "hash".to_string(),
+            state: IdempotencyState::Pending,
+            result: None,
+            created_at: 1,
+            expires_at: 100,
+        };
+        record.mark_post_send_timeout().unwrap();
+        assert_eq!(record.state, IdempotencyState::Unknown);
     }
 
     #[test]
