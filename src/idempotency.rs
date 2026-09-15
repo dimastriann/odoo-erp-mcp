@@ -357,6 +357,41 @@ mod tests {
     }
 
     #[test]
+    fn replay_and_concurrency_guards_survive_recovery() {
+        use std::sync::{Arc, Mutex};
+        let record = IdempotencyRecord {
+            key: IdempotencyKey::new("replay").unwrap(),
+            actor_subject: None,
+            instance: "test".to_string(),
+            payload_hash: "hash".to_string(),
+            state: IdempotencyState::Succeeded,
+            result: Some(serde_json::json!({"id": 7})),
+            created_at: 1,
+            expires_at: 100,
+        };
+        let serialized = serde_json::to_vec(&record).unwrap();
+        let recovered: IdempotencyRecord = serde_json::from_slice(&serialized).unwrap();
+        assert_eq!(recovered.stored_result(), record.stored_result());
+
+        let pending = Arc::new(Mutex::new(IdempotencyRecord {
+            state: IdempotencyState::Pending,
+            ..record
+        }));
+        let attempts = [Arc::clone(&pending), Arc::clone(&pending)]
+            .into_iter()
+            .map(|candidate| {
+                std::thread::spawn(move || candidate.lock().unwrap().mark_unknown().is_ok())
+            });
+        assert_eq!(
+            attempts
+                .map(|attempt| attempt.join().unwrap())
+                .filter(|ok| *ok)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
     fn ttl_policy_is_configurable_and_validated() {
         assert_eq!(IdempotencyPolicy::default().ttl_seconds, 900);
         assert_eq!(IdempotencyPolicy::new(30).unwrap().ttl_seconds, 30);
