@@ -327,7 +327,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 - [x] S4-47 — Return stored results for completed requests.
 - [x] S4-48 — Reject key reuse with a different payload.
 - [x] S4-49 — Add configurable TTL.
-- [ ] S4-50 — Add expired-record cleanup.
+- [x] S4-50 — Add expired-record cleanup.
 - [ ] S4-51 — Treat post-send timeouts as an unknown state.
 - [ ] S4-52 — Add crash, replay, and concurrency tests.
 
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 49/59 | Idempotency reuse is protected by identity, payload, and configurable TTL policy. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 50/59 | Idempotency storage supports configurable TTL and expired-record cleanup. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

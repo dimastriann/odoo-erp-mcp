@@ -165,6 +165,34 @@ pub(crate) trait IdempotencyStorage {
     fn insert(&mut self, record: IdempotencyRecord) -> Result<(), AppError>;
     fn get(&self, key: &IdempotencyKey) -> Result<Option<IdempotencyRecord>, AppError>;
     fn update(&mut self, record: IdempotencyRecord) -> Result<(), AppError>;
+    fn remove_expired(&mut self, now: i64) -> Result<usize, AppError>;
+}
+
+#[derive(Default)]
+pub(crate) struct InMemoryIdempotencyStorage {
+    records: std::collections::BTreeMap<IdempotencyKey, IdempotencyRecord>,
+}
+
+impl IdempotencyStorage for InMemoryIdempotencyStorage {
+    fn insert(&mut self, record: IdempotencyRecord) -> Result<(), AppError> {
+        self.records.insert(record.key.clone(), record);
+        Ok(())
+    }
+
+    fn get(&self, key: &IdempotencyKey) -> Result<Option<IdempotencyRecord>, AppError> {
+        Ok(self.records.get(key).cloned())
+    }
+
+    fn update(&mut self, record: IdempotencyRecord) -> Result<(), AppError> {
+        self.records.insert(record.key.clone(), record);
+        Ok(())
+    }
+
+    fn remove_expired(&mut self, now: i64) -> Result<usize, AppError> {
+        let before = self.records.len();
+        self.records.retain(|_, record| !record.is_expired(now));
+        Ok(before - self.records.len())
+    }
 }
 
 #[cfg(test)]
@@ -189,6 +217,12 @@ mod tests {
         fn update(&mut self, record: IdempotencyRecord) -> Result<(), AppError> {
             self.0.insert(record.key.clone(), record);
             Ok(())
+        }
+
+        fn remove_expired(&mut self, now: i64) -> Result<usize, AppError> {
+            let before = self.0.len();
+            self.0.retain(|_, record| !record.is_expired(now));
+            Ok(before - self.0.len())
         }
     }
 
@@ -307,5 +341,31 @@ mod tests {
         assert_eq!(IdempotencyPolicy::default().ttl_seconds, 900);
         assert_eq!(IdempotencyPolicy::new(30).unwrap().ttl_seconds, 30);
         assert!(IdempotencyPolicy::new(0).is_err());
+    }
+
+    #[test]
+    fn cleanup_removes_only_expired_records() {
+        let mut storage = InMemoryIdempotencyStorage::default();
+        for (key, expiry) in [("old", 10), ("new", 100)] {
+            storage
+                .insert(IdempotencyRecord {
+                    key: IdempotencyKey::new(key).unwrap(),
+                    actor_subject: None,
+                    instance: "test".to_string(),
+                    payload_hash: "hash".to_string(),
+                    state: IdempotencyState::Succeeded,
+                    result: None,
+                    created_at: 1,
+                    expires_at: expiry,
+                })
+                .unwrap();
+        }
+        assert_eq!(storage.remove_expired(10).unwrap(), 1);
+        assert!(
+            storage
+                .get(&IdempotencyKey::new("new").unwrap())
+                .unwrap()
+                .is_some()
+        );
     }
 }
