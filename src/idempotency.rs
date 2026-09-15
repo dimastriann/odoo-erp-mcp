@@ -49,6 +49,28 @@ pub(crate) struct IdempotencyRecord {
     pub(crate) expires_at: i64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct IdempotencyPolicy {
+    pub(crate) ttl_seconds: i64,
+}
+
+impl Default for IdempotencyPolicy {
+    fn default() -> Self {
+        Self { ttl_seconds: 900 }
+    }
+}
+
+impl IdempotencyPolicy {
+    pub(crate) fn new(ttl_seconds: i64) -> Result<Self, AppError> {
+        if ttl_seconds <= 0 {
+            return Err(AppError::input_validation(
+                "Idempotency TTL must be greater than zero",
+            ));
+        }
+        Ok(Self { ttl_seconds })
+    }
+}
+
 impl IdempotencyRecord {
     pub(crate) fn for_operation(
         key: IdempotencyKey,
@@ -278,5 +300,12 @@ mod tests {
         assert_eq!(record.result, Some(serde_json::json!({"id": 42})));
         assert_eq!(record.stored_result(), Some(&serde_json::json!({"id": 42})));
         assert!(record.mark_unknown().is_err());
+    }
+
+    #[test]
+    fn ttl_policy_is_configurable_and_validated() {
+        assert_eq!(IdempotencyPolicy::default().ttl_seconds, 900);
+        assert_eq!(IdempotencyPolicy::new(30).unwrap().ttl_seconds, 30);
+        assert!(IdempotencyPolicy::new(0).is_err());
     }
 }
