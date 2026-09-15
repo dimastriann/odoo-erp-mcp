@@ -83,6 +83,24 @@ impl IdempotencyRecord {
             && self.payload_hash == operation.payload_hash.to_string()
     }
 
+    pub(crate) fn ensure_reuse_allowed(
+        &self,
+        operation: &Operation,
+        context: &RequestContext,
+    ) -> Result<(), AppError> {
+        if !self.scope_matches(context) {
+            return Err(AppError::authorization(
+                "Idempotency key belongs to another actor or instance",
+            ));
+        }
+        if !self.payload_matches(operation) {
+            return Err(AppError::authorization(
+                "Idempotency key was reused with a different payload",
+            ));
+        }
+        Ok(())
+    }
+
     pub(crate) fn succeed(&mut self, result: Value) -> Result<(), AppError> {
         self.transition_from_pending(IdempotencyState::Succeeded, Some(result))
     }
@@ -239,6 +257,8 @@ mod tests {
         let mut changed = operation.clone();
         changed.payload = OperationPayload::new(serde_json::json!({"ids": [2]})).unwrap();
         assert!(!record.payload_matches(&changed));
+        assert!(record.ensure_reuse_allowed(&operation, &context).is_ok());
+        assert!(record.ensure_reuse_allowed(&changed, &context).is_err());
     }
 
     #[test]
