@@ -226,4 +226,11 @@ mod tests {
         assert_eq!(outcome.execution, ExecutionStatus::Succeeded);
         assert_eq!(outcome.verification.status, VerificationStatus::Mismatch);
     }
+
+    #[test]
+    fn mismatch_and_unknown_statuses_are_distinct() {
+        assert_ne!(VerificationStatus::Mismatch, VerificationStatus::Unknown);
+        let encoded = serde_json::to_value(VerificationStatus::Unknown).unwrap();
+        assert_eq!(encoded, json!("unknown"));
+    }
 }
