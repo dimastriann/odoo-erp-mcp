@@ -2,7 +2,7 @@
 
 use crate::context::RequestContext;
 use crate::error::AppError;
-use crate::operation::Operation;
+use crate::lifecycle::operation::Operation;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -203,7 +203,7 @@ impl IdempotencyStorage for InMemoryIdempotencyStorage {
 mod tests {
     use super::*;
     use crate::context::{ActorIdentity, ClientIdentity, IdentitySource};
-    use crate::operation::{OperationKind, OperationPayload};
+    use crate::lifecycle::operation::{OperationKind, OperationPayload};
     use std::collections::BTreeMap;
 
     struct MemoryStorage(BTreeMap<IdempotencyKey, IdempotencyRecord>);

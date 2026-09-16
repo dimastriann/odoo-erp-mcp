@@ -1,8 +1,8 @@
 use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
-use crate::idempotency::IdempotencyKey;
+use crate::lifecycle::idempotency::IdempotencyKey;
+use crate::lifecycle::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
 use crate::odoo::OdooClient;
-use crate::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
 use crate::tools::arguments::{
     CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchArgs,
     SearchDomainArgs, SearchReadArgs, UpdateArgs,

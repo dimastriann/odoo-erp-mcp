@@ -1,14 +1,11 @@
-mod approval;
 mod config;
 mod context;
 mod domain;
 mod error;
-mod idempotency;
+mod lifecycle;
 mod mcp;
 mod odoo;
-mod operation;
 mod policy;
-mod preview;
 mod risk;
 mod secret;
 #[cfg(test)]

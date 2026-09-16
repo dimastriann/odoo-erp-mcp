@@ -2,7 +2,7 @@
 
 use crate::context::RequestContext;
 use crate::error::AppError;
-use crate::operation::Operation;
+use crate::lifecycle::operation::Operation;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -206,7 +206,7 @@ fn _path_is_supported(path: &Path) -> bool {
 mod tests {
     use super::*;
     use crate::context::{ActorIdentity, ClientIdentity, IdentitySource, RequestContext};
-    use crate::operation::{Operation, OperationKind, OperationPayload};
+    use crate::lifecycle::operation::{Operation, OperationKind, OperationPayload};
     use serde_json::json;
 
     fn context(subject: Option<&str>, instance: &str) -> RequestContext {

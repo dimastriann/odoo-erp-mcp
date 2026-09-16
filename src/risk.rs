@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-use crate::operation::{Operation, OperationClass, OperationKind};
+use crate::lifecycle::operation::{Operation, OperationClass, OperationKind};
 
 /// Ordered severity assigned to an operation before execution.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -226,7 +226,7 @@ fn affected_record_count(operation: &Operation) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operation::OperationPayload;
+    use crate::lifecycle::operation::OperationPayload;
     use serde_json::json;
 
     fn operation(kind: OperationKind) -> Operation {

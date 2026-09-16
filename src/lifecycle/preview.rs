@@ -1,6 +1,6 @@
 #![allow(dead_code)] // Preview generation is integrated incrementally through S4-28.
 
-use crate::operation::{Operation, OperationKind};
+use crate::lifecycle::operation::{Operation, OperationKind};
 use crate::{error::AppError, odoo::OdooClient};
 use serde::Serialize;
 use serde_json::Value;
@@ -238,7 +238,7 @@ pub(crate) const fn operation_name(kind: OperationKind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::operation::OperationPayload;
+    use crate::lifecycle::operation::OperationPayload;
     use crate::test_support::{MockOdooServer, authentication_success, json_rpc_success};
     use serde_json::json;
 
