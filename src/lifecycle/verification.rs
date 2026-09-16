@@ -109,8 +109,23 @@ pub(crate) async fn verify_update(
         result
             .mismatches
             .push("Not all updated records could be verified".to_string());
+    } else if records.as_array().is_some_and(|items| {
+        items
+            .iter()
+            .any(|record| !record_matches_values(record, &vals))
+    }) {
+        result.status = VerificationStatus::Mismatch;
+        result
+            .mismatches
+            .push("Updated fields do not match the requested values".to_string());
     }
     Ok(result)
+}
+
+fn record_matches_values(record: &Value, values: &serde_json::Map<String, Value>) -> bool {
+    values
+        .iter()
+        .all(|(field, expected)| record.get(field) == Some(expected))
 }
 
 pub(crate) async fn verify_delete(
@@ -167,5 +182,15 @@ mod tests {
     fn create_verification_requires_a_returned_record() {
         assert!(record_exists(&json!([{"id": 1}])));
         assert!(!record_exists(&json!([])));
+    }
+
+    #[test]
+    fn update_verification_compares_requested_fields() {
+        let values = serde_json::from_value(json!({"name": "Updated"})).unwrap();
+        assert!(record_matches_values(&json!({"name": "Updated"}), &values));
+        assert!(!record_matches_values(
+            &json!({"name": "Original"}),
+            &values
+        ));
     }
 }
