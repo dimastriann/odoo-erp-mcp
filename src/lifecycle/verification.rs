@@ -104,8 +104,8 @@ pub(crate) async fn verify_update(
         .await?;
     let mut result = VerificationResult::new(operation, VerificationStatus::Verified);
     result.checked_records = records.as_array().map_or(0, Vec::len);
-    if result.checked_records < ids.len() {
-        result.status = VerificationStatus::Partial;
+    if let Some(status) = classify_coverage(result.checked_records, ids.len()) {
+        result.status = status;
         result
             .mismatches
             .push("Not all updated records could be verified".to_string());
@@ -120,6 +120,10 @@ pub(crate) async fn verify_update(
             .push("Updated fields do not match the requested values".to_string());
     }
     Ok(result)
+}
+
+fn classify_coverage(checked: usize, expected: usize) -> Option<VerificationStatus> {
+    (checked < expected).then_some(VerificationStatus::Partial)
 }
 
 fn record_matches_values(record: &Value, values: &serde_json::Map<String, Value>) -> bool {
@@ -202,5 +206,11 @@ mod tests {
     fn delete_verification_requires_record_absence() {
         assert!(deleted_records_absent(&json!([])));
         assert!(!deleted_records_absent(&json!([{"id": 1}])));
+    }
+
+    #[test]
+    fn verification_reports_partial_coverage() {
+        assert_eq!(classify_coverage(1, 2), Some(VerificationStatus::Partial));
+        assert_eq!(classify_coverage(2, 2), None);
     }
 }
