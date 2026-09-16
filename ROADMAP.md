@@ -334,7 +334,7 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 ## 4.6 Post-action verification
 
 - [x] S4-53 — Define the verification-result schema.
-- [ ] S4-54 — Verify created records.
+- [x] S4-54 — Verify created records.
 - [ ] S4-55 — Verify updated fields.
 - [ ] S4-56 — Verify deleted-record absence.
 - [ ] S4-57 — Detect partial verification.
@@ -702,7 +702,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | In progress | 53/59 | Section 4.5 is complete; post-action verification schema and helpers are now defined. |
+| Stage 4 — Safe Mutation Lifecycle | In progress | 54/59 | Created-record post-action verification is implemented. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |

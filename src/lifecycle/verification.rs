@@ -71,13 +71,17 @@ pub(crate) async fn verify_create(
         .read(&operation.model, vec![created_id], json!(["id"]))
         .await?;
     result.checked_records = 1;
-    if !records.as_array().is_some_and(|items| !items.is_empty()) {
+    if !record_exists(&records) {
         result.status = VerificationStatus::Mismatch;
         result
             .mismatches
             .push(format!("Created record {created_id} was not found"));
     }
     Ok(result)
+}
+
+fn record_exists(records: &Value) -> bool {
+    records.as_array().is_some_and(|items| !items.is_empty())
 }
 
 pub(crate) async fn verify_update(
@@ -157,5 +161,11 @@ mod tests {
         assert!(result.is_success());
         assert_eq!(result.checked_records, 0);
         assert!(!result.operation_id.is_empty());
+    }
+
+    #[test]
+    fn create_verification_requires_a_returned_record() {
+        assert!(record_exists(&json!([{"id": 1}])));
+        assert!(!record_exists(&json!([])));
     }
 }
