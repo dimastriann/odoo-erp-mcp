@@ -144,13 +144,17 @@ pub(crate) async fn verify_delete(
         .await?;
     let mut result = VerificationResult::new(operation, VerificationStatus::Verified);
     result.checked_records = ids.len();
-    if records.as_array().is_some_and(|items| !items.is_empty()) {
+    if !deleted_records_absent(&records) {
         result.status = VerificationStatus::Mismatch;
         result
             .mismatches
             .push("Deleted records are still present".to_string());
     }
     Ok(result)
+}
+
+fn deleted_records_absent(records: &Value) -> bool {
+    records.as_array().is_none_or(Vec::is_empty)
 }
 
 pub(crate) fn operation_requires_verification(operation: &Operation) -> bool {
@@ -192,5 +196,11 @@ mod tests {
             &json!({"name": "Original"}),
             &values
         ));
+    }
+
+    #[test]
+    fn delete_verification_requires_record_absence() {
+        assert!(deleted_records_absent(&json!([])));
+        assert!(!deleted_records_absent(&json!([{"id": 1}])));
     }
 }
