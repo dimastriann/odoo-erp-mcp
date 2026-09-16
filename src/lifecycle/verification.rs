@@ -213,4 +213,17 @@ mod tests {
         assert_eq!(classify_coverage(1, 2), Some(VerificationStatus::Partial));
         assert_eq!(classify_coverage(2, 2), None);
     }
+
+    #[test]
+    fn lifecycle_outcome_keeps_execution_and_verification_separate() {
+        let operation = Operation::new(
+            OperationKind::Delete,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [1]})).unwrap(),
+        );
+        let verification = VerificationResult::new(&operation, VerificationStatus::Mismatch);
+        let outcome = LifecycleOutcome::new(ExecutionStatus::Succeeded, verification);
+        assert_eq!(outcome.execution, ExecutionStatus::Succeeded);
+        assert_eq!(outcome.verification.status, VerificationStatus::Mismatch);
+    }
 }
