@@ -1,6 +1,9 @@
 use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
-use crate::lifecycle::idempotency::IdempotencyKey;
+use crate::lifecycle::idempotency::{
+    IdempotencyKey, IdempotencyRecord, IdempotencyState, IdempotencyStorage,
+    InMemoryIdempotencyStorage,
+};
 use crate::lifecycle::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
 use crate::lifecycle::verification::{self, VerificationStatus};
 use crate::odoo::OdooClient;
@@ -15,12 +18,80 @@ use crate::tools::protection::{QueryLimits, validate_response_record_count};
 use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::{Value, json};
+use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn validate_idempotency_key(key: Option<&str>) -> Result<(), String> {
     key.map(IdempotencyKey::new)
         .transpose()
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+fn idempotency_storage() -> &'static Mutex<InMemoryIdempotencyStorage> {
+    static STORAGE: OnceLock<Mutex<InMemoryIdempotencyStorage>> = OnceLock::new();
+    STORAGE.get_or_init(|| Mutex::new(InMemoryIdempotencyStorage::default()))
+}
+
+fn now_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs() as i64)
+}
+
+async fn execute_idempotent(
+    odoo: &OdooClient,
+    operation: &Operation,
+    context: &RequestContext,
+    key: Option<String>,
+) -> Result<Value, AppError> {
+    let Some(key) = key else {
+        return execute_verified(odoo, operation).await;
+    };
+    let key = IdempotencyKey::new(key)?;
+    {
+        let mut storage = idempotency_storage()
+            .lock()
+            .map_err(|_| AppError::internal("Idempotency storage lock is poisoned"))?;
+        if let Some(existing) = storage.get(&key)? {
+            existing.ensure_reuse_allowed(operation, context)?;
+            match existing.state {
+                IdempotencyState::Succeeded => {
+                    return existing
+                        .stored_result()
+                        .cloned()
+                        .ok_or_else(|| AppError::internal("Stored idempotency result is missing"));
+                }
+                IdempotencyState::Pending => {
+                    return Err(AppError::authorization(
+                        "An identical idempotent request is already in progress",
+                    ));
+                }
+                IdempotencyState::Failed | IdempotencyState::Unknown => {
+                    return Err(AppError::internal(
+                        "Idempotent request has an unresolved state",
+                    ));
+                }
+                IdempotencyState::Expired => {}
+            }
+        }
+        let record =
+            IdempotencyRecord::for_operation(key.clone(), operation, context, now_seconds(), 900)?;
+        storage.insert(record)?;
+    }
+    let result = execute_verified(odoo, operation).await;
+    let mut storage = idempotency_storage()
+        .lock()
+        .map_err(|_| AppError::internal("Idempotency storage lock is poisoned"))?;
+    let mut record = storage
+        .get(&key)?
+        .ok_or_else(|| AppError::internal("Idempotency record disappeared during execution"))?;
+    match &result {
+        Ok(value) => record.succeed(value.clone())?,
+        Err(error) => record.fail(json!({"error": error.to_string()}))?,
+    }
+    storage.update(record)?;
+    result
 }
 
 async fn execute_verified(odoo: &OdooClient, operation: &Operation) -> Result<Value, AppError> {
@@ -159,7 +230,9 @@ pub(crate) async fn execute_tool(
             let payload = OperationPayload::new(json!({ "vals": args.vals }))
                 .expect("create arguments always form an object payload");
             let operation = Operation::new(OperationKind::Create, args.model, payload);
-            ToolExecutionResult::from_app_error(execute_verified(odoo, &operation).await)
+            ToolExecutionResult::from_app_error(
+                execute_idempotent(odoo, &operation, _context, args.idempotency_key).await,
+            )
         }
         ToolName::Copy => {
             let args: CopyArgs = match serde_json::from_value(arguments) {
@@ -175,7 +248,9 @@ pub(crate) async fn execute_tool(
             }))
             .expect("copy arguments always form an object payload");
             let operation = Operation::new(OperationKind::Copy, args.model, payload);
-            ToolExecutionResult::from_app_error(execute_verified(odoo, &operation).await)
+            ToolExecutionResult::from_app_error(
+                execute_idempotent(odoo, &operation, _context, args.idempotency_key).await,
+            )
         }
         ToolName::Update => {
             let args: UpdateArgs = match serde_json::from_value(arguments) {
@@ -191,7 +266,9 @@ pub(crate) async fn execute_tool(
             }))
             .expect("update arguments always form an object payload");
             let operation = Operation::new(OperationKind::Update, args.model, payload);
-            ToolExecutionResult::from_app_error(execute_verified(odoo, &operation).await)
+            ToolExecutionResult::from_app_error(
+                execute_idempotent(odoo, &operation, _context, args.idempotency_key).await,
+            )
         }
         ToolName::Delete => {
             let args: DeleteArgs = match serde_json::from_value(arguments) {
@@ -204,7 +281,9 @@ pub(crate) async fn execute_tool(
             let payload = OperationPayload::new(json!({ "ids": args.ids }))
                 .expect("delete arguments always form an object payload");
             let operation = Operation::new(OperationKind::Delete, args.model, payload);
-            ToolExecutionResult::from_app_error(execute_verified(odoo, &operation).await)
+            ToolExecutionResult::from_app_error(
+                execute_idempotent(odoo, &operation, _context, args.idempotency_key).await,
+            )
         }
         ToolName::GetMetadata => {
             let args: ModelFieldsArgs = match serde_json::from_value(arguments) {
