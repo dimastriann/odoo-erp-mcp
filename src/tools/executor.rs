@@ -2,6 +2,7 @@ use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
 use crate::lifecycle::idempotency::IdempotencyKey;
 use crate::lifecycle::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
+use crate::lifecycle::verification::{self, VerificationStatus};
 use crate::odoo::OdooClient;
 use crate::tools::arguments::{
     CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchArgs,
@@ -20,6 +21,27 @@ fn validate_idempotency_key(key: Option<&str>) -> Result<(), String> {
         .transpose()
         .map(|_| ())
         .map_err(|error| error.to_string())
+}
+
+async fn execute_verified(odoo: &OdooClient, operation: &Operation) -> Result<Value, AppError> {
+    let response = OperationExecutor::new(odoo).execute(operation).await?;
+    let verification = match operation.kind {
+        OperationKind::Create | OperationKind::Copy => {
+            let id = response.as_i64().ok_or_else(|| {
+                AppError::protocol("Mutation did not return a record ID for verification")
+            })?;
+            verification::verify_create(odoo, operation, id).await?
+        }
+        OperationKind::Update => verification::verify_update(odoo, operation).await?,
+        OperationKind::Delete => verification::verify_delete(odoo, operation).await?,
+    };
+    if verification.status != VerificationStatus::Verified {
+        return Err(AppError::internal(format!(
+            "Mutation verification failed: {:?}",
+            verification.mismatches
+        )));
+    }
+    Ok(response)
 }
 
 fn validate_query_domain(domain: &Value, limits: QueryLimits) -> Result<(), String> {
@@ -137,9 +159,7 @@ pub(crate) async fn execute_tool(
             let payload = OperationPayload::new(json!({ "vals": args.vals }))
                 .expect("create arguments always form an object payload");
             let operation = Operation::new(OperationKind::Create, args.model, payload);
-            ToolExecutionResult::from_app_error(
-                OperationExecutor::new(odoo).execute(&operation).await,
-            )
+            ToolExecutionResult::from_app_error(execute_verified(odoo, &operation).await)
         }
         ToolName::Copy => {
             let args: CopyArgs = match serde_json::from_value(arguments) {
@@ -155,9 +175,7 @@ pub(crate) async fn execute_tool(
             }))
             .expect("copy arguments always form an object payload");
             let operation = Operation::new(OperationKind::Copy, args.model, payload);
-            ToolExecutionResult::from_app_error(
-                OperationExecutor::new(odoo).execute(&operation).await,
-            )
+            ToolExecutionResult::from_app_error(execute_verified(odoo, &operation).await)
         }
         ToolName::Update => {
             let args: UpdateArgs = match serde_json::from_value(arguments) {
@@ -173,9 +191,7 @@ pub(crate) async fn execute_tool(
             }))
             .expect("update arguments always form an object payload");
             let operation = Operation::new(OperationKind::Update, args.model, payload);
-            ToolExecutionResult::from_app_error(
-                OperationExecutor::new(odoo).execute(&operation).await,
-            )
+            ToolExecutionResult::from_app_error(execute_verified(odoo, &operation).await)
         }
         ToolName::Delete => {
             let args: DeleteArgs = match serde_json::from_value(arguments) {
@@ -188,9 +204,7 @@ pub(crate) async fn execute_tool(
             let payload = OperationPayload::new(json!({ "ids": args.ids }))
                 .expect("delete arguments always form an object payload");
             let operation = Operation::new(OperationKind::Delete, args.model, payload);
-            ToolExecutionResult::from_app_error(
-                OperationExecutor::new(odoo).execute(&operation).await,
-            )
+            ToolExecutionResult::from_app_error(execute_verified(odoo, &operation).await)
         }
         ToolName::GetMetadata => {
             let args: ModelFieldsArgs = match serde_json::from_value(arguments) {
@@ -404,6 +418,7 @@ mod tests {
             authentication_success(7),
             json_rpc_success(json!({"name": {"readonly": false}})),
             json_rpc_success(json!(42)),
+            json_rpc_success(json!([{"id": 42}])),
         ])
         .await;
         let client = OdooClient::new(
@@ -440,6 +455,7 @@ mod tests {
             authentication_success(7),
             json_rpc_success(json!({"active": {"readonly": false}})),
             json_rpc_success(json!(true)),
+            json_rpc_success(json!([{"id": 7, "active": false}, {"id": 8, "active": false}])),
         ])
         .await;
         let client = OdooClient::new(
@@ -476,6 +492,7 @@ mod tests {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
             json_rpc_success(json!(true)),
+            json_rpc_success(json!([])),
         ])
         .await;
         let client = OdooClient::new(
@@ -509,6 +526,7 @@ mod tests {
             authentication_success(7),
             json_rpc_success(json!({"name": {"readonly": false}})),
             json_rpc_success(json!(84)),
+            json_rpc_success(json!([{"id": 84}])),
         ])
         .await;
         let client = OdooClient::new(
