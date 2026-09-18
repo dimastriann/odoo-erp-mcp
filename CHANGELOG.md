@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-09-18
+
+### Added
+
+- Safe mutation lifecycle modules for typed operations, previews, approvals, idempotency, and post-action verification.
+- Durable approval and idempotency schemas with actor, instance, payload, expiration, replay, and concurrency safeguards.
+- Runtime idempotency replay protection and post-action verification for create, update, copy, and delete mutations.
+- Administrative approval inbox UI contract and lifecycle verification result reporting.
+
+### Notes
+
+- Approval request creation and human approval transport remain the final integration hardening item before high-risk mutations can be enforced end-to-end.
+
 ## [0.6.0] — 2026-09-08
 
 ### Added
