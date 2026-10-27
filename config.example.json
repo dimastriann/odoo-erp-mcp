@@ -10,7 +10,8 @@
     "max_domain_depth": 8,
     "max_domain_terms": 100,
     "max_response_records": 1000,
-    "max_domain_in_values": 1000
+    "max_domain_in_values": 1000,
+    "approval_ttl_secs": 900
   },
   "instances": [
     {
@@ -21,6 +22,7 @@
       "username": "admin",
       "password_env": "ODOO_PASSWORD",
       "active": true,
+      "rpc_transport": "auto",
       "mode": "crud",
       "allowed_tools": null,
       "permissions": {

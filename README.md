@@ -204,6 +204,39 @@ migration warning at startup. Migrate one instance at a time:
 When both fields are present, `password_env` takes precedence. Never commit
 `.env` or a populated `config.json` to version control.
 
+#### RPC transport and Odoo 19/20 API keys
+
+Odoo 19 deprecates the XML-RPC and JSON-RPC endpoints in favour of the external
+JSON-2 API, and Odoo 20 removes the `db` service. The gateway keeps JSON-RPC as
+a compatibility fallback and can use JSON-2 per instance:
+
+```json
+{
+  "rpc_transport": "auto"
+}
+```
+
+| Value | Behaviour |
+|-------|-----------|
+| `auto` | Detect the Odoo version; use JSON-2 for Odoo 19+ and fall back to JSON-RPC if JSON-2 rejects the credential |
+| `jsonrpc` | Use `/jsonrpc` and `execute_kw` |
+| `json2` | Use `POST /json/2/<model>/<method>` with a bearer API key |
+
+JSON-2 requires an Odoo API key with the `rpc` scope. Store the API key in
+`password_env` exactly like a password; the server sends it as an
+`Authorization: Bearer` header and never logs or serializes it. A plain password
+may continue to use JSON-RPC. JSON-RPC and XML-RPC remain functional through
+Odoo 20 but are scheduled for removal in Odoo 22.
+
+#### Approval expiration
+
+High-risk mutations return an `approval_required` result instead of executing.
+The approval inbox in the admin UI can approve or reject the request. Approvals
+are single-use, bound to the payload, actor, instance, model, and operation
+kind, and expire after `global_settings.approval_ttl_secs` (default `900`
+seconds). Approval state is stored in `approvals.json` next to `config.json`;
+the file is excluded from version control.
+
 **`mode` options per instance:**
 
 | Value | Behaviour |
