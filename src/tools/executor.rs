@@ -595,6 +595,138 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rejected_approval_never_executes_the_mutation() {
+        use crate::lifecycle::approval::{ApprovalId, reject_approval};
+
+        let server = MockOdooServer::start(authentication_success(7)).await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let arguments = json!({"model": "res.partner", "ids": [9101, 9102]});
+        let pending = execute_tool(
+            ToolName::Delete,
+            arguments.clone(),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+        let ToolExecutionResult::ApprovalRequired(value) = pending else {
+            panic!("delete must require approval");
+        };
+        let approval_id = value["approval"]["id"].as_str().unwrap().to_string();
+        reject_approval(ApprovalId::try_parse(&approval_id).unwrap()).unwrap();
+        let mut approved_arguments = arguments;
+        approved_arguments["approval_id"] = json!(approval_id);
+
+        let result = execute_tool(
+            ToolName::Delete,
+            approved_arguments,
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            ToolExecutionResult::Failure(AppError::Authorization { .. })
+        ));
+        assert_eq!(server.requests().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn approval_is_bound_to_the_requesting_actor() {
+        use crate::context::{ActorIdentity, AgentIdentity, ClientIdentity, IdentitySource};
+        use crate::lifecycle::approval::{ApprovalId, approve_approval};
+
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!(true)),
+            json_rpc_success(json!([])),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+        let owner = RequestContext::identified(
+            ClientIdentity::default(),
+            AgentIdentity::default(),
+            ActorIdentity::claimed(
+                Some("owner".to_string()),
+                None,
+                IdentitySource::RequestMetadata,
+            ),
+            "test-instance".to_string(),
+        );
+        let other = RequestContext::identified(
+            ClientIdentity::default(),
+            AgentIdentity::default(),
+            ActorIdentity::claimed(
+                Some("other".to_string()),
+                None,
+                IdentitySource::RequestMetadata,
+            ),
+            "test-instance".to_string(),
+        );
+        let arguments = json!({"model": "res.partner", "ids": [9201, 9202]});
+        let pending = execute_tool(
+            ToolName::Delete,
+            arguments.clone(),
+            &owner,
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+        let ToolExecutionResult::ApprovalRequired(value) = pending else {
+            panic!("delete must require approval");
+        };
+        let approval_id = value["approval"]["id"].as_str().unwrap().to_string();
+        approve_approval(ApprovalId::try_parse(&approval_id).unwrap()).unwrap();
+        let mut approved_arguments = arguments;
+        approved_arguments["approval_id"] = json!(approval_id);
+
+        let denied = execute_tool(
+            ToolName::Delete,
+            approved_arguments.clone(),
+            &other,
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+        assert!(matches!(
+            denied,
+            ToolExecutionResult::Failure(AppError::Authorization { .. })
+        ));
+        assert_eq!(server.requests().await.len(), 1);
+
+        let allowed = execute_tool(
+            ToolName::Delete,
+            approved_arguments,
+            &owner,
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+        assert!(matches!(allowed, ToolExecutionResult::Success(value) if value == json!(true)));
+    }
+
+    #[tokio::test]
     async fn update_runs_through_the_operation_executor() {
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
