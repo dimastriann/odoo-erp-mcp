@@ -1,5 +1,6 @@
 #![allow(dead_code)] // Approval persistence is integrated incrementally through Section 4.4.
 
+use crate::config::Config;
 use crate::context::RequestContext;
 use crate::error::AppError;
 use crate::lifecycle::operation::{Operation, OperationClass, OperationKind};
@@ -7,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
@@ -216,6 +219,151 @@ impl ApprovalStorage for LocalApprovalStorage {
     }
 }
 
+fn now_seconds() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs() as i64)
+}
+
+fn approval_storage_path() -> PathBuf {
+    Config::get_path().with_file_name("approvals.json")
+}
+
+fn global_approval_storage() -> &'static Mutex<LocalApprovalStorage> {
+    static STORAGE: OnceLock<Mutex<LocalApprovalStorage>> = OnceLock::new();
+    STORAGE.get_or_init(|| {
+        let path = approval_storage_path();
+        let storage = LocalApprovalStorage::open(&path).unwrap_or_else(|error| {
+            let fallback = std::env::temp_dir().join(format!(
+                "odoo-erp-mcp-approvals-{}.json",
+                std::process::id()
+            ));
+            eprintln!(
+                "Warning: failed to open approval storage at {:?}: {error}; using {:?}",
+                path, fallback
+            );
+            LocalApprovalStorage::open(fallback)
+                .expect("fallback approval storage must be available")
+        });
+        Mutex::new(storage)
+    })
+}
+
+fn same_pending_request(
+    request: &ApprovalRequest,
+    operation: &Operation,
+    context: &RequestContext,
+) -> bool {
+    request.state == ApprovalState::Pending
+        && request.payload_hash == operation.payload_hash.to_string()
+        && request.operation_kind == operation.kind
+        && request.operation_class == operation.class
+        && request.model == operation.model
+        && request.actor_subject == context.actor.subject
+        && request.instance == context.instance
+}
+
+/// Returns an existing pending approval for the same stable operation target or
+/// creates a new one. Duplicate retries therefore reuse the same approval.
+pub(crate) fn request_approval(
+    operation: &Operation,
+    context: &RequestContext,
+    ttl_seconds: i64,
+    now: i64,
+) -> Result<ApprovalRequest, AppError> {
+    let mut storage = global_approval_storage()
+        .lock()
+        .map_err(|_| AppError::internal("Approval storage lock is poisoned"))?;
+    let existing = storage
+        .list()?
+        .into_iter()
+        .find(|request| same_pending_request(request, operation, context));
+    if let Some(request) = existing {
+        return Ok(request);
+    }
+    let request = ApprovalRequest::for_operation(operation, context, now, ttl_seconds)?;
+    storage.insert(request.clone())?;
+    Ok(request)
+}
+
+/// Lists approvals and expires pending requests whose deadline has passed.
+pub(crate) fn list_approvals() -> Result<Vec<ApprovalRequest>, AppError> {
+    let now = now_seconds();
+    let mut storage = global_approval_storage()
+        .lock()
+        .map_err(|_| AppError::internal("Approval storage lock is poisoned"))?;
+    let requests = storage.list()?;
+    for mut request in requests {
+        if request.expire_if_due(now) {
+            storage.update(request)?;
+        }
+    }
+    storage.list()
+}
+
+pub(crate) fn approve_approval(id: ApprovalId) -> Result<ApprovalRequest, AppError> {
+    let now = now_seconds();
+    let mut storage = global_approval_storage()
+        .lock()
+        .map_err(|_| AppError::internal("Approval storage lock is poisoned"))?;
+    let mut request = storage
+        .get(id)?
+        .ok_or_else(|| AppError::input_validation("Approval request does not exist"))?;
+    if request.expire_if_due(now) {
+        storage.update(request)?;
+        return Err(AppError::authorization("Approval request has expired"));
+    }
+    request.approve()?;
+    storage.update(request.clone())?;
+    Ok(request)
+}
+
+pub(crate) fn reject_approval(id: ApprovalId) -> Result<ApprovalRequest, AppError> {
+    let now = now_seconds();
+    let mut storage = global_approval_storage()
+        .lock()
+        .map_err(|_| AppError::internal("Approval storage lock is poisoned"))?;
+    let mut request = storage
+        .get(id)?
+        .ok_or_else(|| AppError::input_validation("Approval request does not exist"))?;
+    if request.expire_if_due(now) {
+        storage.update(request)?;
+        return Err(AppError::authorization("Approval request has expired"));
+    }
+    request.reject()?;
+    storage.update(request.clone())?;
+    Ok(request)
+}
+
+/// Validates and consumes a single-use approval before a mutation executes.
+pub(crate) fn consume_approval(
+    id: ApprovalId,
+    operation: &Operation,
+    context: &RequestContext,
+) -> Result<ApprovalRequest, AppError> {
+    let now = now_seconds();
+    let mut storage = global_approval_storage()
+        .lock()
+        .map_err(|_| AppError::internal("Approval storage lock is poisoned"))?;
+    let mut request = storage
+        .get(id)?
+        .ok_or_else(|| AppError::input_validation("Approval request does not exist"))?;
+    if request.expire_if_due(now) {
+        storage.update(request)?;
+        return Err(AppError::authorization("Approval request has expired"));
+    }
+    if request.state != ApprovalState::Approved {
+        return Err(AppError::authorization(format!(
+            "Approval request is not approved (state: {:?})",
+            request.state
+        )));
+    }
+    request.ensure_matches_for_retry(operation, context)?;
+    request.consume()?;
+    storage.update(request.clone())?;
+    Ok(request)
+}
+
 impl ApprovalRequest {
     pub(crate) fn approve(&mut self) -> Result<(), AppError> {
         if self.state != ApprovalState::Pending {
@@ -373,6 +521,38 @@ mod tests {
             request
                 .ensure_matches_for_retry(&other_model, &owner)
                 .is_err()
+        );
+    }
+
+    #[test]
+    fn pending_request_deduplication_matches_the_stable_operation_target() {
+        let op = operation();
+        let owner = context(Some("u1"), "prod");
+        let request = ApprovalRequest::for_operation(&op, &owner, 100, 60).unwrap();
+        let retry = Operation::new(
+            OperationKind::Update,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [1], "vals": {"name": "A"}})).unwrap(),
+        );
+        let different_payload = Operation::new(
+            OperationKind::Update,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [1], "vals": {"name": "B"}})).unwrap(),
+        );
+
+        assert!(same_pending_request(&request, &retry, &owner));
+        assert!(!same_pending_request(&request, &different_payload, &owner));
+        assert!(!same_pending_request(
+            &request,
+            &retry,
+            &context(Some("u2"), "prod")
+        ));
+    }
+
+    #[test]
+    fn approval_ttl_must_be_positive() {
+        assert!(
+            ApprovalRequest::for_operation(&operation(), &context(None, "prod"), 1, 0).is_err()
         );
     }
 

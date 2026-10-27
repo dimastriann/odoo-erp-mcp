@@ -173,6 +173,8 @@ pub struct GlobalSettings {
     pub max_response_records: usize,
     #[serde(default = "default_max_domain_in_values")]
     pub max_domain_in_values: usize,
+    #[serde(default = "default_approval_ttl_secs")]
+    pub approval_ttl_secs: u64,
 }
 
 fn default_global_mode() -> String {
@@ -219,6 +221,10 @@ fn default_max_domain_in_values() -> usize {
     1_000
 }
 
+fn default_approval_ttl_secs() -> u64 {
+    900
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
@@ -233,6 +239,7 @@ impl Default for GlobalSettings {
             max_domain_terms: default_max_domain_terms(),
             max_response_records: default_max_response_records(),
             max_domain_in_values: default_max_domain_in_values(),
+            approval_ttl_secs: default_approval_ttl_secs(),
         }
     }
 }
@@ -246,6 +253,7 @@ impl GlobalSettings {
             ),
             ("rpc_request_timeout_secs", self.rpc_request_timeout_secs),
             ("max_query_limit", self.max_query_limit),
+            ("approval_ttl_secs", self.approval_ttl_secs),
         ];
         for (name, value) in positive_values {
             if value == 0 {
@@ -554,6 +562,17 @@ mod tests {
         assert_eq!(
             settings.validate(),
             Err("max_query_limit cannot exceed max_response_records".to_string())
+        );
+    }
+
+    #[test]
+    fn approval_ttl_has_a_safe_default_and_must_be_positive() {
+        let mut settings = GlobalSettings::default();
+        assert_eq!(settings.approval_ttl_secs, 900);
+        settings.approval_ttl_secs = 0;
+        assert_eq!(
+            settings.validate(),
+            Err("approval_ttl_secs must be greater than zero".to_string())
         );
     }
 
