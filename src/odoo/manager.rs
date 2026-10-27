@@ -34,7 +34,7 @@ impl ClientManager {
             "Connecting & authenticating Odoo instance '{}' (id: {})...",
             instance.name, instance.id
         );
-        let client = OdooClient::new_with_timeouts(
+        let client = OdooClient::new_with_transport(
             instance.url.clone(),
             instance.db.clone(),
             instance.username.clone(),
@@ -42,6 +42,7 @@ impl ClientManager {
             connection_timeout,
             request_timeout,
             max_response_bytes,
+            instance.rpc_transport,
         )
         .await?;
         let arc_client = Arc::new(client);
@@ -59,6 +60,7 @@ impl ClientManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::RpcTransport;
     use crate::test_support::connection_failure_url;
 
     #[tokio::test]
@@ -73,6 +75,7 @@ mod tests {
             password: "secret".into(),
             password_env: None,
             active: true,
+            rpc_transport: RpcTransport::Auto,
             mode: None,
             allowed_tools: None,
             permissions: None,

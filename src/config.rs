@@ -10,6 +10,26 @@ use crate::policy::{
 use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference, SecretString};
 use crate::tools::catalog::ToolName;
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RpcTransport {
+    #[default]
+    Auto,
+    JsonRpc,
+    Json2,
+}
+
+impl RpcTransport {
+    #[allow(dead_code)] // Exposed by the admin UI once the transport control lands.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::JsonRpc => "jsonrpc",
+            Self::Json2 => "json2",
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OdooInstance {
     pub id: String,
@@ -22,6 +42,8 @@ pub struct OdooInstance {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password_env: Option<String>,
     pub active: bool,
+    #[serde(default)]
+    pub rpc_transport: RpcTransport,
     #[serde(default)]
     pub mode: Option<String>,
     #[serde(default)]
@@ -588,6 +610,7 @@ mod tests {
             password: "secret".into(),
             password_env: None,
             active: true,
+            rpc_transport: RpcTransport::Auto,
             mode: None,
             allowed_tools: None,
             permissions: None,
@@ -615,6 +638,7 @@ mod tests {
             password: "pass".into(),
             password_env: None,
             active: true,
+            rpc_transport: RpcTransport::Auto,
             mode: Some("crud".into()),
             allowed_tools: None,
             permissions: None,
@@ -638,6 +662,7 @@ mod tests {
             password: "pass".into(),
             password_env: None,
             active: false,
+            rpc_transport: RpcTransport::Auto,
             mode: Some("read_only".into()),
             allowed_tools: None,
             permissions: None,
@@ -663,6 +688,7 @@ mod tests {
             password: "pass".into(),
             password_env: None,
             active: false,
+            rpc_transport: RpcTransport::Auto,
             mode: Some("inherit".into()),
             allowed_tools: None,
             permissions: None,

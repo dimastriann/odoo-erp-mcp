@@ -1,8 +1,11 @@
-use crate::config::{Config, GlobalSettings, OdooInstance};
-use axum::http::StatusCode;
-use axum::http::header;
+use crate::config::{Config, GlobalSettings, OdooInstance, RpcTransport};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::{Json, Router, extract::State, routing::post};
+use axum::{
+    Json, Router,
+    extract::{OriginalUri, State},
+    routing::post,
+};
 use serde_json::Value;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
@@ -50,7 +53,16 @@ pub(crate) fn connection_failure_url() -> &'static str {
 pub(crate) struct MockOdooServer {
     base_url: String,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
+    full_requests: Arc<tokio::sync::Mutex<Vec<RecordedRequest>>>,
     task: tokio::task::JoinHandle<()>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct RecordedRequest {
+    pub(crate) path: String,
+    pub(crate) authorization: Option<String>,
+    pub(crate) database: Option<String>,
+    pub(crate) body: Value,
 }
 
 #[derive(Clone)]
@@ -58,6 +70,7 @@ struct MockOdooState {
     responses: Arc<tokio::sync::Mutex<VecDeque<MockReply>>>,
     fallback: MockReply,
     requests: Arc<tokio::sync::Mutex<Vec<Value>>>,
+    full_requests: Arc<tokio::sync::Mutex<Vec<RecordedRequest>>>,
 }
 
 #[derive(Clone)]
@@ -75,9 +88,23 @@ struct MockReply {
 
 async fn handle_mock_rpc(
     State(state): State<MockOdooState>,
+    OriginalUri(uri): OriginalUri,
+    headers: HeaderMap,
     Json(request): Json<Value>,
 ) -> Response {
-    state.requests.lock().await.push(request);
+    state.requests.lock().await.push(request.clone());
+    state.full_requests.lock().await.push(RecordedRequest {
+        path: uri.path().to_string(),
+        authorization: headers
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string),
+        database: headers
+            .get("x-odoo-database")
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string),
+        body: request,
+    });
     let reply = state
         .responses
         .lock()
@@ -167,13 +194,16 @@ impl MockOdooServer {
 
     async fn start_with_replies(responses: VecDeque<MockReply>, fallback: MockReply) -> Self {
         let requests = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let full_requests = Arc::new(tokio::sync::Mutex::new(Vec::new()));
         let state = MockOdooState {
             responses: Arc::new(tokio::sync::Mutex::new(responses)),
             fallback,
             requests: Arc::clone(&requests),
+            full_requests: Arc::clone(&full_requests),
         };
         let app = Router::new()
             .route("/jsonrpc", post(handle_mock_rpc))
+            .route("/json/2/{model}/{method}", post(handle_mock_rpc))
             .with_state(state);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
@@ -190,6 +220,7 @@ impl MockOdooServer {
         Self {
             base_url: format!("http://{address}"),
             requests,
+            full_requests,
             task,
         }
     }
@@ -200,6 +231,10 @@ impl MockOdooServer {
 
     pub(crate) async fn requests(&self) -> Vec<Value> {
         self.requests.lock().await.clone()
+    }
+
+    pub(crate) async fn full_requests(&self) -> Vec<RecordedRequest> {
+        self.full_requests.lock().await.clone()
     }
 }
 
@@ -235,6 +270,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
                 password: "pass".into(),
                 password_env: None,
                 active: true,
+                rpc_transport: RpcTransport::Auto,
                 mode: Some("crud".into()),
                 allowed_tools: None,
                 permissions: None,
@@ -249,6 +285,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
                 password: "pass".into(),
                 password_env: None,
                 active: true,
+                rpc_transport: RpcTransport::Auto,
                 mode: Some("read_only".into()),
                 allowed_tools: None,
                 permissions: None,
