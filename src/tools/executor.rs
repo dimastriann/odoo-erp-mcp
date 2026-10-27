@@ -1,5 +1,6 @@
 use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
+use crate::lifecycle::approval::{self, ApprovalId};
 use crate::lifecycle::idempotency::{
     IdempotencyKey, IdempotencyRecord, IdempotencyState, IdempotencyStorage,
     InMemoryIdempotencyStorage,
@@ -7,6 +8,7 @@ use crate::lifecycle::idempotency::{
 use crate::lifecycle::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
 use crate::lifecycle::verification::{self, VerificationStatus};
 use crate::odoo::OdooClient;
+use crate::risk::RiskEvaluator;
 use crate::tools::arguments::{
     CopyArgs, CreateArgs, DeleteArgs, ModelFieldsArgs, ReadArgs, ReadGroupArgs, SearchArgs,
     SearchDomainArgs, SearchReadArgs, UpdateArgs,
@@ -115,6 +117,41 @@ async fn execute_verified(odoo: &OdooClient, operation: &Operation) -> Result<Va
     Ok(response)
 }
 
+async fn execute_mutation(
+    odoo: &OdooClient,
+    operation: &Operation,
+    context: &RequestContext,
+    key: Option<String>,
+    approval_id: Option<String>,
+    approval_ttl_secs: u64,
+) -> ToolExecutionResult {
+    if let Some(approval_id) = approval_id {
+        let approval_id = match ApprovalId::try_parse(&approval_id) {
+            Ok(approval_id) => approval_id,
+            Err(error) => return ToolExecutionResult::Failure(error),
+        };
+        if let Err(error) = approval::consume_approval(approval_id, operation, context) {
+            return ToolExecutionResult::Failure(error);
+        }
+    } else {
+        let assessment = RiskEvaluator::default().assess(operation);
+        if assessment.level >= crate::risk::RiskLevel::High {
+            let ttl = i64::try_from(approval_ttl_secs).unwrap_or(i64::MAX);
+            let request = match approval::request_approval(operation, context, ttl, now_seconds()) {
+                Ok(request) => request,
+                Err(error) => return ToolExecutionResult::Failure(error),
+            };
+            return ToolExecutionResult::ApprovalRequired(json!({
+                "status": "approval_required",
+                "approval": request,
+                "retry_with": {"approval_id": request.id.to_string()}
+            }));
+        }
+    }
+
+    ToolExecutionResult::from_app_error(execute_idempotent(odoo, operation, context, key).await)
+}
+
 fn validate_query_domain(domain: &Value, limits: QueryLimits) -> Result<(), String> {
     validate_domain_security(
         domain,
@@ -129,9 +166,10 @@ fn validate_query_domain(domain: &Value, limits: QueryLimits) -> Result<(), Stri
 pub(crate) async fn execute_tool(
     name: ToolName,
     arguments: Value,
-    _context: &RequestContext,
+    context: &RequestContext,
     odoo: &OdooClient,
     limits: QueryLimits,
+    approval_ttl_secs: u64,
 ) -> ToolExecutionResult {
     let model = arguments
         .get("model")
@@ -230,9 +268,15 @@ pub(crate) async fn execute_tool(
             let payload = OperationPayload::new(json!({ "vals": args.vals }))
                 .expect("create arguments always form an object payload");
             let operation = Operation::new(OperationKind::Create, args.model, payload);
-            ToolExecutionResult::from_app_error(
-                execute_idempotent(odoo, &operation, _context, args.idempotency_key).await,
+            execute_mutation(
+                odoo,
+                &operation,
+                context,
+                args.idempotency_key,
+                args.approval_id,
+                approval_ttl_secs,
             )
+            .await
         }
         ToolName::Copy => {
             let args: CopyArgs = match serde_json::from_value(arguments) {
@@ -248,9 +292,15 @@ pub(crate) async fn execute_tool(
             }))
             .expect("copy arguments always form an object payload");
             let operation = Operation::new(OperationKind::Copy, args.model, payload);
-            ToolExecutionResult::from_app_error(
-                execute_idempotent(odoo, &operation, _context, args.idempotency_key).await,
+            execute_mutation(
+                odoo,
+                &operation,
+                context,
+                args.idempotency_key,
+                args.approval_id,
+                approval_ttl_secs,
             )
+            .await
         }
         ToolName::Update => {
             let args: UpdateArgs = match serde_json::from_value(arguments) {
@@ -266,9 +316,15 @@ pub(crate) async fn execute_tool(
             }))
             .expect("update arguments always form an object payload");
             let operation = Operation::new(OperationKind::Update, args.model, payload);
-            ToolExecutionResult::from_app_error(
-                execute_idempotent(odoo, &operation, _context, args.idempotency_key).await,
+            execute_mutation(
+                odoo,
+                &operation,
+                context,
+                args.idempotency_key,
+                args.approval_id,
+                approval_ttl_secs,
             )
+            .await
         }
         ToolName::Delete => {
             let args: DeleteArgs = match serde_json::from_value(arguments) {
@@ -281,9 +337,15 @@ pub(crate) async fn execute_tool(
             let payload = OperationPayload::new(json!({ "ids": args.ids }))
                 .expect("delete arguments always form an object payload");
             let operation = Operation::new(OperationKind::Delete, args.model, payload);
-            ToolExecutionResult::from_app_error(
-                execute_idempotent(odoo, &operation, _context, args.idempotency_key).await,
+            execute_mutation(
+                odoo,
+                &operation,
+                context,
+                args.idempotency_key,
+                args.approval_id,
+                approval_ttl_secs,
             )
+            .await
         }
         ToolName::GetMetadata => {
             let args: ModelFieldsArgs = match serde_json::from_value(arguments) {
@@ -389,6 +451,7 @@ mod tests {
             &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
+            900,
         )
         .await;
         let ToolExecutionResult::Success(response) = result else {
@@ -431,6 +494,7 @@ mod tests {
             &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
+            900,
         )
         .await;
         let ToolExecutionResult::Success(response) = result else {
@@ -481,6 +545,7 @@ mod tests {
                 &RequestContext::new(),
                 &client,
                 TEST_QUERY_LIMITS,
+                900,
             )
             .await;
             let ToolExecutionResult::Failure(AppError::InputValidation { .. }) = result else {
@@ -515,6 +580,7 @@ mod tests {
             &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
+            900,
         )
         .await;
 
@@ -552,6 +618,7 @@ mod tests {
             &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
+            900,
         )
         .await;
 
@@ -567,7 +634,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn delete_runs_through_the_operation_executor() {
+    async fn high_risk_delete_requires_single_use_approval_before_rpc() {
+        use crate::lifecycle::approval::{ApprovalId, approve_approval};
+
         let server = MockOdooServer::start_with_responses(vec![
             authentication_success(7),
             json_rpc_success(json!(true)),
@@ -582,21 +651,56 @@ mod tests {
         )
         .await
         .unwrap();
+        let arguments = json!({"model": "res.partner", "ids": [9001, 9002]});
 
-        let result = execute_tool(
+        let pending = execute_tool(
             ToolName::Delete,
-            json!({"model": "res.partner", "ids": [9, 10]}),
+            arguments.clone(),
             &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
+            900,
         )
         .await;
+        let ToolExecutionResult::ApprovalRequired(value) = pending else {
+            panic!("delete must require approval");
+        };
+        assert_eq!(value["status"], "approval_required");
+        assert_eq!(server.requests().await.len(), 1, "no mutation RPC may run");
 
+        let approval_id = value["approval"]["id"].as_str().unwrap().to_string();
+        approve_approval(ApprovalId::try_parse(&approval_id).unwrap()).unwrap();
+        let mut approved_arguments = arguments.clone();
+        approved_arguments["approval_id"] = json!(approval_id);
+
+        let result = execute_tool(
+            ToolName::Delete,
+            approved_arguments.clone(),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
         assert!(matches!(result, ToolExecutionResult::Success(value) if value == json!(true)));
         let requests = server.requests().await;
         assert_eq!(requests[1]["params"]["args"][3], "res.partner");
         assert_eq!(requests[1]["params"]["args"][4], "unlink");
-        assert_eq!(requests[1]["params"]["args"][5][0], json!([9, 10]));
+        assert_eq!(requests[1]["params"]["args"][5][0], json!([9001, 9002]));
+
+        let replay = execute_tool(
+            ToolName::Delete,
+            approved_arguments,
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+        assert!(matches!(
+            replay,
+            ToolExecutionResult::Failure(AppError::Authorization { .. })
+        ));
     }
 
     #[tokio::test]
@@ -623,6 +727,7 @@ mod tests {
             &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
+            900,
         )
         .await;
 

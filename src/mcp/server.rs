@@ -173,6 +173,7 @@ async fn handle_request_with_identity(
                 request_timeout,
                 max_response_bytes,
                 global_settings,
+                approval_ttl_secs,
             ) = {
                 let conf = config.read().unwrap();
                 let inst = conf.find_instance(instance_target).cloned();
@@ -182,6 +183,7 @@ async fn handle_request_with_identity(
                 let request_timeout =
                     Duration::from_secs(conf.global_settings.rpc_request_timeout_secs);
                 let max_response_bytes = conf.global_settings.rpc_max_response_bytes;
+                let approval_ttl_secs = conf.global_settings.approval_ttl_secs;
                 let global_settings = conf.global_settings.clone();
                 (
                     inst,
@@ -190,6 +192,7 @@ async fn handle_request_with_identity(
                     request_timeout,
                     max_response_bytes,
                     global_settings,
+                    approval_ttl_secs,
                 )
             };
 
@@ -271,6 +274,7 @@ async fn handle_request_with_identity(
                 &request_context,
                 &odoo_client,
                 query_limits,
+                approval_ttl_secs,
             )
             .await
             .into_mcp_result();

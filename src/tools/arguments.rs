@@ -68,6 +68,8 @@ pub(crate) struct CreateArgs {
     pub(crate) vals: Map<String, Value>,
     #[serde(default)]
     pub(crate) idempotency_key: Option<String>,
+    #[serde(default)]
+    pub(crate) approval_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -77,6 +79,8 @@ pub(crate) struct CopyArgs {
     pub(crate) vals: Map<String, Value>,
     #[serde(default)]
     pub(crate) idempotency_key: Option<String>,
+    #[serde(default)]
+    pub(crate) approval_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,6 +90,8 @@ pub(crate) struct UpdateArgs {
     pub(crate) vals: Map<String, Value>,
     #[serde(default)]
     pub(crate) idempotency_key: Option<String>,
+    #[serde(default)]
+    pub(crate) approval_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,6 +100,8 @@ pub(crate) struct DeleteArgs {
     pub(crate) ids: Vec<i64>,
     #[serde(default)]
     pub(crate) idempotency_key: Option<String>,
+    #[serde(default)]
+    pub(crate) approval_id: Option<String>,
 }
 
 #[cfg(test)]
@@ -186,5 +194,22 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(delete.idempotency_key, None);
+        assert_eq!(delete.approval_id, None);
+    }
+
+    #[test]
+    fn mutation_arguments_accept_optional_approval_ids() {
+        let update: UpdateArgs = serde_json::from_value(json!({
+            "model": "res.partner",
+            "ids": [1],
+            "vals": {"name": "A"},
+            "approval_id": "00000000-0000-0000-0000-000000000000"
+        }))
+        .unwrap();
+
+        assert_eq!(
+            update.approval_id.as_deref(),
+            Some("00000000-0000-0000-0000-000000000000")
+        );
     }
 }
