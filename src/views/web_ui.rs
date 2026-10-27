@@ -1,4 +1,5 @@
 use crate::config::{Config, OdooInstance, OdooPrompt, generate_id};
+use crate::lifecycle::approval::{ApprovalId, approve_approval, list_approvals, reject_approval};
 use axum::{
     Json, Router,
     extract::{Path, Request, State},
@@ -48,6 +49,8 @@ pub async fn start_ui(config: SharedConfig) {
     let protected = Router::new()
         .route("/api/config", get(get_config))
         .route("/api/approvals", get(get_approvals))
+        .route("/api/approvals/{id}/approve", post(approve))
+        .route("/api/approvals/{id}/reject", post(reject))
         .route("/api/global-settings", post(update_global_settings))
         .route("/api/instances", post(add_instance))
         .route("/api/instances/{id}", delete(delete_instance))
@@ -180,7 +183,35 @@ async fn get_config(State(state): State<AppState>) -> Json<Value> {
 }
 
 async fn get_approvals() -> Json<Value> {
-    Json(json!({"approvals": []}))
+    match list_approvals() {
+        Ok(approvals) => Json(json!({"approvals": approvals})),
+        Err(error) => Json(json!({
+            "approvals": [],
+            "error": error.to_string()
+        })),
+    }
+}
+
+async fn approve(Path(id): Path<String>) -> Response {
+    match ApprovalId::try_parse(&id).and_then(approve_approval) {
+        Ok(approval) => (StatusCode::OK, Json(json!({"approval": approval}))).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": error.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+async fn reject(Path(id): Path<String>) -> Response {
+    match ApprovalId::try_parse(&id).and_then(reject_approval) {
+        Ok(approval) => (StatusCode::OK, Json(json!({"approval": approval}))).into_response(),
+        Err(error) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": error.to_string()})),
+        )
+            .into_response(),
+    }
 }
 
 fn redacted_config_value(config: &Config) -> Value {
@@ -361,6 +392,8 @@ mod tests {
             "Instance capabilities",
             "Scoped policy",
             "Default deny is active",
+            "Approve",
+            "Reject",
         ] {
             assert!(html.contains(control), "missing UI control: {control}");
         }
@@ -375,6 +408,22 @@ mod tests {
                 "missing UI behavior: {behavior}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn approval_listing_has_a_stable_response_shape() {
+        let response = get_approvals().await.0;
+
+        assert!(response["approvals"].is_array());
+    }
+
+    #[tokio::test]
+    async fn approval_decisions_reject_malformed_ids() {
+        let approve_response = approve(Path("not-a-uuid".to_string())).await;
+        let reject_response = reject(Path("not-a-uuid".to_string())).await;
+
+        assert_eq!(approve_response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(reject_response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]

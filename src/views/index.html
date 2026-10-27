@@ -80,8 +80,8 @@
             </section>
             <section id="approvals" class="section-block">
                 <div class="section-heading"><div><p class="eyebrow">Safety</p><h2>Approval inbox</h2></div></div>
-                <div v-if="!approvals.length" class="empty panel"><h3>No pending approvals</h3><p class="muted">Approved mutation requests will appear here for review.</p></div>
-                <div v-else class="prompt-grid"><article v-for="approval in approvals" :key="approval.id" class="panel prompt-card"><h3>{{ approval.operation_id }}</h3><p class="muted">{{ approval.state }}</p></article></div>
+                <div v-if="!approvals.length" class="empty panel"><h3>No approval requests</h3><p class="muted">High-risk mutation requests will appear here for review.</p></div>
+                <div v-else class="prompt-grid"><article v-for="approval in approvals" :key="approval.id" class="panel prompt-card"><div><h3>{{ approval.operation_kind }} · {{ approval.model }}</h3><p class="muted text-sm">Instance: {{ approval.instance }} · State: {{ approval.state }}</p><p class="muted text-sm">Expires: {{ approval.expires_at }}</p></div><div v-if="approval.state === 'pending'" class="actions"><button @click="approveApproval(approval.id)" class="button primary">Approve</button><button @click="rejectApproval(approval.id)" class="button danger">Reject</button></div></article></div>
             </section>
         </main>
 

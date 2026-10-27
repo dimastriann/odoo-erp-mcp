@@ -35,10 +35,22 @@ createApp({
             const response = await api('/api/config');
             if (!response.ok) return;
             config.value = await response.json();
-            const approvalResponse = await api('/api/approvals');
-            if (approvalResponse.ok) approvals.value = (await approvalResponse.json()).approvals || [];
+            await fetchApprovals();
             authenticated.value = true;
         }
+
+        async function fetchApprovals() {
+            const response = await api('/api/approvals');
+            if (response.ok) approvals.value = (await response.json()).approvals || [];
+        }
+
+        async function decideApproval(id, decision) {
+            const response = await api(`/api/approvals/${id}/${decision}`, { method: 'POST' });
+            if (response.ok) await fetchApprovals();
+        }
+
+        const approveApproval = id => decideApproval(id, 'approve');
+        const rejectApproval = id => decideApproval(id, 'reject');
 
         async function fetchVersion() {
             const response = await fetch('/api/version');
@@ -147,6 +159,6 @@ createApp({
         function toggleDarkMode() { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light'); document.documentElement.classList.toggle('light', !isDark.value); }
 
         onMounted(() => { document.documentElement.classList.toggle('light', !isDark.value); fetchVersion(); fetchConfig(); });
-        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, serverVersion, instanceSearch, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, capabilities, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode };
+        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, serverVersion, instanceSearch, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, capabilities, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode, approveApproval, rejectApproval };
     }
 }).mount('#app');
