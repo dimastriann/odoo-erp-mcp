@@ -2,6 +2,7 @@
 
 use crate::error::AppError;
 use crate::odoo::OdooClient;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -23,7 +24,8 @@ impl fmt::Display for OperationId {
 }
 
 /// A mutation understood by the safe operation lifecycle.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum OperationKind {
     Create,
     Copy,
@@ -32,7 +34,8 @@ pub(crate) enum OperationKind {
 }
 
 /// Security and risk category applied to an operation before execution.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum OperationClass {
     Read,
     Write,

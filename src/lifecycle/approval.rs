@@ -2,7 +2,7 @@
 
 use crate::context::RequestContext;
 use crate::error::AppError;
-use crate::lifecycle::operation::Operation;
+use crate::lifecycle::operation::{Operation, OperationClass, OperationKind};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -15,6 +15,12 @@ pub(crate) struct ApprovalId(Uuid);
 impl ApprovalId {
     pub(crate) fn new() -> Self {
         Self(Uuid::new_v4())
+    }
+
+    pub(crate) fn try_parse(value: &str) -> Result<Self, AppError> {
+        Uuid::parse_str(value.trim())
+            .map(Self)
+            .map_err(|_| AppError::input_validation("Invalid approval ID"))
     }
 }
 
@@ -38,6 +44,9 @@ pub(crate) enum ApprovalState {
 pub(crate) struct ApprovalRequest {
     pub(crate) id: ApprovalId,
     pub(crate) operation_id: String,
+    pub(crate) operation_kind: OperationKind,
+    pub(crate) operation_class: OperationClass,
+    pub(crate) model: String,
     pub(crate) payload_hash: String,
     pub(crate) actor_subject: Option<String>,
     pub(crate) instance: String,
@@ -61,6 +70,9 @@ impl ApprovalRequest {
         Ok(Self {
             id: ApprovalId::new(),
             operation_id: operation.id.to_string(),
+            operation_kind: operation.kind,
+            operation_class: operation.class,
+            model: operation.model.clone(),
             payload_hash: operation.payload_hash.to_string(),
             actor_subject: context.actor.subject.clone(),
             instance: context.instance.clone(),
@@ -93,11 +105,37 @@ impl ApprovalRequest {
                 "Approval is bound to another operation",
             ));
         }
+        self.ensure_stable_matches(operation, context)
+    }
+
+    /// A retry creates a fresh operation ID, so approval reuse is bound to the
+    /// stable payload, actor, instance, model, kind, and operation class.
+    pub(crate) fn ensure_matches_for_retry(
+        &self,
+        operation: &Operation,
+        context: &RequestContext,
+    ) -> Result<(), AppError> {
+        self.ensure_stable_matches(operation, context)
+    }
+
+    fn ensure_stable_matches(
+        &self,
+        operation: &Operation,
+        context: &RequestContext,
+    ) -> Result<(), AppError> {
         if self.payload_hash != operation.payload.hash().to_string()
             || self.payload_hash != operation.payload_hash.to_string()
         {
             return Err(AppError::authorization(
                 "Operation payload changed after approval",
+            ));
+        }
+        if self.operation_kind != operation.kind
+            || self.operation_class != operation.class
+            || self.model != operation.model
+        {
+            return Err(AppError::authorization(
+                "Approval operation target changed after approval",
             ));
         }
         if self.actor_subject != context.actor.subject || self.instance != context.instance {
@@ -113,6 +151,7 @@ pub(crate) trait ApprovalStorage {
     fn insert(&mut self, request: ApprovalRequest) -> Result<(), AppError>;
     fn get(&self, id: ApprovalId) -> Result<Option<ApprovalRequest>, AppError>;
     fn update(&mut self, request: ApprovalRequest) -> Result<(), AppError>;
+    fn list(&self) -> Result<Vec<ApprovalRequest>, AppError>;
 }
 
 #[derive(Debug)]
@@ -163,6 +202,17 @@ impl ApprovalStorage for LocalApprovalStorage {
         }
         self.records.insert(request.id, request);
         self.persist()
+    }
+
+    fn list(&self) -> Result<Vec<ApprovalRequest>, AppError> {
+        let mut requests = self.records.values().cloned().collect::<Vec<_>>();
+        requests.sort_by(|left, right| {
+            right
+                .requested_at
+                .cmp(&left.requested_at)
+                .then_with(|| right.id.cmp(&left.id))
+        });
+        Ok(requests)
     }
 }
 
@@ -299,6 +349,55 @@ mod tests {
         assert_eq!(request.state, ApprovalState::Expired);
         assert!(!request.expire_if_due(11));
         assert!(request.approve().is_err());
+    }
+
+    #[test]
+    fn retry_matching_accepts_a_new_operation_id_but_rejects_changed_targets() {
+        let op = operation();
+        let owner = context(Some("u1"), "prod");
+        let request = ApprovalRequest::for_operation(&op, &owner, 100, 60).unwrap();
+        let retry = Operation::new(
+            OperationKind::Update,
+            "res.partner",
+            OperationPayload::new(json!({"ids": [1], "vals": {"name": "A"}})).unwrap(),
+        );
+        assert_ne!(request.operation_id, retry.id.to_string());
+        assert!(request.ensure_matches_for_retry(&retry, &owner).is_ok());
+
+        let other_model = Operation::new(
+            OperationKind::Update,
+            "res.users",
+            OperationPayload::new(json!({"ids": [1], "vals": {"name": "A"}})).unwrap(),
+        );
+        assert!(
+            request
+                .ensure_matches_for_retry(&other_model, &owner)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn approval_ids_parse_from_strings_and_reject_malformed_values() {
+        let id = ApprovalId::new();
+        assert_eq!(ApprovalId::try_parse(&id.to_string()).unwrap(), id);
+        assert!(ApprovalId::try_parse("not-a-uuid").is_err());
+    }
+
+    #[test]
+    fn storage_lists_newest_requests_first() {
+        let path = std::env::temp_dir().join(format!("odoo-approval-{}.json", Uuid::new_v4()));
+        let mut storage = LocalApprovalStorage::open(&path).unwrap();
+        let older =
+            ApprovalRequest::for_operation(&operation(), &context(None, "prod"), 100, 60).unwrap();
+        let newer =
+            ApprovalRequest::for_operation(&operation(), &context(None, "prod"), 200, 60).unwrap();
+        storage.insert(older).unwrap();
+        storage.insert(newer.clone()).unwrap();
+
+        let listed = storage.list().unwrap();
+
+        assert_eq!(listed.first().map(|request| request.id), Some(newer.id));
+        let _ = fs::remove_file(path);
     }
 
     #[test]
