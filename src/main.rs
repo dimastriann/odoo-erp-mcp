@@ -14,8 +14,11 @@ mod tools;
 mod views;
 
 use config::Config;
+use mcp::McpRuntime;
 use odoo::ClientManager;
 use std::sync::{Arc, RwLock};
+use tokio::io::AsyncWriteExt;
+use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -36,17 +39,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::load().expect("Failed to load config.json");
     let shared_config = Arc::new(RwLock::new(config));
     let client_manager = ClientManager::new();
+    let (sender, mut receiver) = mpsc::unbounded_channel::<serde_json::Value>();
+    tokio::spawn(async move {
+        let mut stdout = tokio::io::stdout();
+        while let Some(message) = receiver.recv().await {
+            let Ok(line) = serde_json::to_string(&message) else {
+                continue;
+            };
+            let _ = stdout.write_all(format!("{line}\n").as_bytes()).await;
+            let _ = stdout.flush().await;
+        }
+    });
+    let runtime = McpRuntime::new(sender);
 
     // Spawn Web UI Task
     let ui_config = Arc::clone(&shared_config);
+    let ui_runtime = runtime.clone();
+    let ui_client_manager = client_manager.clone();
     tokio::spawn(async move {
-        views::web_ui::start_ui(ui_config).await;
+        views::web_ui::start_ui(ui_config, ui_runtime, ui_client_manager).await;
     });
 
     eprintln!("Starting MCP server with multi-instance support & permission enforcement...");
 
     // Start MCP Server loop
-    mcp::run_server(shared_config, client_manager).await;
+    mcp::run_server(shared_config, client_manager, runtime).await;
 
     Ok(())
 }

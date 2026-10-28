@@ -3,6 +3,7 @@ use crate::context::{
     ActorIdentity, AgentIdentity, ClientIdentity, IdentitySource, RequestContext,
 };
 use crate::error::AppError;
+use crate::mcp::McpRuntime;
 use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
 use crate::tools::executor::execute_tool;
@@ -11,13 +12,15 @@ use crate::tools::result::ToolExecutionResult;
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use tokio::io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{self, AsyncBufReadExt, BufReader};
 
-fn tool_call_response(id: Value, result: ToolExecutionResult) -> Value {
+fn tool_call_response(id: Value, result: ToolExecutionResult, revision: u64) -> Value {
+    let mut result = result.into_mcp_result();
+    result["_meta"] = json!({"configRevision": revision});
     json!({
         "jsonrpc": "2.0",
         "id": id,
-        "result": result.into_mcp_result()
+        "result": result
     })
 }
 
@@ -59,9 +62,12 @@ fn request_context(client: &ClientIdentity, params: &Value, instance: String) ->
     RequestContext::identified(client.clone(), agent, actor, instance)
 }
 
-pub async fn run_server(config: Arc<RwLock<Config>>, client_manager: ClientManager) {
+pub async fn run_server(
+    config: Arc<RwLock<Config>>,
+    client_manager: ClientManager,
+    runtime: McpRuntime,
+) {
     let stdin = io::stdin();
-    let mut stdout = io::stdout();
     let mut reader = BufReader::new(stdin).lines();
     let mut client_identity = ClientIdentity::default();
 
@@ -71,28 +77,26 @@ pub async fn run_server(config: Arc<RwLock<Config>>, client_manager: ClientManag
         }
 
         if let Ok(request) = serde_json::from_str::<Value>(&line) {
+            if request.get("method").and_then(Value::as_str) == Some("notifications/initialized") {
+                runtime.mark_initialized();
+            }
             let response = handle_request_with_identity(
                 request,
                 &config,
                 &client_manager,
+                &runtime,
                 &mut client_identity,
             )
             .await;
             if let Some(resp) = response {
-                let resp_str = serde_json::to_string(&resp).unwrap();
-                let _ = stdout.write_all(format!("{}\n", resp_str).as_bytes()).await;
-                let _ = stdout.flush().await;
+                runtime.send(resp);
             }
         } else {
-            let error_resp = json!({
+            runtime.send(json!({
                 "jsonrpc": "2.0",
                 "error": { "code": -32700, "message": "Parse error" },
                 "id": Value::Null
-            });
-            let _ = stdout
-                .write_all(format!("{}\n", error_resp).as_bytes())
-                .await;
-            let _ = stdout.flush().await;
+            }));
         }
     }
 }
@@ -101,10 +105,12 @@ async fn handle_request_with_identity(
     req: Value,
     config: &Arc<RwLock<Config>>,
     client_manager: &ClientManager,
+    runtime: &McpRuntime,
     client_identity: &mut ClientIdentity,
 ) -> Option<Value> {
     let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let id = req.get("id").cloned().unwrap_or(Value::Null);
+    let revision = runtime.revision();
 
     match method {
         "initialize" => {
@@ -132,7 +138,7 @@ async fn handle_request_with_identity(
                     "version": env!("CARGO_PKG_VERSION")
                 },
                 "capabilities": {
-                    "tools": {}
+                    "tools": {"listChanged": true}
                 }
             }
             }))
@@ -147,7 +153,8 @@ async fn handle_request_with_identity(
                 "jsonrpc": "2.0",
                 "id": id,
                 "result": {
-                    "tools": tools
+                    "tools": tools,
+                    "_meta": {"configRevision": revision}
                 }
             }))
         }
@@ -155,15 +162,13 @@ async fn handle_request_with_identity(
             let params = req.get("params").cloned().unwrap_or(json!({}));
             let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
             let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+            let respond = |result| tool_call_response(id.clone(), result, revision);
             let tool_name = match ToolName::try_from(name) {
                 Ok(tool_name) => tool_name,
                 Err(()) => {
-                    return Some(tool_call_response(
-                        id,
-                        ToolExecutionResult::Failure(AppError::input_validation(format!(
-                            "Error: Unknown tool {name}"
-                        ))),
-                    ));
+                    return Some(respond(ToolExecutionResult::Failure(
+                        AppError::input_validation(format!("Error: Unknown tool {name}")),
+                    )));
                 }
             };
             let globally_disabled = {
@@ -174,26 +179,25 @@ async fn handle_request_with_identity(
                     .any(|disabled| disabled.eq_ignore_ascii_case(tool_name.as_str()))
             };
             if globally_disabled {
-                return Some(tool_call_response(
-                    id,
-                    ToolExecutionResult::Failure(AppError::tool_disabled(format!(
+                return Some(respond(ToolExecutionResult::Failure(
+                    AppError::tool_disabled(format!(
                         "Tool '{}' is disabled in the server configuration",
                         tool_name.as_str()
-                    ))),
-                ));
+                    )),
+                )));
             }
 
             if !tool_name.requires_client() {
                 let result = {
                     let conf = config.read().unwrap();
                     match tool_name {
-                        ToolName::ListInstances => list_instances_result(&conf),
+                        ToolName::ListInstances => list_instances_result(&conf, revision),
                         _ => ToolExecutionResult::Failure(AppError::internal(
                             "local tool is not implemented",
                         )),
                     }
                 };
-                return Some(tool_call_response(id, result));
+                return Some(respond(result));
             }
 
             let instance_target = arguments
@@ -244,18 +248,17 @@ async fn handle_request_with_identity(
                             instance_target
                         ))
                     };
-                    return Some(tool_call_response(id, ToolExecutionResult::Failure(error)));
+                    return Some(respond(ToolExecutionResult::Failure(error)));
                 }
             };
             if instance_obj.tool_disabled(tool_name) {
-                return Some(tool_call_response(
-                    id,
-                    ToolExecutionResult::Failure(AppError::tool_disabled(format!(
+                return Some(respond(ToolExecutionResult::Failure(
+                    AppError::tool_disabled(format!(
                         "Tool '{}' is disabled for Odoo instance '{}'",
                         tool_name.as_str(),
                         instance_obj.name
-                    ))),
-                ));
+                    )),
+                )));
             }
             let effective_settings = instance_obj.effective_query_settings(&global_settings);
             let query_limits = QueryLimits {
@@ -295,7 +298,7 @@ async fn handle_request_with_identity(
                     mode_str,
                     policy_evaluation.explanation
                 ));
-                return Some(tool_call_response(id, ToolExecutionResult::Failure(error)));
+                return Some(respond(ToolExecutionResult::Failure(error)));
             }
 
             // Get or create OdooClient dynamically
@@ -310,7 +313,7 @@ async fn handle_request_with_identity(
             {
                 Ok(client) => client,
                 Err(err) => {
-                    return Some(tool_call_response(id, ToolExecutionResult::Failure(err)));
+                    return Some(respond(ToolExecutionResult::Failure(err)));
                 }
             };
 
@@ -324,10 +327,9 @@ async fn handle_request_with_identity(
                 query_limits,
                 approval_ttl_secs,
             )
-            .await
-            .into_mcp_result();
+            .await;
 
-            Some(json!({"jsonrpc": "2.0", "id": id, "result": result}))
+            Some(respond(result))
         }
         _ => Some(json!({
             "jsonrpc": "2.0",
@@ -361,7 +363,7 @@ fn filtered_tool_definitions(config: &Config) -> Value {
     )
 }
 
-fn list_instances_result(config: &Config) -> ToolExecutionResult {
+fn list_instances_result(config: &Config, revision: u64) -> ToolExecutionResult {
     let instances = config
         .instances
         .iter()
@@ -378,7 +380,7 @@ fn list_instances_result(config: &Config) -> ToolExecutionResult {
             })
         })
         .collect::<Vec<_>>();
-    ToolExecutionResult::Success(json!({"instances": instances}))
+    ToolExecutionResult::Success(json!({"revision": revision, "instances": instances}))
 }
 
 fn requested_fields(arguments: &Value) -> Vec<String> {
@@ -402,7 +404,16 @@ async fn handle_request(
     config: &Arc<RwLock<Config>>,
     client_manager: &ClientManager,
 ) -> Option<Value> {
-    handle_request_with_identity(req, config, client_manager, &mut ClientIdentity::default()).await
+    let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+    let runtime = McpRuntime::new(sender);
+    handle_request_with_identity(
+        req,
+        config,
+        client_manager,
+        &runtime,
+        &mut ClientIdentity::default(),
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -443,7 +454,9 @@ mod tests {
             }
         });
 
-        handle_request_with_identity(req, &config, &client_manager, &mut client).await;
+        let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        let runtime = McpRuntime::new(sender);
+        handle_request_with_identity(req, &config, &client_manager, &runtime, &mut client).await;
 
         assert_eq!(client.name.as_deref(), Some("codex"));
         assert_eq!(client.version.as_deref(), Some("1.2.3"));

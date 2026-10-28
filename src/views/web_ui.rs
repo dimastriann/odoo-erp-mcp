@@ -1,5 +1,7 @@
 use crate::config::{Config, OdooInstance, OdooPrompt, generate_id};
 use crate::lifecycle::approval::{ApprovalId, approve_approval, list_approvals, reject_approval};
+use crate::mcp::McpRuntime;
+use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
 use axum::{
     Json, Router,
@@ -25,6 +27,8 @@ struct AppState {
     username: Arc<String>,
     password: Arc<String>,
     sessions: Arc<RwLock<HashSet<String>>>,
+    runtime: McpRuntime,
+    client_manager: ClientManager,
 }
 
 #[derive(Deserialize)]
@@ -39,7 +43,7 @@ struct ToolSettingsRequest {
     disabled: Vec<String>,
 }
 
-pub async fn start_ui(config: SharedConfig) {
+pub async fn start_ui(config: SharedConfig, runtime: McpRuntime, client_manager: ClientManager) {
     let username = std::env::var("ODOO_MCP_UI_USERNAME").unwrap_or_else(|_| "admin".into());
     let password = std::env::var("ODOO_MCP_UI_PASSWORD").unwrap_or_else(|_| {
         let generated = Uuid::new_v4().to_string();
@@ -51,6 +55,8 @@ pub async fn start_ui(config: SharedConfig) {
         username: Arc::new(username),
         password: Arc::new(password),
         sessions: Arc::new(RwLock::new(HashSet::new())),
+        runtime,
+        client_manager,
     };
 
     let protected = Router::new()
@@ -151,16 +157,33 @@ async fn update_global_settings(
         config.global_settings = previous_settings;
         return (StatusCode::BAD_REQUEST, error).into_response();
     }
-    match config.save() {
-        Ok(()) => StatusCode::OK.into_response(),
+    let saved = config.save();
+    drop(config);
+    match saved {
+        Ok(()) => {
+            let manager = state.client_manager.clone();
+            tokio::spawn(async move {
+                manager.invalidate_all().await;
+            });
+            state.runtime.config_changed();
+            StatusCode::OK.into_response()
+        }
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 
 async fn toggle_active(State(state): State<AppState>, Path(id): Path<String>) -> StatusCode {
-    let mut config = state.config.write().unwrap();
-    config.toggle_active_instance(&id);
-    config.save().unwrap();
+    {
+        let mut config = state.config.write().unwrap();
+        config.toggle_active_instance(&id);
+        config.save().unwrap();
+    }
+    let manager = state.client_manager.clone();
+    let invalidate_id = id.clone();
+    tokio::spawn(async move {
+        manager.invalidate(&invalidate_id).await;
+    });
+    state.runtime.config_changed();
     StatusCode::OK
 }
 
@@ -247,6 +270,8 @@ async fn update_tools(
         config.global_settings.disabled_tools = previous;
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
+    drop(config);
+    state.runtime.config_changed();
     StatusCode::OK.into_response()
 }
 
@@ -301,33 +326,42 @@ async fn add_instance(
     State(state): State<AppState>,
     Json(instance): Json<OdooInstance>,
 ) -> StatusCode {
-    let mut config = state.config.write().unwrap();
-    let existing = config
-        .instances
-        .iter()
-        .find(|existing| existing.id == instance.id);
-    let mut instance = match prepare_instance_for_save(instance, existing) {
-        Ok(instance) => instance,
-        Err(status) => return status,
+    let instance_id = {
+        let mut config = state.config.write().unwrap();
+        let existing = config
+            .instances
+            .iter()
+            .find(|existing| existing.id == instance.id);
+        let mut instance = match prepare_instance_for_save(instance, existing) {
+            Ok(instance) => instance,
+            Err(status) => return status,
+        };
+
+        if instance.id.is_empty() {
+            instance.id = generate_id();
+        }
+
+        // If first instance, make it active
+        if config.instances.is_empty() {
+            instance.active = true;
+        }
+
+        // Update existing or add new
+        let saved_id = instance.id.clone();
+        if let Some(existing) = config.instances.iter_mut().find(|i| i.id == saved_id) {
+            *existing = instance;
+        } else {
+            config.instances.push(instance);
+        }
+
+        config.save().unwrap();
+        saved_id
     };
-
-    if instance.id.is_empty() {
-        instance.id = generate_id();
-    }
-
-    // If first instance, make it active
-    if config.instances.is_empty() {
-        instance.active = true;
-    }
-
-    // Update existing or add new
-    if let Some(existing) = config.instances.iter_mut().find(|i| i.id == instance.id) {
-        *existing = instance;
-    } else {
-        config.instances.push(instance);
-    }
-
-    config.save().unwrap();
+    let manager = state.client_manager.clone();
+    tokio::spawn(async move {
+        manager.invalidate(&instance_id).await;
+    });
+    state.runtime.config_changed();
     StatusCode::OK
 }
 
@@ -357,9 +391,17 @@ fn prepare_instance_for_save(
 }
 
 async fn delete_instance(State(state): State<AppState>, Path(id): Path<String>) -> StatusCode {
-    let mut config = state.config.write().unwrap();
-    config.instances.retain(|i| i.id != id);
-    config.save().unwrap();
+    {
+        let mut config = state.config.write().unwrap();
+        config.instances.retain(|i| i.id != id);
+        config.save().unwrap();
+    }
+    let manager = state.client_manager.clone();
+    let invalidate_id = id.clone();
+    tokio::spawn(async move {
+        manager.invalidate(&invalidate_id).await;
+    });
+    state.runtime.config_changed();
     StatusCode::OK
 }
 
@@ -379,6 +421,8 @@ async fn add_prompt(
     }
 
     config.save().unwrap();
+    drop(config);
+    state.runtime.config_changed();
     StatusCode::OK
 }
 
@@ -386,6 +430,8 @@ async fn delete_prompt(State(state): State<AppState>, Path(id): Path<String>) ->
     let mut config = state.config.write().unwrap();
     config.prompts.retain(|p| p.id != id);
     config.save().unwrap();
+    drop(config);
+    state.runtime.config_changed();
     StatusCode::OK
 }
 

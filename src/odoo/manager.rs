@@ -50,10 +50,14 @@ impl ClientManager {
         Ok(arc_client)
     }
 
-    #[allow(dead_code)]
-    pub(crate) async fn remove_client(&self, instance_id: &str) {
+    pub(crate) async fn invalidate(&self, instance_id: &str) {
         let mut map = self.clients.lock().await;
         map.remove(instance_id);
+    }
+
+    pub(crate) async fn invalidate_all(&self) {
+        let mut map = self.clients.lock().await;
+        map.clear();
     }
 }
 
@@ -76,6 +80,7 @@ mod tests {
             password_env: None,
             active: true,
             rpc_transport: RpcTransport::Auto,
+            disabled_tools: None,
             mode: None,
             allowed_tools: None,
             permissions: None,
