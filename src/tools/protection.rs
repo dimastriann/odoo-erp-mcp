@@ -12,6 +12,7 @@ pub(crate) struct QueryLimits {
     pub(crate) max_domain_in_values: usize,
     pub(crate) max_context_keys: usize,
     pub(crate) max_context_bytes: usize,
+    pub(crate) max_batch_size: usize,
 }
 
 pub(crate) fn validate_response_record_count(

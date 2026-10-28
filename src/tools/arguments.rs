@@ -104,6 +104,111 @@ pub(crate) struct DeleteArgs {
     pub(crate) approval_id: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListModelsArgs {
+    #[serde(default = "empty_array")]
+    pub(crate) domain: Value,
+    pub(crate) offset: Option<u64>,
+    pub(crate) limit: Option<u64>,
+    #[serde(default)]
+    pub(crate) include_total: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CheckAccessArgs {
+    pub(crate) model: String,
+    pub(crate) operation: String,
+    #[serde(default)]
+    pub(crate) ids: Option<Vec<i64>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct OnchangeArgs {
+    pub(crate) model: String,
+    pub(crate) values: Map<String, Value>,
+    pub(crate) field_names: Vec<String>,
+    pub(crate) fields_spec: Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct NameSearchArgs {
+    pub(crate) model: String,
+    pub(crate) name: String,
+    #[serde(default = "empty_array")]
+    pub(crate) domain: Value,
+    pub(crate) operator: Option<String>,
+    pub(crate) limit: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct GetViewsArgs {
+    pub(crate) model: String,
+    pub(crate) views: Value,
+    #[serde(default)]
+    pub(crate) options: Option<Map<String, Value>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ListReportsArgs {
+    pub(crate) model: Option<String>,
+    #[serde(default = "empty_array")]
+    pub(crate) domain: Value,
+    pub(crate) offset: Option<u64>,
+    pub(crate) limit: Option<u64>,
+    #[serde(default)]
+    pub(crate) include_total: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RenderReportArgs {
+    pub(crate) report_name: String,
+    pub(crate) ids: Vec<i64>,
+    #[serde(default = "default_report_format")]
+    pub(crate) format: String,
+    #[serde(default)]
+    pub(crate) data: Option<Map<String, Value>>,
+}
+
+fn default_report_format() -> String {
+    "pdf".to_string()
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct CreateBatchArgs {
+    pub(crate) model: String,
+    pub(crate) vals_list: Vec<Map<String, Value>>,
+    #[serde(default)]
+    pub(crate) idempotency_key: Option<String>,
+    #[serde(default)]
+    pub(crate) approval_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct BatchUpdateRecord {
+    pub(crate) id: i64,
+    pub(crate) vals: Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct UpdateBatchArgs {
+    pub(crate) model: String,
+    pub(crate) records: Vec<BatchUpdateRecord>,
+    #[serde(default)]
+    pub(crate) idempotency_key: Option<String>,
+    #[serde(default)]
+    pub(crate) approval_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct DeleteBatchArgs {
+    pub(crate) model: String,
+    pub(crate) ids: Vec<i64>,
+    #[serde(default)]
+    pub(crate) idempotency_key: Option<String>,
+    #[serde(default)]
+    pub(crate) approval_id: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

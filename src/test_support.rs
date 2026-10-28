@@ -261,6 +261,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
             approval_ttl_secs: 900,
             max_context_keys: 32,
             max_context_bytes: 8_192,
+            max_batch_size: 100,
         },
         instances: vec![
             OdooInstance {

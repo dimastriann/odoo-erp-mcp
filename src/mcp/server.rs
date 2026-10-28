@@ -161,6 +161,19 @@ async fn handle_request_with_identity(
                 }
             };
 
+            if !tool_name.requires_client() {
+                let result = {
+                    let conf = config.read().unwrap();
+                    match tool_name {
+                        ToolName::ListInstances => list_instances_result(&conf),
+                        _ => ToolExecutionResult::Failure(AppError::internal(
+                            "local tool is not implemented",
+                        )),
+                    }
+                };
+                return Some(tool_call_response(id, result));
+            }
+
             let instance_target = arguments
                 .get("instance")
                 .and_then(|i| i.as_str())
@@ -223,6 +236,7 @@ async fn handle_request_with_identity(
                 max_domain_in_values: effective_settings.max_domain_in_values,
                 max_context_keys: effective_settings.max_context_keys,
                 max_context_bytes: effective_settings.max_context_bytes,
+                max_batch_size: effective_settings.max_batch_size,
             };
 
             // Enforce Instance Tool Permissions
@@ -289,6 +303,25 @@ async fn handle_request_with_identity(
             "error": { "code": -32601, "message": "Method not found" }
         })),
     }
+}
+
+fn list_instances_result(config: &Config) -> ToolExecutionResult {
+    let instances = config
+        .instances
+        .iter()
+        .map(|instance| {
+            json!({
+                "id": instance.id,
+                "name": instance.name,
+                "active": instance.active,
+                "mode": instance.get_mode(&config.global_settings.default_mode),
+                "rpc_transport": instance.rpc_transport.as_str(),
+                "has_credentials": !instance.password.is_empty()
+                    || instance.password_env.is_some()
+            })
+        })
+        .collect::<Vec<_>>();
+    ToolExecutionResult::Success(json!({"instances": instances}))
 }
 
 fn requested_fields(arguments: &Value) -> Vec<String> {
@@ -443,6 +476,21 @@ mod tests {
             ("odoo-get-metadata", &["model", "fields"][..]),
             ("odoo-search", &["model", "domain"][..]),
             ("odoo-read", &["model", "ids", "fields"][..]),
+            ("odoo-get-server-info", &[][..]),
+            ("odoo-list-models", &[][..]),
+            ("odoo-check-access", &["model", "operation"][..]),
+            (
+                "odoo-onchange",
+                &["model", "values", "field_names", "fields_spec"][..],
+            ),
+            ("odoo-name-search", &["model", "name"][..]),
+            ("odoo-get-views", &["model", "views"][..]),
+            ("odoo-list-reports", &[][..]),
+            ("odoo-render-report", &["report_name", "ids"][..]),
+            ("odoo-create-batch", &["model", "vals_list"][..]),
+            ("odoo-update-batch", &["model", "records"][..]),
+            ("odoo-delete-batch", &["model", "ids"][..]),
+            ("odoo-list-instances", &[][..]),
         ];
 
         assert_eq!(tools.len(), expected_contracts.len());

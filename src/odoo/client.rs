@@ -3,6 +3,7 @@ use crate::error::AppError;
 use crate::odoo::retry::{
     OperationClass, RetryBackoff, RetryEvent, RetryObserver, default_retry_observer,
 };
+use base64::Engine as _;
 use futures::StreamExt;
 use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,7 @@ const TRANSPORT_JSON2: u8 = 2;
 pub struct OdooClient {
     base_url: String,
     db: String,
+    username: String,
     uid: i64,
     password: String,
     client: Client,
@@ -150,6 +152,7 @@ impl OdooClient {
         let mut odoo = OdooClient {
             base_url,
             db,
+            username: username.clone(),
             uid: 0,
             password: password.clone(),
             client,
@@ -470,6 +473,288 @@ impl OdooClient {
             AppError::authentication("Authentication failed or returned empty uid")
         })?;
         Ok(uid)
+    }
+
+    pub async fn server_info(&self) -> Result<Value, AppError> {
+        self.call_rpc(
+            json!({"service": "common", "method": "version", "args": []}),
+            OperationClass::ReadOnly,
+        )
+        .await
+    }
+
+    pub async fn list_models(
+        &self,
+        domain: Value,
+        offset: Option<u64>,
+        limit: u64,
+    ) -> Result<Value, AppError> {
+        self.search_read(
+            "ir.model",
+            domain,
+            json!(["id", "model", "name", "transient"]),
+            offset,
+            limit,
+        )
+        .await
+    }
+
+    pub async fn list_reports(
+        &self,
+        domain: Value,
+        offset: Option<u64>,
+        limit: u64,
+    ) -> Result<Value, AppError> {
+        self.search_read(
+            "ir.actions.report",
+            domain,
+            json!(["id", "report_name", "name", "model", "report_type"]),
+            offset,
+            limit,
+        )
+        .await
+    }
+
+    pub async fn check_access(
+        &self,
+        model: &str,
+        operation: &str,
+        ids: Vec<i64>,
+    ) -> Result<Value, AppError> {
+        let params = json!({
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+                self.db,
+                self.uid,
+                self.password,
+                model,
+                "has_access",
+                [operation],
+                { "ids": ids }
+            ]
+        });
+        match self.call_rpc(params, OperationClass::ReadOnly).await {
+            Ok(value) => Ok(json!({
+                "allowed": value.as_bool().unwrap_or(false),
+                "method": "has_access"
+            })),
+            Err(_) => {
+                let params = json!({
+                    "service": "object",
+                    "method": "execute_kw",
+                    "args": [
+                        self.db,
+                        self.uid,
+                        self.password,
+                        model,
+                        "check_access_rights",
+                        [operation],
+                        { "raise_exception": false }
+                    ]
+                });
+                let value = self.call_rpc(params, OperationClass::ReadOnly).await?;
+                Ok(json!({
+                    "allowed": value.as_bool().unwrap_or(false),
+                    "method": "check_access_rights"
+                }))
+            }
+        }
+    }
+
+    pub async fn onchange(
+        &self,
+        model: &str,
+        values: Value,
+        field_names: Value,
+        fields_spec: Value,
+    ) -> Result<Value, AppError> {
+        let params = json!({
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+                self.db,
+                self.uid,
+                self.password,
+                model,
+                "onchange",
+                [values, field_names, fields_spec]
+            ]
+        });
+
+        self.call_rpc(params, OperationClass::ReadOnly).await
+    }
+
+    pub async fn name_search(
+        &self,
+        model: &str,
+        name: &str,
+        domain: Value,
+        operator: Option<&str>,
+        limit: u64,
+    ) -> Result<Value, AppError> {
+        let mut kwargs = Map::new();
+        kwargs.insert("domain".to_string(), domain);
+        kwargs.insert("limit".to_string(), Value::from(limit));
+        if let Some(operator) = operator {
+            kwargs.insert("operator".to_string(), Value::String(operator.to_string()));
+        }
+        let params = json!({
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+                self.db,
+                self.uid,
+                self.password,
+                model,
+                "name_search",
+                [name],
+                kwargs
+            ]
+        });
+
+        self.call_rpc(params, OperationClass::ReadOnly).await
+    }
+
+    pub async fn get_views(
+        &self,
+        model: &str,
+        views: Value,
+        options: Option<Map<String, Value>>,
+    ) -> Result<Value, AppError> {
+        let mut kwargs = Map::new();
+        if let Some(options) = options {
+            kwargs.insert("options".to_string(), Value::Object(options));
+        }
+        let params = json!({
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+                self.db,
+                self.uid,
+                self.password,
+                model,
+                "get_views",
+                [views],
+                kwargs
+            ]
+        });
+
+        self.call_rpc(params, OperationClass::ReadOnly).await
+    }
+
+    pub async fn render_report(
+        &self,
+        report_name: &str,
+        ids: &[i64],
+        format: &str,
+        data: Option<&Map<String, Value>>,
+    ) -> Result<Value, AppError> {
+        if !matches!(format, "pdf" | "html") {
+            return Err(AppError::input_validation(
+                "report format must be 'pdf' or 'html'",
+            ));
+        }
+        self.ensure_web_session().await?;
+        let docids = ids.iter().map(i64::to_string).collect::<Vec<_>>().join(",");
+        let url = format!("{}/report/{format}/{report_name}/{docids}", self.base_url);
+        let mut url = reqwest::Url::parse(&url)
+            .map_err(|_| AppError::input_validation("invalid Odoo report URL"))?;
+        if let Some(data) = data {
+            let data = serde_json::to_string(data)
+                .map_err(|_| AppError::input_validation("report data must be JSON"))?;
+            url.query_pairs_mut().append_pair("data", &data);
+        }
+        let res = self.client.get(url).send().await.map_err(|error| {
+            if error.is_timeout() {
+                AppError::timeout("Odoo report request timed out")
+            } else {
+                AppError::transport("Failed to download the Odoo report")
+            }
+        })?;
+        let status = res.status();
+        let content_type = res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        let body = self.read_response_body(res).await?;
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(AppError::authentication(
+                "Odoo report access requires a valid web session",
+            ));
+        }
+        if !status.is_success() {
+            return Err(AppError::protocol(format!(
+                "Odoo report request failed with HTTP status {}",
+                status.as_u16()
+            )));
+        }
+        let content = if format == "pdf" {
+            base64::engine::general_purpose::STANDARD.encode(&body)
+        } else {
+            String::from_utf8(body)
+                .map_err(|_| AppError::protocol("Odoo returned a non-UTF-8 HTML report"))?
+        };
+        Ok(json!({
+            "report_name": report_name,
+            "ids": ids,
+            "format": format,
+            "mime_type": content_type,
+            "encoding": if format == "pdf" { "base64" } else { "utf8" },
+            "content": content
+        }))
+    }
+
+    async fn ensure_web_session(&self) -> Result<(), AppError> {
+        let url = format!("{}/web/session/authenticate", self.base_url);
+        let body = json!({
+            "jsonrpc": "2.0",
+            "method": "call",
+            "params": {
+                "db": self.db,
+                "login": self.username,
+                "password": self.password
+            },
+            "id": self.next_request_id.fetch_add(1, Ordering::Relaxed)
+        });
+        let res = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|error| {
+                if error.is_timeout() {
+                    AppError::timeout("Odoo web session request timed out")
+                } else {
+                    AppError::transport("Failed to create an Odoo web session")
+                }
+            })?;
+        if !res.status().is_success() {
+            return Err(AppError::authentication(
+                "Odoo rejected the web session credentials",
+            ));
+        }
+        let response_body = self.read_response_body(res).await?;
+        let response: Value = serde_json::from_slice(&response_body)
+            .map_err(|_| AppError::protocol("Odoo returned an invalid web session response"))?;
+        if response.get("error").is_some() {
+            return Err(AppError::authentication(
+                "Odoo rejected the web session credentials",
+            ));
+        }
+        let authenticated = response
+            .pointer("/result/uid")
+            .and_then(Value::as_i64)
+            .is_some_and(|uid| uid > 0);
+        if !authenticated {
+            return Err(AppError::authentication(
+                "Odoo rejected the web session credentials",
+            ));
+        }
+        Ok(())
     }
 
     pub async fn search_read(

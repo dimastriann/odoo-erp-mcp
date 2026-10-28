@@ -89,6 +89,7 @@ mod tests {
         max_domain_in_values: 1_000,
         max_context_keys: 5,
         max_context_bytes: 256,
+        max_batch_size: 100,
     };
 
     fn context(value: Value) -> Map<String, Value> {
