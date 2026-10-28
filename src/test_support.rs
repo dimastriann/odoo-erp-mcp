@@ -262,6 +262,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
             max_context_keys: 32,
             max_context_bytes: 8_192,
             max_batch_size: 100,
+            disabled_tools: Vec::new(),
         },
         instances: vec![
             OdooInstance {
@@ -274,6 +275,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
                 password_env: None,
                 active: true,
                 rpc_transport: RpcTransport::Auto,
+                disabled_tools: None,
                 mode: Some("crud".into()),
                 allowed_tools: None,
                 permissions: None,
@@ -289,6 +291,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
                 password_env: None,
                 active: true,
                 rpc_transport: RpcTransport::Auto,
+                disabled_tools: None,
                 mode: Some("read_only".into()),
                 allowed_tools: None,
                 permissions: None,

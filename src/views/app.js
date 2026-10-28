@@ -9,8 +9,11 @@ createApp({
         const formError = ref('');
         const config = ref({ global_settings: { default_mode: 'crud' }, instances: [], prompts: [] });
         const approvals = ref([]);
+        const tools = ref([]);
         const serverVersion = ref('—');
         const instanceSearch = ref('');
+        const toolSearch = ref('');
+        const toolCapability = ref('all');
         const showInstanceModal = ref(false);
         const showPromptModal = ref(false);
         const newInstance = ref({});
@@ -24,6 +27,16 @@ createApp({
             return config.value.instances.filter(item => [item.name, item.url, item.db, item.username]
                 .some(value => String(value || '').toLowerCase().includes(query)));
         });
+        const toolCapabilities = computed(() => [...new Set(tools.value.map(tool => tool.capability))].sort());
+        const filteredTools = computed(() => {
+            const query = toolSearch.value.trim().toLowerCase();
+            return tools.value.filter(tool => {
+                const matchesCapability = toolCapability.value === 'all' || tool.capability === toolCapability.value;
+                const matchesQuery = !query || [tool.name, tool.description, tool.capability]
+                    .some(value => String(value || '').toLowerCase().includes(query));
+                return matchesCapability && matchesQuery;
+            });
+        });
 
         async function api(url, options = {}) {
             const response = await fetch(url, options);
@@ -36,7 +49,21 @@ createApp({
             if (!response.ok) return;
             config.value = await response.json();
             await fetchApprovals();
+            await fetchTools();
             authenticated.value = true;
+        }
+
+        async function fetchTools() {
+            const response = await api('/api/tools');
+            if (response.ok) tools.value = (await response.json()).tools || [];
+        }
+
+        async function setToolEnabled(name, enabled) {
+            const disabled = new Set(tools.value.filter(tool => !tool.enabled).map(tool => tool.name));
+            if (enabled) disabled.delete(name);
+            else disabled.add(name);
+            const response = await api('/api/tools', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ disabled: [...disabled] }) });
+            if (response.ok) await fetchTools();
         }
 
         async function fetchApprovals() {
@@ -74,9 +101,16 @@ createApp({
             formError.value = '';
             const scopedPolicy = item?.permissions ? { models: item.permissions.models || {}, operations: item.permissions.operations || {} } : { models: {}, operations: {} };
             newInstance.value = item
-                ? { ...item, mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false }
-                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false };
+                ? { ...item, disabled_tools: [...(item.disabled_tools || [])], mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false }
+                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, rpc_transport: 'auto', disabled_tools: [], mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false };
             showInstanceModal.value = true;
+        }
+
+        function toggleInstanceTool(name) {
+            const values = newInstance.value.disabled_tools;
+            const index = values.indexOf(name);
+            if (index >= 0) values.splice(index, 1);
+            else values.push(name);
         }
 
         function openPromptModal(item = null) {
@@ -95,6 +129,7 @@ createApp({
             delete payload.capability_deny;
             delete payload.scoped_policy_json;
             delete payload.confirm_empty_policy;
+            payload.disabled_tools = (newInstance.value.disabled_tools || []).length ? newInstance.value.disabled_tools : null;
             if (newInstance.value.credential_source === 'environment') {
                 if (!String(payload.password_env || '').trim()) return void (formError.value = 'Environment variable name is required.');
                 payload.password = '';
@@ -159,6 +194,6 @@ createApp({
         function toggleDarkMode() { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light'); document.documentElement.classList.toggle('light', !isDark.value); }
 
         onMounted(() => { document.documentElement.classList.toggle('light', !isDark.value); fetchVersion(); fetchConfig(); });
-        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, serverVersion, instanceSearch, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, capabilities, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode, approveApproval, rejectApproval };
+        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, tools, serverVersion, instanceSearch, toolSearch, toolCapability, toolCapabilities, filteredTools, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, capabilities, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode, approveApproval, rejectApproval, setToolEnabled, toggleInstanceTool };
     }
 }).mount('#app');

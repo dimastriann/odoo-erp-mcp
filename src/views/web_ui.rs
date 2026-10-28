@@ -1,5 +1,6 @@
 use crate::config::{Config, OdooInstance, OdooPrompt, generate_id};
 use crate::lifecycle::approval::{ApprovalId, approve_approval, list_approvals, reject_approval};
+use crate::tools::catalog::{ToolName, tool_definitions};
 use axum::{
     Json, Router,
     extract::{Path, Request, State},
@@ -32,6 +33,12 @@ struct LoginRequest {
     password: String,
 }
 
+#[derive(Deserialize)]
+struct ToolSettingsRequest {
+    #[serde(default)]
+    disabled: Vec<String>,
+}
+
 pub async fn start_ui(config: SharedConfig) {
     let username = std::env::var("ODOO_MCP_UI_USERNAME").unwrap_or_else(|_| "admin".into());
     let password = std::env::var("ODOO_MCP_UI_PASSWORD").unwrap_or_else(|_| {
@@ -52,6 +59,8 @@ pub async fn start_ui(config: SharedConfig) {
         .route("/api/approvals/{id}/approve", post(approve))
         .route("/api/approvals/{id}/reject", post(reject))
         .route("/api/global-settings", post(update_global_settings))
+        .route("/api/tools", get(get_tools))
+        .route("/api/tools", post(update_tools))
         .route("/api/instances", post(add_instance))
         .route("/api/instances/{id}", delete(delete_instance))
         .route("/api/instances/{id}/active", post(toggle_active))
@@ -180,6 +189,65 @@ async fn version() -> Json<Value> {
 async fn get_config(State(state): State<AppState>) -> Json<Value> {
     let config = state.config.read().unwrap();
     Json(redacted_config_value(&config))
+}
+
+async fn get_tools(State(state): State<AppState>) -> Json<Value> {
+    let config = state.config.read().unwrap();
+    let definitions = tool_definitions();
+    let tools = definitions
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|definition| {
+            let name = definition["name"].as_str().unwrap_or_default();
+            let tool = ToolName::try_from(name).ok();
+            let enabled = !config
+                .global_settings
+                .disabled_tools
+                .iter()
+                .any(|disabled| disabled.eq_ignore_ascii_case(name));
+            let instances = config
+                .instances
+                .iter()
+                .map(|instance| {
+                    (
+                        instance.id.clone(),
+                        Value::Bool(!instance.disabled_tools.as_ref().is_some_and(|disabled| {
+                            disabled
+                                .iter()
+                                .any(|disabled| disabled.eq_ignore_ascii_case(name))
+                        })),
+                    )
+                })
+                .collect::<serde_json::Map<_, _>>();
+            json!({
+                "name": name,
+                "description": definition["description"],
+                "capability": tool.map(|tool| tool.capability().as_str()).unwrap_or("read"),
+                "enabled": enabled,
+                "instances": instances
+            })
+        })
+        .collect::<Vec<_>>();
+    Json(json!({"tools": tools}))
+}
+
+async fn update_tools(
+    State(state): State<AppState>,
+    Json(settings): Json<ToolSettingsRequest>,
+) -> Response {
+    let mut config = state.config.write().unwrap();
+    let previous = std::mem::take(&mut config.global_settings.disabled_tools);
+    config.global_settings.disabled_tools = settings.disabled;
+    if let Err(error) = config.validate() {
+        config.global_settings.disabled_tools = previous;
+        return (StatusCode::BAD_REQUEST, error).into_response();
+    }
+    if config.save().is_err() {
+        config.global_settings.disabled_tools = previous;
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    StatusCode::OK.into_response()
 }
 
 async fn get_approvals() -> Json<Value> {
@@ -394,6 +462,9 @@ mod tests {
             "Default deny is active",
             "Approve",
             "Reject",
+            "MCP tools",
+            "RPC transport",
+            "Instance tool overrides",
         ] {
             assert!(html.contains(control), "missing UI control: {control}");
         }

@@ -138,13 +138,19 @@ async fn handle_request_with_identity(
             }))
         }
         "notifications/initialized" => None,
-        "tools/list" => Some(json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": {
-                "tools": tool_definitions()
-            }
-        })),
+        "tools/list" => {
+            let tools = {
+                let conf = config.read().unwrap();
+                filtered_tool_definitions(&conf)
+            };
+            Some(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "tools": tools
+                }
+            }))
+        }
         "tools/call" => {
             let params = req.get("params").cloned().unwrap_or(json!({}));
             let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
@@ -160,6 +166,22 @@ async fn handle_request_with_identity(
                     ));
                 }
             };
+            let globally_disabled = {
+                let conf = config.read().unwrap();
+                conf.global_settings
+                    .disabled_tools
+                    .iter()
+                    .any(|disabled| disabled.eq_ignore_ascii_case(tool_name.as_str()))
+            };
+            if globally_disabled {
+                return Some(tool_call_response(
+                    id,
+                    ToolExecutionResult::Failure(AppError::tool_disabled(format!(
+                        "Tool '{}' is disabled in the server configuration",
+                        tool_name.as_str()
+                    ))),
+                ));
+            }
 
             if !tool_name.requires_client() {
                 let result = {
@@ -225,6 +247,16 @@ async fn handle_request_with_identity(
                     return Some(tool_call_response(id, ToolExecutionResult::Failure(error)));
                 }
             };
+            if instance_obj.tool_disabled(tool_name) {
+                return Some(tool_call_response(
+                    id,
+                    ToolExecutionResult::Failure(AppError::tool_disabled(format!(
+                        "Tool '{}' is disabled for Odoo instance '{}'",
+                        tool_name.as_str(),
+                        instance_obj.name
+                    ))),
+                ));
+            }
             let effective_settings = instance_obj.effective_query_settings(&global_settings);
             let query_limits = QueryLimits {
                 max_query_limit: effective_settings.max_query_limit,
@@ -305,6 +337,30 @@ async fn handle_request_with_identity(
     }
 }
 
+fn filtered_tool_definitions(config: &Config) -> Value {
+    let definitions = tool_definitions();
+    Value::Array(
+        definitions
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|definition| {
+                definition
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .is_none_or(|name| {
+                        !config
+                            .global_settings
+                            .disabled_tools
+                            .iter()
+                            .any(|disabled| disabled.eq_ignore_ascii_case(name))
+                    })
+            })
+            .cloned()
+            .collect(),
+    )
+}
+
 fn list_instances_result(config: &Config) -> ToolExecutionResult {
     let instances = config
         .instances
@@ -316,6 +372,7 @@ fn list_instances_result(config: &Config) -> ToolExecutionResult {
                 "active": instance.active,
                 "mode": instance.get_mode(&config.global_settings.default_mode),
                 "rpc_transport": instance.rpc_transport.as_str(),
+                "disabled_tools": instance.disabled_tools.clone().unwrap_or_default(),
                 "has_credentials": !instance.password.is_empty()
                     || instance.password_env.is_some()
             })
@@ -509,6 +566,50 @@ mod tests {
             assert!(tool["inputSchema"]["properties"].is_object());
             assert_eq!(tool["inputSchema"]["required"], json!(required));
         }
+    }
+
+    #[tokio::test]
+    async fn globally_disabled_tools_are_not_listed() {
+        let config = multi_instance_config();
+        config.write().unwrap().global_settings.disabled_tools = vec!["odoo-delete".to_string()];
+        let client_manager = ClientManager::new();
+        let req = json!({"jsonrpc": "2.0", "id": 20, "method": "tools/list"});
+
+        let resp = handle_request(req, &config, &client_manager).await.unwrap();
+        let tools = resp["result"]["tools"].as_array().unwrap();
+
+        assert!(!tools.iter().any(|tool| tool["name"] == "odoo-delete"));
+        assert!(tools.iter().any(|tool| tool["name"] == "odoo-search-read"));
+    }
+
+    #[tokio::test]
+    async fn instance_disabled_tools_are_rejected_at_call_time() {
+        let config = multi_instance_config();
+        config.write().unwrap().instances[0].disabled_tools =
+            Some(vec!["odoo-search-read".to_string()]);
+        let client_manager = ClientManager::new();
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 21,
+            "method": "tools/call",
+            "params": {
+                "name": "odoo-search-read",
+                "arguments": {
+                    "instance": "1",
+                    "model": "res.partner",
+                    "domain": [],
+                    "fields": ["id"]
+                }
+            }
+        });
+
+        let resp = handle_request(req, &config, &client_manager).await.unwrap();
+
+        assert_eq!(resp["result"]["isError"], true);
+        assert_eq!(
+            resp["result"]["structuredContent"]["error"]["code"],
+            "TOOL_DISABLED"
+        );
     }
 
     #[tokio::test]

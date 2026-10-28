@@ -31,6 +31,7 @@
             <div><div class="brand-mark small">O</div><strong>Odoo MCP</strong></div>
             <nav>
                 <a href="#instances">Instances <span>{{ config.instances.length }}</span></a>
+                <a href="#tools">Tools <span>{{ tools.length }}</span></a>
                 <a href="#prompts">Prompts <span>{{ config.prompts.length }}</span></a>
                 <a href="#approvals">Approvals <span>{{ approvals.length }}</span></a>
             </nav>
@@ -73,6 +74,22 @@
                 <div v-else class="empty panel"><h3>{{ instanceSearch ? 'No matching instances' : 'No instances yet' }}</h3><p class="muted">{{ instanceSearch ? 'Try another search term.' : 'Add your first Odoo connection to get started.' }}</p></div>
             </section>
 
+            <section id="tools" class="section-block">
+                <div class="section-heading"><div><p class="eyebrow">Tool surface</p><h2>MCP tools</h2><p class="muted text-sm">Enable or disable tools globally. Instances can add further restrictions.</p></div></div>
+                <div class="toolbar panel">
+                    <input v-model="toolSearch" class="search" type="search" aria-label="Search tools" placeholder="Search tools by name, capability, or description…">
+                    <select v-model="toolCapability"><option value="all">All capabilities</option><option v-for="capability in toolCapabilities" :key="capability" :value="capability">{{ capability }}</option></select>
+                </div>
+                <div class="tool-list">
+                    <article v-for="tool in filteredTools" :key="tool.name" class="panel tool-row">
+                        <div class="tool-main"><h3>{{ tool.name }}</h3><p class="muted text-sm">{{ tool.description }}</p></div>
+                        <span class="badge">{{ tool.capability }}</span>
+                        <label class="tool-switch"><input type="checkbox" :checked="tool.enabled" @change="setToolEnabled(tool.name, $event.target.checked)"><span>{{ tool.enabled ? 'Enabled' : 'Disabled' }}</span></label>
+                    </article>
+                </div>
+                <div v-if="!filteredTools.length" class="empty panel"><h3>No matching tools</h3><p class="muted">Try another search term or capability.</p></div>
+            </section>
+
             <section id="prompts" class="section-block">
                 <div class="section-heading"><div><h2>AI prompts</h2><p class="muted text-sm">Reusable instructions exposed through MCP.</p></div><button @click="openPromptModal()" class="button primary">+ Add prompt</button></div>
                 <div class="prompt-grid"><article v-for="p in config.prompts" :key="p.id" class="panel prompt-card"><div><h3>{{ p.name }}</h3><p class="muted prompt-preview">{{ p.content }}</p></div><div class="actions"><button @click="openPromptModal(p)" class="button ghost">Edit</button><button @click="deletePrompt(p.id)" class="button danger">Delete</button></div></article></div>
@@ -94,8 +111,10 @@
                     <label class="field"><span>Database</span><input v-model.trim="newInstance.db" required></label>
                     <label class="field"><span>Username</span><input v-model.trim="newInstance.username" autocomplete="username" required></label>
                     <label class="field full"><span>Credential source</span><select v-model="newInstance.credential_source"><option value="environment">Environment variable (recommended)</option><option value="inline">Inline secret (legacy)</option></select></label>
+                    <label class="field full"><span>RPC transport</span><select v-model="newInstance.rpc_transport"><option value="auto">Auto (JSON-2 for Odoo 19+)</option><option value="jsonrpc">JSON-RPC (legacy compatibility)</option><option value="json2">JSON-2 (API key)</option></select><small>JSON-2 requires an API key with the rpc scope.</small></label>
                     <label v-if="newInstance.credential_source === 'environment'" class="field full"><span>Environment variable</span><input v-model.trim="newInstance.password_env" placeholder="ODOO_PASSWORD" required><small>Only the variable name is stored. Restart the server after changing it.</small></label>
                     <label v-else class="field full"><span>Password / API key</span><input v-model="newInstance.password" type="password" autocomplete="new-password" :placeholder="newInstance.id && !newInstance.password_env ? 'Leave blank to keep current secret' : 'Required'" :required="!newInstance.id || !!newInstance.password_env"><small v-if="newInstance.id && newInstance.has_password">A secret is already configured.</small><small class="warning-text">Inline credentials are retained only for migration compatibility.</small></label>
+                    <div class="field full"><span>Instance tool overrides</span><div class="tool-override-list"><label v-for="tool in tools" :key="'instance-tool-' + tool.name" class="check-row"><input type="checkbox" :checked="newInstance.disabled_tools.includes(tool.name)" @change="toggleInstanceTool(tool.name)"><span>{{ tool.name }}</span></label></div><small>Checked tools are disabled for this instance, even when enabled globally.</small></div>
                     <label class="field full"><span>Authorization system</span><select v-model="newInstance.policy_enabled"><option :value="false">Legacy mode (compatible)</option><option :value="true">Capability policy (default deny)</option></select></label>
                     <label v-if="!newInstance.policy_enabled" class="field full"><span>Tool access</span><select v-model="newInstance.mode"><option value="inherit">Inherit global default</option><option value="crud">Full CRUD access</option><option value="read_only">Read only</option></select></label>
                     <div v-else class="field full"><span>Instance capabilities</span><div class="capability-columns"><fieldset><legend>Allow</legend><label v-for="capability in capabilities" :key="'allow-' + capability" class="check-row"><input type="checkbox" :checked="newInstance.capability_allow.includes(capability)" @change="toggleCapability('capability_allow', capability)"><span>{{ capability }}</span></label></fieldset><fieldset><legend>Deny</legend><label v-for="capability in capabilities" :key="'deny-' + capability" class="check-row"><input type="checkbox" :checked="newInstance.capability_deny.includes(capability)" @change="toggleCapability('capability_deny', capability)"><span>{{ capability }}</span></label></fieldset></div><small>Unmatched capabilities are denied when capability policy is enabled.</small></div>

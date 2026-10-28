@@ -15,6 +15,7 @@ pub(crate) enum ErrorCode {
     Protocol,
     Timeout,
     Transport,
+    ToolDisabled,
 }
 
 impl ErrorCode {
@@ -30,6 +31,7 @@ impl ErrorCode {
             Self::Protocol => "PROTOCOL_ERROR",
             Self::Timeout => "TIMEOUT",
             Self::Transport => "TRANSPORT_ERROR",
+            Self::ToolDisabled => "TOOL_DISABLED",
         }
     }
 }
@@ -59,6 +61,7 @@ pub(crate) enum AppError {
     Protocol { message: String },
     Timeout { message: String },
     Transport { message: String },
+    ToolDisabled { message: String },
 }
 
 impl AppError {
@@ -74,6 +77,7 @@ impl AppError {
             Self::Protocol { .. } => ErrorCode::Protocol,
             Self::Timeout { .. } => ErrorCode::Timeout,
             Self::Transport { .. } => ErrorCode::Transport,
+            Self::ToolDisabled { .. } => ErrorCode::ToolDisabled,
         }
     }
 
@@ -104,7 +108,8 @@ impl AppError {
             | Self::OdooValidation { message }
             | Self::Protocol { message }
             | Self::Timeout { message }
-            | Self::Transport { message } => message.as_str(),
+            | Self::Transport { message }
+            | Self::ToolDisabled { message } => message.as_str(),
         }
     }
 
@@ -178,6 +183,12 @@ impl AppError {
             message: message.into(),
         }
     }
+
+    pub(crate) fn tool_disabled(message: impl Into<String>) -> Self {
+        Self::ToolDisabled {
+            message: message.into(),
+        }
+    }
 }
 
 impl Display for AppError {
@@ -192,7 +203,8 @@ impl Display for AppError {
             | Self::OdooValidation { message }
             | Self::Protocol { message }
             | Self::Timeout { message }
-            | Self::Transport { message } => formatter.write_str(message),
+            | Self::Transport { message }
+            | Self::ToolDisabled { message } => formatter.write_str(message),
         }
     }
 }

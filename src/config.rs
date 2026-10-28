@@ -45,6 +45,8 @@ pub struct OdooInstance {
     #[serde(default)]
     pub rpc_transport: RpcTransport,
     #[serde(default)]
+    pub disabled_tools: Option<Vec<String>>,
+    #[serde(default)]
     pub mode: Option<String>,
     #[serde(default)]
     pub allowed_tools: Option<Vec<String>>,
@@ -90,6 +92,14 @@ impl OdooInstance {
                 .unwrap_or(effective.max_domain_in_values);
         }
         effective
+    }
+
+    pub(crate) fn tool_disabled(&self, tool: ToolName) -> bool {
+        self.disabled_tools.as_ref().is_some_and(|tools| {
+            tools
+                .iter()
+                .any(|name| name.eq_ignore_ascii_case(tool.as_str()))
+        })
     }
 
     pub fn get_mode<'a>(&'a self, global_default: &'a str) -> &'a str {
@@ -203,6 +213,8 @@ pub struct GlobalSettings {
     pub max_context_bytes: usize,
     #[serde(default = "default_max_batch_size")]
     pub max_batch_size: usize,
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
 }
 
 fn default_global_mode() -> String {
@@ -283,6 +295,7 @@ impl Default for GlobalSettings {
             max_context_keys: default_max_context_keys(),
             max_context_bytes: default_max_context_bytes(),
             max_batch_size: default_max_batch_size(),
+            disabled_tools: Vec::new(),
         }
     }
 }
@@ -325,8 +338,24 @@ impl GlobalSettings {
         if self.max_query_limit > u64::try_from(self.max_response_records).unwrap_or(u64::MAX) {
             return Err("max_query_limit cannot exceed max_response_records".to_string());
         }
+        validate_tool_names(&self.disabled_tools)?;
         Ok(())
     }
+}
+
+fn validate_tool_names(tools: &[String]) -> Result<(), String> {
+    for (index, name) in tools.iter().enumerate() {
+        if ToolName::try_from(name.as_str()).is_err() {
+            return Err(format!("unknown tool name '{name}'"));
+        }
+        if tools[..index]
+            .iter()
+            .any(|other| other.eq_ignore_ascii_case(name))
+        {
+            return Err(format!("duplicate tool name '{name}'"));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -352,6 +381,10 @@ impl Config {
                 .effective_query_settings(&self.global_settings)
                 .validate()
                 .map_err(|error| format!("instance {:?}: {error}", instance.name))?;
+            if let Some(tools) = &instance.disabled_tools {
+                validate_tool_names(tools)
+                    .map_err(|error| format!("instance {:?}: {error}", instance.name))?;
+            }
         }
         Ok(())
     }
@@ -612,6 +645,33 @@ mod tests {
     }
 
     #[test]
+    fn disabled_tool_names_are_validated_and_unique() {
+        let valid = GlobalSettings {
+            disabled_tools: vec!["odoo-delete".to_string()],
+            ..GlobalSettings::default()
+        };
+        assert!(valid.validate().is_ok());
+
+        let unknown = GlobalSettings {
+            disabled_tools: vec!["odoo-unknown".to_string()],
+            ..GlobalSettings::default()
+        };
+        assert_eq!(
+            unknown.validate(),
+            Err("unknown tool name 'odoo-unknown'".to_string())
+        );
+
+        let duplicate = GlobalSettings {
+            disabled_tools: vec!["odoo-delete".to_string(), "odoo-delete".to_string()],
+            ..GlobalSettings::default()
+        };
+        assert_eq!(
+            duplicate.validate(),
+            Err("duplicate tool name 'odoo-delete'".to_string())
+        );
+    }
+
+    #[test]
     fn approval_ttl_has_a_safe_default_and_must_be_positive() {
         let mut settings = GlobalSettings::default();
         assert_eq!(settings.approval_ttl_secs, 900);
@@ -635,6 +695,7 @@ mod tests {
             password_env: None,
             active: true,
             rpc_transport: RpcTransport::Auto,
+            disabled_tools: None,
             mode: None,
             allowed_tools: None,
             permissions: None,
@@ -663,6 +724,7 @@ mod tests {
             password_env: None,
             active: true,
             rpc_transport: RpcTransport::Auto,
+            disabled_tools: None,
             mode: Some("crud".into()),
             allowed_tools: None,
             permissions: None,
@@ -687,6 +749,7 @@ mod tests {
             password_env: None,
             active: false,
             rpc_transport: RpcTransport::Auto,
+            disabled_tools: None,
             mode: Some("read_only".into()),
             allowed_tools: None,
             permissions: None,
@@ -713,6 +776,7 @@ mod tests {
             password_env: None,
             active: false,
             rpc_transport: RpcTransport::Auto,
+            disabled_tools: None,
             mode: Some("inherit".into()),
             allowed_tools: None,
             permissions: None,
