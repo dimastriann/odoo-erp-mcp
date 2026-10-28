@@ -197,6 +197,10 @@ pub struct GlobalSettings {
     pub max_domain_in_values: usize,
     #[serde(default = "default_approval_ttl_secs")]
     pub approval_ttl_secs: u64,
+    #[serde(default = "default_max_context_keys")]
+    pub max_context_keys: usize,
+    #[serde(default = "default_max_context_bytes")]
+    pub max_context_bytes: usize,
 }
 
 fn default_global_mode() -> String {
@@ -247,6 +251,14 @@ fn default_approval_ttl_secs() -> u64 {
     900
 }
 
+fn default_max_context_keys() -> usize {
+    32
+}
+
+fn default_max_context_bytes() -> usize {
+    8_192
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
@@ -262,6 +274,8 @@ impl Default for GlobalSettings {
             max_response_records: default_max_response_records(),
             max_domain_in_values: default_max_domain_in_values(),
             approval_ttl_secs: default_approval_ttl_secs(),
+            max_context_keys: default_max_context_keys(),
+            max_context_bytes: default_max_context_bytes(),
         }
     }
 }
@@ -291,6 +305,8 @@ impl GlobalSettings {
             ("max_domain_terms", self.max_domain_terms),
             ("max_response_records", self.max_response_records),
             ("max_domain_in_values", self.max_domain_in_values),
+            ("max_context_keys", self.max_context_keys),
+            ("max_context_bytes", self.max_context_bytes),
         ];
         for (name, value) in positive_sizes {
             if value == 0 {

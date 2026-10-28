@@ -110,7 +110,7 @@ impl TryFrom<&str> for ToolName {
 }
 
 pub(crate) fn tool_definitions() -> Value {
-    json!([
+    let mut definitions = json!([
         {
             "name": "odoo-search-read",
             "description": "Search and retrieve records from Odoo.",
@@ -257,7 +257,23 @@ pub(crate) fn tool_definitions() -> Value {
                 "required": ["model", "ids", "fields"]
             }
         }
-    ])
+    ]);
+
+    for definition in definitions
+        .as_array_mut()
+        .expect("tool definitions are always an array")
+    {
+        definition["inputSchema"]["properties"]["context"] = context_schema();
+    }
+    definitions
+}
+
+fn context_schema() -> Value {
+    json!({
+        "type": "object",
+        "description": "Optional Odoo context. Supported keys: lang, tz, active_test, company_id, allowed_company_ids, and default_* values.",
+        "additionalProperties": true
+    })
 }
 
 #[cfg(test)]

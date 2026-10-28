@@ -26,6 +26,7 @@ pub struct OdooClient {
     retry_observer: Arc<dyn RetryObserver>,
     configured_transport: RpcTransport,
     transport: Arc<AtomicU8>,
+    context: Option<Map<String, Value>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -157,6 +158,7 @@ impl OdooClient {
             retry_observer,
             configured_transport: transport,
             transport: Arc::new(AtomicU8::new(initial_transport)),
+            context: None,
         };
 
         if transport == RpcTransport::Auto && odoo.server_version_major().await.unwrap_or(0) >= 19 {
@@ -180,6 +182,30 @@ impl OdooClient {
 
     fn is_auto_transport(&self) -> bool {
         self.configured_transport == RpcTransport::Auto
+    }
+
+    pub(crate) fn with_context(&self, context: Option<Map<String, Value>>) -> Self {
+        let mut client = self.clone();
+        client.context = context;
+        client
+    }
+
+    fn apply_context(&self, mut params: Value) -> Value {
+        let Some(context) = &self.context else {
+            return params;
+        };
+        if params.get("service").and_then(Value::as_str) != Some("object") {
+            return params;
+        }
+        let Some(args) = params.get_mut("args").and_then(Value::as_array_mut) else {
+            return params;
+        };
+        if args.len() == 6 {
+            args.push(json!({"context": context}));
+        } else if let Some(kwargs) = args.get_mut(6).and_then(Value::as_object_mut) {
+            kwargs.insert("context".to_string(), Value::Object(context.clone()));
+        }
+        params
     }
 
     async fn server_version_major(&self) -> Option<u64> {
@@ -209,6 +235,7 @@ impl OdooClient {
         params: Value,
         operation_class: OperationClass,
     ) -> Result<Value, AppError> {
+        let params = self.apply_context(params);
         let backoff = RetryBackoff::default();
         let mut retry_index = 0;
 

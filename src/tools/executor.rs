@@ -14,6 +14,7 @@ use crate::tools::arguments::{
     SearchDomainArgs, SearchReadArgs, UpdateArgs,
 };
 use crate::tools::catalog::ToolName;
+use crate::tools::context::validate_context;
 use crate::tools::fields::{validate_field_count, validate_field_names};
 use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, resolve_limit};
 use crate::tools::protection::{QueryLimits, validate_response_record_count};
@@ -180,6 +181,14 @@ pub(crate) async fn execute_tool(
             "Error: Missing required parameter 'model'",
         ));
     }
+    let odoo_context = arguments.get("context").and_then(Value::as_object).cloned();
+    if let Err(error) = validate_context(odoo_context.as_ref(), limits) {
+        return ToolExecutionResult::Failure(AppError::input_validation(format!(
+            "Error: Invalid context: {error}"
+        )));
+    }
+    let scoped_odoo = odoo.with_context(odoo_context);
+    let odoo = &scoped_odoo;
 
     match name {
         ToolName::SearchRead => {
@@ -427,6 +436,8 @@ mod tests {
         max_domain_terms: 100,
         max_response_records: 1_000,
         max_domain_in_values: 1_000,
+        max_context_keys: 32,
+        max_context_bytes: 8_192,
     };
 
     #[tokio::test]

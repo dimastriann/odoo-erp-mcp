@@ -221,6 +221,8 @@ async fn handle_request_with_identity(
                 max_domain_terms: effective_settings.max_domain_terms,
                 max_response_records: effective_settings.max_response_records,
                 max_domain_in_values: effective_settings.max_domain_in_values,
+                max_context_keys: effective_settings.max_context_keys,
+                max_context_bytes: effective_settings.max_context_bytes,
             };
 
             // Enforce Instance Tool Permissions
