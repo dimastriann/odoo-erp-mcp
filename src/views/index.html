@@ -8,6 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="/styles.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/vue@3.2.31/dist/vue.global.prod.js" defer></script>
+    <script src="/pagination.js" defer></script>
     <script src="/app.js" defer></script>
 </head>
 <body class="min-h-screen">
@@ -66,14 +67,15 @@
                         <option value="crud">Default: Full access</option><option value="read_only">Default: Read only</option>
                     </select>
                 </div>
-                <div v-if="filteredInstances.length" class="instance-list">
-                    <article v-for="inst in filteredInstances" :key="inst.id" class="panel instance-row">
+                <div v-if="instancePaged.total" class="instance-list">
+                    <article v-for="inst in instancePaged.items" :key="inst.id" class="panel instance-row">
                         <div class="instance-main"><span :class="['status-dot', { active: inst.active }]"></span><div><h3>{{ inst.name }}</h3><p class="muted truncate">{{ inst.url }} · {{ inst.db }}</p></div></div>
                         <div class="instance-meta"><span class="badge">{{ getFolderName(inst) }}</span><span :class="['badge', getInstanceMode(inst)]">{{ displayMode(getInstanceMode(inst)) }}</span><span class="muted text-sm">{{ inst.username }}</span></div>
                         <div class="actions"><button @click="toggleActive(inst.id)" class="button ghost">{{ inst.active ? 'Active' : 'Enable' }}</button><button @click="openInstanceModal(inst)" class="button ghost">Edit</button><button @click="deleteInstance(inst.id)" class="button danger">Delete</button></div>
                     </article>
                 </div>
                 <div v-else class="empty panel"><h3>{{ instanceSearch ? 'No matching instances' : 'No instances yet' }}</h3><p class="muted">{{ instanceSearch ? 'Try another search term.' : 'Add your first Odoo connection to get started.' }}</p></div>
+                <div class="pager" v-if="instancePaged.total"><span class="muted text-sm">Showing {{ instancePaged.start }}-{{ instancePaged.end }} of {{ instancePaged.total }}</span><div class="pager-controls"><select :value="pageSize" @change="setPageSize($event.target.value)" aria-label="Rows per page"><option :value="20">20 rows</option><option :value="50">50 rows</option><option :value="100">100 rows</option><option :value="1000">Max (1000)</option></select><button class="button ghost" :disabled="instancePaged.page <= 1" @click="setPage(instancePage, instancePaged.page - 1)">Previous</button><span class="muted text-sm">Page {{ instancePaged.page }} / {{ instancePaged.pageCount }}</span><button class="button ghost" :disabled="instancePaged.page >= instancePaged.pageCount" @click="setPage(instancePage, instancePaged.page + 1)">Next</button></div></div>
             </section>
 
             <section id="folders" class="section-block">
@@ -89,24 +91,27 @@
                     <select v-model="toolCapability"><option value="all">All capabilities</option><option v-for="capability in toolCapabilities" :key="capability" :value="capability">{{ capability }}</option></select>
                 </div>
                 <div class="tool-list">
-                    <article v-for="tool in filteredTools" :key="tool.name" class="panel tool-row">
+                    <article v-for="tool in toolPaged.items" :key="tool.name" class="panel tool-row">
                         <div class="tool-main"><h3>{{ tool.name }}</h3><p class="muted text-sm">{{ tool.description }}</p></div>
                         <span class="badge">{{ tool.capability }}</span>
                         <label class="tool-switch"><input type="checkbox" :checked="tool.enabled" @change="setToolEnabled(tool.name, $event.target.checked)"><span>{{ tool.enabled ? 'Enabled' : 'Disabled' }}</span></label>
                     </article>
                 </div>
-                <div v-if="!filteredTools.length" class="empty panel"><h3>No matching tools</h3><p class="muted">Try another search term or capability.</p></div>
+                <div v-if="!toolPaged.total" class="empty panel"><h3>No matching tools</h3><p class="muted">Try another search term or capability.</p></div>
+                <div class="pager" v-if="toolPaged.total"><span class="muted text-sm">Showing {{ toolPaged.start }}-{{ toolPaged.end }} of {{ toolPaged.total }}</span><div class="pager-controls"><select :value="pageSize" @change="setPageSize($event.target.value)" aria-label="Rows per page"><option :value="20">20 rows</option><option :value="50">50 rows</option><option :value="100">100 rows</option><option :value="1000">Max (1000)</option></select><button class="button ghost" :disabled="toolPaged.page <= 1" @click="setPage(toolPage, toolPaged.page - 1)">Previous</button><span class="muted text-sm">Page {{ toolPaged.page }} / {{ toolPaged.pageCount }}</span><button class="button ghost" :disabled="toolPaged.page >= toolPaged.pageCount" @click="setPage(toolPage, toolPaged.page + 1)">Next</button></div></div>
             </section>
 
             <section id="prompts" class="section-block">
                 <div class="section-heading"><div><h2>AI prompts</h2><p class="muted text-sm">Reusable instructions exposed through MCP.</p></div><button @click="openPromptModal()" class="button primary">+ Add prompt</button></div>
-                <div class="prompt-grid"><article v-for="p in config.prompts" :key="p.id" class="panel prompt-card"><div><h3>{{ p.name }}</h3><p class="muted prompt-preview">{{ p.content }}</p></div><div class="actions"><button @click="openPromptModal(p)" class="button ghost">Edit</button><button @click="deletePrompt(p.id)" class="button danger">Delete</button></div></article></div>
-                <div v-if="!config.prompts.length" class="empty panel"><h3>No prompts yet</h3><p class="muted">Create a reusable prompt for your MCP clients.</p></div>
+                <div class="prompt-grid"><article v-for="p in promptPaged.items" :key="p.id" class="panel prompt-card"><div><h3>{{ p.name }}</h3><p class="muted prompt-preview">{{ p.content }}</p></div><div class="actions"><button @click="openPromptModal(p)" class="button ghost">Edit</button><button @click="deletePrompt(p.id)" class="button danger">Delete</button></div></article></div>
+                <div v-if="!promptPaged.total" class="empty panel"><h3>No prompts yet</h3><p class="muted">Create a reusable prompt for your MCP clients.</p></div>
+                <div class="pager" v-if="promptPaged.total"><span class="muted text-sm">Showing {{ promptPaged.start }}-{{ promptPaged.end }} of {{ promptPaged.total }}</span><div class="pager-controls"><select :value="pageSize" @change="setPageSize($event.target.value)" aria-label="Rows per page"><option :value="20">20 rows</option><option :value="50">50 rows</option><option :value="100">100 rows</option><option :value="1000">Max (1000)</option></select><button class="button ghost" :disabled="promptPaged.page <= 1" @click="setPage(promptPage, promptPaged.page - 1)">Previous</button><span class="muted text-sm">Page {{ promptPaged.page }} / {{ promptPaged.pageCount }}</span><button class="button ghost" :disabled="promptPaged.page >= promptPaged.pageCount" @click="setPage(promptPage, promptPaged.page + 1)">Next</button></div></div>
             </section>
             <section id="approvals" class="section-block">
                 <div class="section-heading"><div><p class="eyebrow">Safety</p><h2>Approval inbox</h2></div></div>
-                <div v-if="!approvals.length" class="empty panel"><h3>No approval requests</h3><p class="muted">High-risk mutation requests will appear here for review.</p></div>
-                <div v-else class="prompt-grid"><article v-for="approval in approvals" :key="approval.id" class="panel prompt-card"><div><h3>{{ approval.operation_kind }} · {{ approval.model }}</h3><p class="muted text-sm">Instance: {{ approval.instance }} · State: {{ approval.state }}</p><p class="muted text-sm">Expires: {{ approval.expires_at }}</p></div><div v-if="approval.state === 'pending'" class="actions"><button @click="approveApproval(approval.id)" class="button primary">Approve</button><button @click="rejectApproval(approval.id)" class="button danger">Reject</button></div></article></div>
+                <div v-if="!approvalPaged.total" class="empty panel"><h3>No approval requests</h3><p class="muted">High-risk mutation requests will appear here for review.</p></div>
+                <div v-else class="prompt-grid"><article v-for="approval in approvalPaged.items" :key="approval.id" class="panel prompt-card"><div><h3>{{ approval.operation_kind }} - {{ approval.model }}</h3><p class="muted text-sm">Instance: {{ approval.instance }} - State: {{ approval.state }}</p><p class="muted text-sm">Expires: {{ approval.expires_at }}</p></div><div v-if="approval.state === 'pending'" class="actions"><button @click="approveApproval(approval.id)" class="button primary">Approve</button><button @click="rejectApproval(approval.id)" class="button danger">Reject</button></div></article></div>
+                <div class="pager" v-if="approvalPaged.total"><span class="muted text-sm">Showing {{ approvalPaged.start }}-{{ approvalPaged.end }} of {{ approvalPaged.total }}</span><div class="pager-controls"><select :value="pageSize" @change="setPageSize($event.target.value)" aria-label="Rows per page"><option :value="20">20 rows</option><option :value="50">50 rows</option><option :value="100">100 rows</option><option :value="1000">Max (1000)</option></select><button class="button ghost" :disabled="approvalPaged.page <= 1" @click="setPage(approvalPage, approvalPaged.page - 1)">Previous</button><span class="muted text-sm">Page {{ approvalPaged.page }} / {{ approvalPaged.pageCount }}</span><button class="button ghost" :disabled="approvalPaged.page >= approvalPaged.pageCount" @click="setPage(approvalPage, approvalPaged.page + 1)">Next</button></div></div>
             </section>
         </main>
 

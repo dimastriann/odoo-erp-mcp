@@ -79,6 +79,7 @@ pub async fn start_ui(config: SharedConfig, runtime: McpRuntime, client_manager:
     let app = Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
+        .route("/pagination.js", get(pagination_js))
         .route("/styles.css", get(styles_css))
         .route("/api/version", get(version))
         .route("/api/login", post(login))
@@ -197,6 +198,13 @@ async fn app_js() -> impl IntoResponse {
     (
         [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
         include_str!("app.js"),
+    )
+}
+
+async fn pagination_js() -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        include_str!("pagination.js"),
     )
 }
 
@@ -550,6 +558,8 @@ mod tests {
             "Instance tool overrides",
             "Folders",
             "Workspace",
+            "Rows per page",
+            "Max (1000)",
         ] {
             assert!(html.contains(control), "missing UI control: {control}");
         }
