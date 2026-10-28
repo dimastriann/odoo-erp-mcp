@@ -266,6 +266,26 @@ Folders are single-level. Each instance may reference one `folder_id`, and the
 and clears their `folder_id` (they become ungrouped). Existing configurations
 without `folders` or `folder_id` load unchanged.
 
+#### Audit and observability
+
+Audit events are written to `audit.log.jsonl` next to `config.json`. Each event
+is versioned, hash-chained to the previous event, redacts sensitive keys, and
+records policy decisions, disabled-tool rejections, approvals, execution
+attempts, and outcomes. `global_settings.audit_retention_events` controls how
+many events are retained (default `10000`). Authorized administrators can query
+the newest events with `GET /api/audit?limit=100` and export the full trail with
+`GET /api/audit/export`.
+
+Runtime observability is available through:
+
+- `GET /health` — process health and version.
+- `GET /ready` — readiness based on configured instances.
+- `GET /api/metrics` — request, tool, RPC latency, and retry counters.
+
+MCP request logs are emitted as JSON on stderr with method, tool, duration,
+failure state, and configuration revision. RPC latency and retry counters are
+recorded for every Odoo call.
+
 **`mode` options per instance:**
 
 | Value | Behaviour |

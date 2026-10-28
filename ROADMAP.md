@@ -467,41 +467,41 @@ reconnecting or restarting MCP.
 
 ---
 
-# Stage 5 — Audit and Observability
+# Stage 5 � Audit and Observability
 
 Goal: Make operations traceable without exposing secrets or unrestricted sensitive data.
 
 ## 5.1 Audit trail
 
-- [ ] S5-01 — Define a versioned audit-event schema.
-- [ ] S5-02 — Record authorization decisions.
+- [x] S5-01 — Define a versioned audit-event schema.
+- [x] S5-02 — Record authorization decisions.
 - [ ] S5-03 — Record preview generation.
-- [ ] S5-04 — Record approvals and rejections.
-- [ ] S5-05 — Record execution attempts.
+- [x] S5-04 — Record approvals and rejections.
+- [x] S5-05 — Record execution attempts.
 - [ ] S5-06 — Record verification results.
-- [ ] S5-07 — Record failed, denied, and unknown operations.
-- [ ] S5-08 — Add a field-redaction policy.
-- [ ] S5-09 — Add an audit-payload size limit.
-- [ ] S5-10 — Create an append-only audit-storage abstraction.
-- [ ] S5-11 — Add a durable local audit backend.
-- [ ] S5-12 — Add retention configuration.
-- [ ] S5-13 — Add tamper-evident hash chaining.
-- [ ] S5-14 — Add authorized audit query and export.
-- [ ] S5-15 — Add sensitive-data regression tests.
+- [x] S5-07 — Record failed, denied, and unknown operations.
+- [x] S5-08 — Add a field-redaction policy.
+- [x] S5-09 — Add an audit-payload size limit.
+- [x] S5-10 — Create an append-only audit-storage abstraction.
+- [x] S5-11 — Add a durable local audit backend.
+- [x] S5-12 — Add retention configuration.
+- [x] S5-13 — Add tamper-evident hash chaining.
+- [x] S5-14 — Add authorized audit query and export.
+- [x] S5-15 — Add sensitive-data regression tests.
 
 ## 5.2 Runtime observability
 
-- [ ] S5-16 — Add structured logging.
+- [x] S5-16 — Add structured logging.
 - [ ] S5-17 — Include correlation IDs in all operation logs.
-- [ ] S5-18 — Record operation duration.
-- [ ] S5-19 — Record Odoo RPC latency.
-- [ ] S5-20 — Add request and error counters.
-- [ ] S5-21 — Add retry counters.
+- [x] S5-18 — Record operation duration.
+- [x] S5-19 — Record Odoo RPC latency.
+- [x] S5-20 — Add request and error counters.
+- [x] S5-21 — Add retry counters.
 - [ ] S5-22 — Add tracing spans.
-- [ ] S5-23 — Add log and trace redaction.
-- [ ] S5-24 — Add a health endpoint.
-- [ ] S5-25 — Add a readiness endpoint.
-- [ ] S5-26 — Add a metrics endpoint for the remote runtime.
+- [x] S5-23 — Add log and trace redaction.
+- [x] S5-24 — Add a health endpoint.
+- [x] S5-25 — Add a readiness endpoint.
+- [x] S5-26 — Add a metrics endpoint for the remote runtime.
 
 ## Stage 5 Definition of Done
 
@@ -828,7 +828,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 4 — Safe Mutation Lifecycle | Complete | 59/59 | Verification, idempotency, and single-use approval gating are wired into mutation execution. |
 | Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | Complete | 29/29 | JSON-2, context, ordered queries, report limits, read/report/batch tools, and deprecation warning complete. |
 | Stage 4C — Live Administration and Workspace Organization | Complete | 30/30 | Pagination, tool enablement, live notifications, cache invalidation, folders, and documentation complete. |
-| Stage 5 — Audit and Observability | Not started | 0/26 | |
+| Stage 5 - Audit and Observability | In progress | 22/26 | Hash-chained audit trail, query/export, structured logs, metrics, health, readiness, and retry/RPC counters complete; preview/verification audit hooks, correlation IDs in logs, and tracing spans remain. |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |
 | Stage 8 — Remote MCP and Enterprise Readiness | Not started | 0/22 | |

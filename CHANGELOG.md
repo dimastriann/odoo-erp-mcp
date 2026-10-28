@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Versioned, hash-chained audit events for policy decisions, disabled tools,
+  approvals, execution attempts, and tool outcomes.
+- Durable local audit storage with retention, secret redaction, authorized
+  query/export endpoints, and `audit.log.jsonl` persistence.
+- Structured JSON request logs, request/error and tool counters, RPC latency
+  and retry metrics, and `/health`, `/ready`, and `/api/metrics` endpoints.
+
 ## [0.8.0] — 2026-10-28
 
 ### Added
