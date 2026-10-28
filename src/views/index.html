@@ -69,8 +69,8 @@
                 </div>
                 <div v-if="instancePaged.total" class="instance-list">
                     <article v-for="inst in instancePaged.items" :key="inst.id" class="panel instance-row">
-                        <div class="instance-main"><span :class="['status-dot', { active: inst.active }]"></span><div><h3>{{ inst.name }}</h3><p class="muted truncate">{{ inst.url }} · {{ inst.db }}</p></div></div>
-                        <div class="instance-meta"><span class="badge">{{ getFolderName(inst) }}</span><span :class="['badge', getInstanceMode(inst)]">{{ displayMode(getInstanceMode(inst)) }}</span><span class="muted text-sm">{{ toolStatsFor(inst).active }} active / {{ toolStatsFor(inst).disabled }} disabled / {{ toolStatsFor(inst).total }} tools</span><span class="muted text-sm">{{ inst.username }}</span></div>
+                        <div class="instance-main"><span :class="['status-dot', { active: inst.active }]"></span><div><h3>{{ inst.name }}</h3><p class="muted truncate">{{ inst.url }} · {{ inst.db }}</p><p class="muted text-sm tool-summary">{{ toolStatsFor(inst).active }} active / {{ toolStatsFor(inst).disabled }} disabled / {{ toolStatsFor(inst).total }} tools</p></div></div>
+                        <div class="instance-meta"><span class="badge">{{ getFolderName(inst) }}</span><span :class="['badge', getInstanceMode(inst)]">{{ displayMode(getInstanceMode(inst)) }}</span><span class="muted text-sm">{{ inst.username }}</span></div>
                         <div class="actions"><button @click="toggleActive(inst.id)" class="button ghost">{{ inst.active ? 'Active' : 'Enable' }}</button><button @click="openInstanceModal(inst)" class="button ghost">Edit</button><button @click="deleteInstance(inst.id)" class="button danger">Delete</button></div>
                     </article>
                 </div>
