@@ -14,6 +14,7 @@ pub(crate) struct SearchReadArgs {
     pub(crate) fields: Value,
     pub(crate) offset: Option<u64>,
     pub(crate) limit: Option<u64>,
+    pub(crate) order: Option<String>,
     #[serde(default)]
     pub(crate) include_total: bool,
 }
@@ -32,6 +33,7 @@ pub(crate) struct SearchArgs {
     pub(crate) domain: Value,
     pub(crate) offset: Option<u64>,
     pub(crate) limit: Option<u64>,
+    pub(crate) order: Option<String>,
     #[serde(default)]
     pub(crate) include_total: bool,
 }
@@ -45,6 +47,9 @@ pub(crate) struct ReadGroupArgs {
     pub(crate) fields: Value,
     #[serde(default = "empty_array")]
     pub(crate) groupby: Value,
+    pub(crate) offset: Option<u64>,
+    pub(crate) limit: Option<u64>,
+    pub(crate) orderby: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

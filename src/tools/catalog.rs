@@ -191,6 +191,7 @@ pub(crate) fn tool_definitions() -> Value {
                     "fields": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "List of fields to return" },
                     "offset": { "type": "integer", "minimum": 0, "description": "Number of matching records to skip" },
                     "limit": { "type": "integer", "minimum": 1, "default": 100, "description": "Maximum number of records to return" },
+                    "order": { "type": "string", "description": "Odoo order clause, for example 'name asc, id desc'" },
                     "include_total": { "type": "boolean", "default": false, "description": "Run an additional count query and include the total number of matches" }
                 },
                 "required": ["model", "domain", "fields"]
@@ -219,7 +220,10 @@ pub(crate) fn tool_definitions() -> Value {
                     "model": { "type": "string" },
                     "domain": domain_schema(),
                     "fields": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-                    "groupby": { "type": "array", "items": { "type": "string" } }
+                    "groupby": { "type": "array", "items": { "type": "string" } },
+                    "offset": { "type": "integer", "minimum": 0 },
+                    "limit": { "type": "integer", "minimum": 1, "default": 100 },
+                    "orderby": { "type": "string", "description": "Odoo order clause for grouped results" }
                 },
                 "required": ["model", "domain", "fields", "groupby"]
             }
@@ -306,6 +310,7 @@ pub(crate) fn tool_definitions() -> Value {
                     "domain": domain_schema(),
                     "offset": { "type": "integer", "minimum": 0, "description": "Number of matching records to skip" },
                     "limit": { "type": "integer", "minimum": 1, "default": 100, "description": "Maximum number of record IDs to return" },
+                    "order": { "type": "string", "description": "Odoo order clause, for example 'name asc, id desc'" },
                     "include_total": { "type": "boolean", "default": false, "description": "Run an additional count query and include the total number of matches" }
                 },
                 "required": ["model", "domain"]

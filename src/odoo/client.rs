@@ -495,6 +495,7 @@ impl OdooClient {
             json!(["id", "model", "name", "transient"]),
             offset,
             limit,
+            None,
         )
         .await
     }
@@ -511,6 +512,7 @@ impl OdooClient {
             json!(["id", "report_name", "name", "model", "report_type"]),
             offset,
             limit,
+            None,
         )
         .await
     }
@@ -764,6 +766,7 @@ impl OdooClient {
         fields: Value,
         offset: Option<u64>,
         limit: u64,
+        order: Option<&str>,
     ) -> Result<Value, AppError> {
         let mut options = serde_json::Map::new();
         options.insert("fields".to_string(), fields);
@@ -771,6 +774,9 @@ impl OdooClient {
             options.insert("offset".to_string(), Value::from(offset));
         }
         options.insert("limit".to_string(), Value::from(limit));
+        if let Some(order) = order {
+            options.insert("order".to_string(), Value::String(order.to_string()));
+        }
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -805,18 +811,32 @@ impl OdooClient {
         self.call_rpc(params, OperationClass::ReadOnly).await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn read_group(
         &self,
         model: &str,
         domain: Value,
         fields: Value,
         groupby: Value,
+        offset: Option<u64>,
+        limit: u64,
+        orderby: Option<&str>,
     ) -> Result<Value, AppError> {
         let method = if self.transport() == TRANSPORT_JSON2 {
             "formatted_read_group"
         } else {
             "read_group"
         };
+        let mut options = serde_json::Map::new();
+        options.insert("fields".to_string(), fields);
+        options.insert("groupby".to_string(), groupby);
+        options.insert("limit".to_string(), Value::from(limit));
+        if let Some(offset) = offset {
+            options.insert("offset".to_string(), Value::from(offset));
+        }
+        if let Some(orderby) = orderby {
+            options.insert("orderby".to_string(), Value::String(orderby.to_string()));
+        }
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -827,7 +847,7 @@ impl OdooClient {
                 model,
                 method,
                 [domain],
-                { "fields": fields, "groupby": groupby }
+                options
             ]
         });
 
@@ -926,12 +946,16 @@ impl OdooClient {
         domain: Value,
         offset: Option<u64>,
         limit: u64,
+        order: Option<&str>,
     ) -> Result<Value, AppError> {
         let mut options = serde_json::Map::new();
         if let Some(offset) = offset {
             options.insert("offset".to_string(), Value::from(offset));
         }
         options.insert("limit".to_string(), Value::from(limit));
+        if let Some(order) = order {
+            options.insert("order".to_string(), Value::String(order.to_string()));
+        }
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -1397,6 +1421,7 @@ mod tests {
                 json!(["id", "name"]),
                 Some(5),
                 10,
+                None,
             )
             .await
             .unwrap();
@@ -1466,6 +1491,9 @@ mod tests {
                 json!([]),
                 json!(["country_id"]),
                 json!(["country_id"]),
+                None,
+                100,
+                None,
             )
             .await
             .unwrap();

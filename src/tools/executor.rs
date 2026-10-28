@@ -19,7 +19,7 @@ use crate::tools::catalog::ToolName;
 use crate::tools::context::validate_context;
 use crate::tools::fields::{validate_field_count, validate_field_names};
 use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, resolve_limit};
-use crate::tools::protection::{QueryLimits, validate_response_record_count};
+use crate::tools::protection::{QueryLimits, validate_order, validate_response_record_count};
 use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::{Value, json};
@@ -420,6 +420,11 @@ pub(crate) async fn execute_tool(
                     return ToolExecutionResult::invalid_arguments("search-read limit", error);
                 }
             };
+            if let Some(order) = args.order.as_deref()
+                && let Err(error) = validate_order(order)
+            {
+                return ToolExecutionResult::invalid_arguments("search-read order", error);
+            }
             let count_domain = args.include_total.then(|| args.domain.clone());
             let result = odoo
                 .search_read(
@@ -428,6 +433,7 @@ pub(crate) async fn execute_tool(
                     args.fields,
                     args.offset,
                     fetch_limit(limit),
+                    args.order.as_deref(),
                 )
                 .await;
             let mut page = validate_response_record_count(
@@ -467,8 +473,27 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_field_names(&args.fields) {
                 return ToolExecutionResult::invalid_arguments("read-group fields", error);
             }
+            let limit = match resolve_limit(args.limit, limits.max_query_limit) {
+                Ok(limit) => limit,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("read-group limit", error);
+                }
+            };
+            if let Some(orderby) = args.orderby.as_deref()
+                && let Err(error) = validate_order(orderby)
+            {
+                return ToolExecutionResult::invalid_arguments("read-group orderby", error);
+            }
             let result = odoo
-                .read_group(&args.model, args.domain, args.fields, args.groupby)
+                .read_group(
+                    &args.model,
+                    args.domain,
+                    args.fields,
+                    args.groupby,
+                    args.offset,
+                    limit,
+                    args.orderby.as_deref(),
+                )
                 .await;
             ToolExecutionResult::from_app_error(validate_response_record_count(
                 result,
@@ -592,9 +617,20 @@ pub(crate) async fn execute_tool(
                     return ToolExecutionResult::invalid_arguments("search limit", error);
                 }
             };
+            if let Some(order) = args.order.as_deref()
+                && let Err(error) = validate_order(order)
+            {
+                return ToolExecutionResult::invalid_arguments("search order", error);
+            }
             let count_domain = args.include_total.then(|| args.domain.clone());
             let result = odoo
-                .search(&args.model, args.domain, args.offset, fetch_limit(limit))
+                .search(
+                    &args.model,
+                    args.domain,
+                    args.offset,
+                    fetch_limit(limit),
+                    args.order.as_deref(),
+                )
                 .await;
             let mut page = validate_response_record_count(
                 paginated_result(result, args.offset, limit),
@@ -1097,6 +1133,79 @@ mod tests {
         assert_eq!(value["batch"]["requested"], 2);
         assert_eq!(value["batch"]["succeeded"], 2);
         assert_eq!(value["batch"]["failed"], 0);
+    }
+
+    #[tokio::test]
+    async fn unsafe_order_clauses_are_rejected_before_rpc() {
+        let server = MockOdooServer::start(authentication_success(7)).await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Search,
+            json!({"model": "res.partner", "order": "name; drop table"}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            ToolExecutionResult::Failure(AppError::InputValidation { .. })
+        ));
+        assert_eq!(server.requests().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn read_group_forwards_pagination_and_order() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!([])),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::ReadGroup,
+            json!({
+                "model": "res.partner",
+                "domain": [],
+                "fields": ["country_id"],
+                "groupby": ["country_id"],
+                "offset": 10,
+                "limit": 5,
+                "orderby": "country_id desc"
+            }),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        assert!(matches!(result, ToolExecutionResult::Success(_)));
+        let requests = server.requests().await;
+        assert_eq!(requests[1]["params"]["args"][6]["offset"], 10);
+        assert_eq!(requests[1]["params"]["args"][6]["limit"], 5);
+        assert_eq!(
+            requests[1]["params"]["args"][6]["orderby"],
+            "country_id desc"
+        );
     }
 
     #[tokio::test]

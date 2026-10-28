@@ -44,3 +44,54 @@ mod tests {
         assert!(validate_response_record_count(Ok(json!({"items": [1, 2, 3]})), 2).is_err());
     }
 }
+
+pub(crate) fn validate_order(value: &str) -> Result<(), String> {
+    let value = value.trim();
+    if value.is_empty() || value.len() > 256 {
+        return Err("order clause must be between 1 and 256 characters".to_string());
+    }
+    for character in value.chars() {
+        if !(character.is_ascii_alphanumeric() || matches!(character, '_' | '.' | ',' | ' ')) {
+            return Err("order clause contains unsupported characters".to_string());
+        }
+    }
+    for token in value.split_whitespace() {
+        let token = token.trim_matches(',').to_ascii_lowercase();
+        if token == "asc" || token == "desc" {
+            continue;
+        }
+        if token.is_empty()
+            || !token.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '_' | '.' | ',')
+            })
+        {
+            return Err("order clause contains an unsupported token".to_string());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::*;
+
+    #[test]
+    fn accepts_identifier_order_clauses() {
+        for value in ["name", "name asc", "name desc, id desc", "partner_id.name"] {
+            assert!(validate_order(value).is_ok(), "{value}");
+        }
+    }
+
+    #[test]
+    fn rejects_injection_and_unsupported_tokens() {
+        for value in [
+            "name; drop table",
+            "name --",
+            "(select 1)",
+            "name = 'x'",
+            "",
+        ] {
+            assert!(validate_order(value).is_err(), "{value}");
+        }
+    }
+}
