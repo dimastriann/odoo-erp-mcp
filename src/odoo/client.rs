@@ -812,6 +812,11 @@ impl OdooClient {
         fields: Value,
         groupby: Value,
     ) -> Result<Value, AppError> {
+        let method = if self.transport() == TRANSPORT_JSON2 {
+            "formatted_read_group"
+        } else {
+            "read_group"
+        };
         let params = json!({
             "service": "object",
             "method": "execute_kw",
@@ -820,7 +825,7 @@ impl OdooClient {
                 self.uid,
                 self.password,
                 model,
-                "read_group",
+                method,
                 [domain],
                 { "fields": fields, "groupby": groupby }
             ]
@@ -982,8 +987,12 @@ fn json2_request_body(
         }
         "read_group" | "formatted_read_group" => {
             body.insert("domain".to_string(), positional_value(0));
-            body.insert("fields".to_string(), positional_value(1));
-            body.insert("groupby".to_string(), positional_value(2));
+            if let Some(fields) = positional.get(1) {
+                body.insert("fields".to_string(), fields.clone());
+            }
+            if let Some(groupby) = positional.get(2) {
+                body.insert("groupby".to_string(), groupby.clone());
+            }
         }
         "create" => {
             let vals = positional_value(0);
@@ -1432,6 +1441,40 @@ mod tests {
         let requests = server.full_requests().await;
         assert_eq!(requests[1].path, "/json/2/res.partner/create");
         assert_eq!(requests[1].body["vals_list"], json!([{"name": "Alpha"}]));
+    }
+
+    #[tokio::test]
+    async fn json2_uses_formatted_read_group() {
+        let server =
+            MockOdooServer::start_with_responses(vec![authentication_success(7), json!([])]).await;
+        let client = OdooClient::new_with_transport(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "api-key".to_string(),
+            Duration::from_secs(1),
+            Duration::from_secs(1),
+            10 * 1024 * 1024,
+            RpcTransport::Json2,
+        )
+        .await
+        .unwrap();
+
+        client
+            .read_group(
+                "res.partner",
+                json!([]),
+                json!(["country_id"]),
+                json!(["country_id"]),
+            )
+            .await
+            .unwrap();
+
+        let requests = server.full_requests().await;
+        assert_eq!(requests[1].path, "/json/2/res.partner/formatted_read_group");
+        assert_eq!(requests[1].body["domain"], json!([]));
+        assert_eq!(requests[1].body["fields"], json!(["country_id"]));
+        assert_eq!(requests[1].body["groupby"], json!(["country_id"]));
     }
 
     #[tokio::test]
