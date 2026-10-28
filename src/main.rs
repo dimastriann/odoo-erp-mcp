@@ -1,3 +1,4 @@
+mod audit;
 mod config;
 mod context;
 mod domain;
@@ -37,6 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Load configuration
     eprintln!("Loading config from: {:?}", config_path);
     let config = Config::load().expect("Failed to load config.json");
+    audit::initialize(config.global_settings.audit_retention_events);
     let shared_config = Arc::new(RwLock::new(config));
     let client_manager = ClientManager::new();
     let (sender, mut receiver) = mpsc::unbounded_channel::<serde_json::Value>();

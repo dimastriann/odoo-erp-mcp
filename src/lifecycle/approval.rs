@@ -1,10 +1,13 @@
 #![allow(dead_code)] // Approval persistence is integrated incrementally through Section 4.4.
 
+use crate::audit::{self, AuditEvent, AuditEventKind, AuditOutcome};
 use crate::config::Config;
 use crate::context::RequestContext;
 use crate::error::AppError;
 use crate::lifecycle::operation::{Operation, OperationClass, OperationKind};
+use crate::risk::RiskLevel;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -268,6 +271,7 @@ fn same_pending_request(
 pub(crate) fn request_approval(
     operation: &Operation,
     context: &RequestContext,
+    risk: Option<RiskLevel>,
     ttl_seconds: i64,
     now: i64,
 ) -> Result<ApprovalRequest, AppError> {
@@ -283,6 +287,14 @@ pub(crate) fn request_approval(
     }
     let request = ApprovalRequest::for_operation(operation, context, now, ttl_seconds)?;
     storage.insert(request.clone())?;
+    let mut event = AuditEvent::new(AuditEventKind::ApprovalRequested, AuditOutcome::Pending)
+        .with_context(context)
+        .with_operation(operation)
+        .with_details(json!({"approval_id": request.id.to_string()}));
+    if let Some(risk) = risk {
+        event = event.with_risk(risk);
+    }
+    let _ = audit::record(event);
     Ok(request)
 }
 
@@ -301,6 +313,18 @@ pub(crate) fn list_approvals() -> Result<Vec<ApprovalRequest>, AppError> {
     storage.list()
 }
 
+fn record_approval_decision(request: &ApprovalRequest, outcome: AuditOutcome) {
+    let mut event = AuditEvent::new(AuditEventKind::ApprovalDecided, outcome)
+        .with_instance(request.instance.clone())
+        .with_details(json!({
+            "approval_id": request.id.to_string(),
+            "state": request.state
+        }));
+    event.model = Some(request.model.clone());
+    event.operation_id = Some(request.operation_id.clone());
+    let _ = audit::record(event);
+}
+
 pub(crate) fn approve_approval(id: ApprovalId) -> Result<ApprovalRequest, AppError> {
     let now = now_seconds();
     let mut storage = global_approval_storage()
@@ -315,6 +339,7 @@ pub(crate) fn approve_approval(id: ApprovalId) -> Result<ApprovalRequest, AppErr
     }
     request.approve()?;
     storage.update(request.clone())?;
+    record_approval_decision(&request, AuditOutcome::Allowed);
     Ok(request)
 }
 
@@ -332,6 +357,7 @@ pub(crate) fn reject_approval(id: ApprovalId) -> Result<ApprovalRequest, AppErro
     }
     request.reject()?;
     storage.update(request.clone())?;
+    record_approval_decision(&request, AuditOutcome::Denied);
     Ok(request)
 }
 

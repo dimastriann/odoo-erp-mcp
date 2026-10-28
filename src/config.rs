@@ -217,6 +217,8 @@ pub struct GlobalSettings {
     pub max_batch_size: usize,
     #[serde(default = "default_max_report_bytes")]
     pub max_report_bytes: usize,
+    #[serde(default = "default_audit_retention_events")]
+    pub audit_retention_events: usize,
     #[serde(default)]
     pub disabled_tools: Vec<String>,
 }
@@ -285,6 +287,10 @@ fn default_max_report_bytes() -> usize {
     10 * 1024 * 1024
 }
 
+fn default_audit_retention_events() -> usize {
+    10_000
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
@@ -304,6 +310,7 @@ impl Default for GlobalSettings {
             max_context_bytes: default_max_context_bytes(),
             max_batch_size: default_max_batch_size(),
             max_report_bytes: default_max_report_bytes(),
+            audit_retention_events: default_audit_retention_events(),
             disabled_tools: Vec::new(),
         }
     }
@@ -338,6 +345,7 @@ impl GlobalSettings {
             ("max_context_bytes", self.max_context_bytes),
             ("max_batch_size", self.max_batch_size),
             ("max_report_bytes", self.max_report_bytes),
+            ("audit_retention_events", self.audit_retention_events),
         ];
         for (name, value) in positive_sizes {
             if value == 0 {

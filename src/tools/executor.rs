@@ -136,8 +136,14 @@ fn authorize_mutation(
     let assessment = RiskEvaluator::default().assess(operation);
     if assessment.level >= crate::risk::RiskLevel::High {
         let ttl = i64::try_from(approval_ttl_secs).unwrap_or(i64::MAX);
-        let request = approval::request_approval(operation, context, ttl, now_seconds())
-            .map_err(ToolExecutionResult::Failure)?;
+        let request = approval::request_approval(
+            operation,
+            context,
+            Some(assessment.level),
+            ttl,
+            now_seconds(),
+        )
+        .map_err(ToolExecutionResult::Failure)?;
         return Err(ToolExecutionResult::ApprovalRequired(json!({
             "status": "approval_required",
             "approval": request,

@@ -1,3 +1,4 @@
+use crate::audit;
 use crate::config::{Config, Folder, OdooInstance, OdooPrompt, generate_id};
 use crate::lifecycle::approval::{ApprovalId, approve_approval, list_approvals, reject_approval};
 use crate::mcp::McpRuntime;
@@ -5,7 +6,7 @@ use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
 use axum::{
     Json, Router,
-    extract::{Path, Request, State},
+    extract::{Path, Query, Request, State},
     http::{StatusCode, header},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
@@ -38,6 +39,11 @@ struct LoginRequest {
 }
 
 #[derive(Deserialize)]
+struct AuditQuery {
+    limit: Option<usize>,
+}
+
+#[derive(Deserialize)]
 struct ToolSettingsRequest {
     #[serde(default)]
     disabled: Vec<String>,
@@ -62,6 +68,8 @@ pub async fn start_ui(config: SharedConfig, runtime: McpRuntime, client_manager:
     let protected = Router::new()
         .route("/api/config", get(get_config))
         .route("/api/approvals", get(get_approvals))
+        .route("/api/audit", get(get_audit))
+        .route("/api/audit/export", get(export_audit))
         .route("/api/approvals/{id}/approve", post(approve))
         .route("/api/approvals/{id}/reject", post(reject))
         .route("/api/global-settings", post(update_global_settings))
@@ -283,6 +291,25 @@ async fn update_tools(
     drop(config);
     state.runtime.config_changed();
     StatusCode::OK.into_response()
+}
+
+async fn get_audit(Query(query): Query<AuditQuery>) -> Json<Value> {
+    let limit = query.limit.unwrap_or(100);
+    match audit::query(limit) {
+        Ok(events) => Json(json!({"events": events})),
+        Err(error) => Json(json!({"events": [], "error": error.to_string()})),
+    }
+}
+
+async fn export_audit() -> Response {
+    match audit::export() {
+        Ok(events) => Json(json!({"events": events})).into_response(),
+        Err(error) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": error.to_string()})),
+        )
+            .into_response(),
+    }
 }
 
 async fn get_approvals() -> Json<Value> {
@@ -577,6 +604,15 @@ mod tests {
                 "missing UI behavior: {behavior}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn audit_listing_and_export_have_stable_shapes() {
+        let listing = get_audit(Query(AuditQuery { limit: Some(5) })).await.0;
+        let export = export_audit().await;
+
+        assert!(listing["events"].is_array());
+        assert_eq!(export.status(), StatusCode::OK);
     }
 
     #[tokio::test]

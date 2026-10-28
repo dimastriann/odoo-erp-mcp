@@ -1,3 +1,4 @@
+use crate::audit::{self, AuditEvent, AuditEventKind, AuditOutcome};
 use crate::config::Config;
 use crate::context::{
     ActorIdentity, AgentIdentity, ClientIdentity, IdentitySource, RequestContext,
@@ -11,7 +12,7 @@ use crate::tools::protection::QueryLimits;
 use crate::tools::result::ToolExecutionResult;
 use serde_json::{Value, json};
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 
 fn tool_call_response(id: Value, result: ToolExecutionResult, revision: u64) -> Value {
@@ -171,6 +172,12 @@ async fn handle_request_with_identity(
                     )));
                 }
             };
+            let instance_target = arguments
+                .get("instance")
+                .and_then(|i| i.as_str())
+                .unwrap_or("");
+            let audit_context =
+                request_context(client_identity, &params, instance_target.to_string());
             let globally_disabled = {
                 let conf = config.read().unwrap();
                 conf.global_settings
@@ -179,6 +186,14 @@ async fn handle_request_with_identity(
                     .any(|disabled| disabled.eq_ignore_ascii_case(tool_name.as_str()))
             };
             if globally_disabled {
+                let _ = audit::record(
+                    AuditEvent::new(AuditEventKind::ToolDisabled, AuditOutcome::Denied)
+                        .with_context(&audit_context)
+                        .with_details(json!({
+                            "tool": tool_name.as_str(),
+                            "scope": "global"
+                        })),
+                );
                 return Some(respond(ToolExecutionResult::Failure(
                     AppError::tool_disabled(format!(
                         "Tool '{}' is disabled in the server configuration",
@@ -197,13 +212,14 @@ async fn handle_request_with_identity(
                         )),
                     }
                 };
+                let outcome = audit_outcome(&result);
+                let _ = audit::record(
+                    AuditEvent::new(AuditEventKind::ToolCallCompleted, outcome)
+                        .with_context(&audit_context)
+                        .with_details(json!({"tool": tool_name.as_str()})),
+                );
                 return Some(respond(result));
             }
-
-            let instance_target = arguments
-                .get("instance")
-                .and_then(|i| i.as_str())
-                .unwrap_or("");
 
             let (
                 target_instance,
@@ -248,10 +264,27 @@ async fn handle_request_with_identity(
                             instance_target
                         ))
                     };
+                    let _ = audit::record(
+                        AuditEvent::new(AuditEventKind::ToolCallCompleted, AuditOutcome::Failure)
+                            .with_context(&audit_context)
+                            .with_details(json!({
+                                "tool": tool_name.as_str(),
+                                "reason": "instance_not_found"
+                            })),
+                    );
                     return Some(respond(ToolExecutionResult::Failure(error)));
                 }
             };
             if instance_obj.tool_disabled(tool_name) {
+                let _ = audit::record(
+                    AuditEvent::new(AuditEventKind::ToolDisabled, AuditOutcome::Denied)
+                        .with_context(&audit_context)
+                        .with_instance(instance_obj.name.clone())
+                        .with_details(json!({
+                            "tool": tool_name.as_str(),
+                            "scope": "instance"
+                        })),
+                );
                 return Some(respond(ToolExecutionResult::Failure(
                     AppError::tool_disabled(format!(
                         "Tool '{}' is disabled for Odoo instance '{}'",
@@ -279,15 +312,31 @@ async fn handle_request_with_identity(
             let model = arguments
                 .get("model")
                 .and_then(Value::as_str)
-                .unwrap_or_default();
+                .unwrap_or_default()
+                .to_string();
             let requested_fields = requested_fields(&arguments);
             let method = arguments.get("method").and_then(Value::as_str);
             let policy_evaluation = instance_obj.policy_evaluation_for_request(
                 tool_name,
-                model,
+                &model,
                 method,
                 &requested_fields,
                 &global_mode,
+            );
+            let policy_outcome = if policy_evaluation.decision.is_denied() {
+                AuditOutcome::Denied
+            } else {
+                AuditOutcome::Allowed
+            };
+            let _ = audit::record(
+                AuditEvent::new(AuditEventKind::PolicyDecision, policy_outcome)
+                    .with_context(&audit_context)
+                    .with_instance(instance_obj.name.clone())
+                    .with_details(json!({
+                        "tool": tool_name.as_str(),
+                        "model": model,
+                        "explanation": policy_evaluation.explanation
+                    })),
             );
             if policy_evaluation.decision.is_denied() {
                 let mode_str = instance_obj.get_mode(&global_mode);
@@ -314,12 +363,31 @@ async fn handle_request_with_identity(
             {
                 Ok(client) => client,
                 Err(err) => {
+                    let _ = audit::record(
+                        AuditEvent::new(AuditEventKind::ToolCallCompleted, AuditOutcome::Failure)
+                            .with_context(&audit_context)
+                            .with_instance(instance_obj.name.clone())
+                            .with_details(json!({
+                                "tool": tool_name.as_str(),
+                                "model": model,
+                                "reason": "connection_failed"
+                            })),
+                    );
                     return Some(respond(ToolExecutionResult::Failure(err)));
                 }
             };
 
             let request_context =
                 request_context(client_identity, &params, instance_obj.name.clone());
+            let started = Instant::now();
+            let _ = audit::record(
+                AuditEvent::new(AuditEventKind::ExecutionStarted, AuditOutcome::Pending)
+                    .with_context(&request_context)
+                    .with_details(json!({
+                        "tool": tool_name.as_str(),
+                        "model": model
+                    })),
+            );
             let result = execute_tool(
                 tool_name,
                 arguments,
@@ -329,6 +397,17 @@ async fn handle_request_with_identity(
                 approval_ttl_secs,
             )
             .await;
+            let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let outcome = audit_outcome(&result);
+            let _ = audit::record(
+                AuditEvent::new(AuditEventKind::ToolCallCompleted, outcome)
+                    .with_context(&request_context)
+                    .with_duration_ms(duration_ms)
+                    .with_details(json!({
+                        "tool": tool_name.as_str(),
+                        "model": model
+                    })),
+            );
 
             Some(respond(result))
         }
@@ -337,6 +416,14 @@ async fn handle_request_with_identity(
             "id": id,
             "error": { "code": -32601, "message": "Method not found" }
         })),
+    }
+}
+
+fn audit_outcome(result: &ToolExecutionResult) -> AuditOutcome {
+    match result {
+        ToolExecutionResult::Success(_) => AuditOutcome::Success,
+        ToolExecutionResult::ApprovalRequired(_) => AuditOutcome::Pending,
+        ToolExecutionResult::Failure(_) => AuditOutcome::Failure,
     }
 }
 
