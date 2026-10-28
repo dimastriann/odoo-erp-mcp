@@ -651,6 +651,7 @@ impl OdooClient {
         ids: &[i64],
         format: &str,
         data: Option<&Map<String, Value>>,
+        max_bytes: usize,
     ) -> Result<Value, AppError> {
         if !matches!(format, "pdf" | "html") {
             return Err(AppError::input_validation(
@@ -682,6 +683,11 @@ impl OdooClient {
             .unwrap_or("application/octet-stream")
             .to_string();
         let body = self.read_response_body(res).await?;
+        if body.len() > max_bytes {
+            return Err(AppError::protocol(
+                "Odoo report exceeds the configured size limit",
+            ));
+        }
         if status == reqwest::StatusCode::UNAUTHORIZED {
             return Err(AppError::authentication(
                 "Odoo report access requires a valid web session",

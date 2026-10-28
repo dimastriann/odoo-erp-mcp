@@ -838,6 +838,7 @@ pub(crate) async fn execute_tool(
                     &args.ids,
                     &args.format.to_lowercase(),
                     args.data.as_ref(),
+                    limits.max_report_bytes,
                 )
                 .await,
             )
@@ -893,6 +894,7 @@ mod tests {
         max_context_keys: 32,
         max_context_bytes: 8_192,
         max_batch_size: 100,
+        max_report_bytes: 10_485_760,
     };
 
     #[tokio::test]

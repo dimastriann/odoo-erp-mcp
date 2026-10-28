@@ -272,6 +272,7 @@ async fn handle_request_with_identity(
                 max_context_keys: effective_settings.max_context_keys,
                 max_context_bytes: effective_settings.max_context_bytes,
                 max_batch_size: effective_settings.max_batch_size,
+                max_report_bytes: effective_settings.max_report_bytes,
             };
 
             // Enforce Instance Tool Permissions

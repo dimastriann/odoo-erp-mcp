@@ -215,6 +215,8 @@ pub struct GlobalSettings {
     pub max_context_bytes: usize,
     #[serde(default = "default_max_batch_size")]
     pub max_batch_size: usize,
+    #[serde(default = "default_max_report_bytes")]
+    pub max_report_bytes: usize,
     #[serde(default)]
     pub disabled_tools: Vec<String>,
 }
@@ -279,6 +281,10 @@ fn default_max_batch_size() -> usize {
     100
 }
 
+fn default_max_report_bytes() -> usize {
+    10 * 1024 * 1024
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
@@ -297,6 +303,7 @@ impl Default for GlobalSettings {
             max_context_keys: default_max_context_keys(),
             max_context_bytes: default_max_context_bytes(),
             max_batch_size: default_max_batch_size(),
+            max_report_bytes: default_max_report_bytes(),
             disabled_tools: Vec::new(),
         }
     }
@@ -330,6 +337,7 @@ impl GlobalSettings {
             ("max_context_keys", self.max_context_keys),
             ("max_context_bytes", self.max_context_bytes),
             ("max_batch_size", self.max_batch_size),
+            ("max_report_bytes", self.max_report_bytes),
         ];
         for (name, value) in positive_sizes {
             if value == 0 {
@@ -673,6 +681,13 @@ mod tests {
         );
 
         settings.max_domain_terms = 100;
+        settings.max_report_bytes = 0;
+        assert_eq!(
+            settings.validate(),
+            Err("max_report_bytes must be greater than zero".to_string())
+        );
+
+        settings.max_report_bytes = 10_485_760;
         settings.max_query_limit = 1_001;
         settings.max_response_records = 1_000;
         assert_eq!(
