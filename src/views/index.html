@@ -32,6 +32,7 @@
             <nav>
                 <a href="#instances">Instances <span>{{ config.instances.length }}</span></a>
                 <a href="#tools">Tools <span>{{ tools.length }}</span></a>
+                <a href="#folders">Folders <span>{{ (config.folders || []).length }}</span></a>
                 <a href="#prompts">Prompts <span>{{ config.prompts.length }}</span></a>
                 <a href="#approvals">Approvals <span>{{ approvals.length }}</span></a>
             </nav>
@@ -60,6 +61,7 @@
                 </div>
                 <div class="toolbar panel">
                     <input v-model="instanceSearch" class="search" type="search" aria-label="Search Odoo instances" placeholder="Search instances by name, URL, database, or username…">
+                    <select v-model="folderFilter" aria-label="Filter by folder"><option value="">All folders</option><option value="__none__">Ungrouped</option><option v-for="folder in config.folders || []" :key="folder.id" :value="folder.id">{{ folder.name }}</option></select>
                     <select @change="updateGlobalMode($event.target.value)" :value="config.global_settings?.default_mode || 'crud'">
                         <option value="crud">Default: Full access</option><option value="read_only">Default: Read only</option>
                     </select>
@@ -67,11 +69,17 @@
                 <div v-if="filteredInstances.length" class="instance-list">
                     <article v-for="inst in filteredInstances" :key="inst.id" class="panel instance-row">
                         <div class="instance-main"><span :class="['status-dot', { active: inst.active }]"></span><div><h3>{{ inst.name }}</h3><p class="muted truncate">{{ inst.url }} · {{ inst.db }}</p></div></div>
-                        <div class="instance-meta"><span :class="['badge', getInstanceMode(inst)]">{{ displayMode(getInstanceMode(inst)) }}</span><span class="muted text-sm">{{ inst.username }}</span></div>
+                        <div class="instance-meta"><span class="badge">{{ getFolderName(inst) }}</span><span :class="['badge', getInstanceMode(inst)]">{{ displayMode(getInstanceMode(inst)) }}</span><span class="muted text-sm">{{ inst.username }}</span></div>
                         <div class="actions"><button @click="toggleActive(inst.id)" class="button ghost">{{ inst.active ? 'Active' : 'Enable' }}</button><button @click="openInstanceModal(inst)" class="button ghost">Edit</button><button @click="deleteInstance(inst.id)" class="button danger">Delete</button></div>
                     </article>
                 </div>
                 <div v-else class="empty panel"><h3>{{ instanceSearch ? 'No matching instances' : 'No instances yet' }}</h3><p class="muted">{{ instanceSearch ? 'Try another search term.' : 'Add your first Odoo connection to get started.' }}</p></div>
+            </section>
+
+            <section id="folders" class="section-block">
+                <div class="section-heading"><div><p class="eyebrow">Workspace</p><h2>Folders</h2><p class="muted text-sm">Group Odoo instances by project or environment.</p></div><button @click="openFolderModal()" class="button primary">+ Add folder</button></div>
+                <div class="prompt-grid"><article v-for="folder in config.folders || []" :key="folder.id" class="panel prompt-card"><div><h3>{{ folder.name }}</h3><p class="muted prompt-preview">{{ folder.description || 'No description' }}</p></div><div class="actions"><button @click="openFolderModal(folder)" class="button ghost">Edit</button><button @click="deleteFolder(folder.id)" class="button danger">Delete</button></div></article></div>
+                <div v-if="!(config.folders || []).length" class="empty panel"><h3>No folders yet</h3><p class="muted">Create a folder to organize production, staging, and project instances.</p></div>
             </section>
 
             <section id="tools" class="section-block">
@@ -107,6 +115,7 @@
                 <div class="modal-heading"><div><p class="eyebrow">Connection</p><h2>{{ newInstance.id ? 'Edit instance' : 'Add instance' }}</h2></div><button type="button" @click="showInstanceModal = false" class="icon-button">×</button></div>
                 <div class="form-grid">
                     <label class="field full"><span>Instance name</span><input v-model.trim="newInstance.name" placeholder="Production Odoo" required></label>
+                    <label class="field full"><span>Folder</span><select v-model="newInstance.folder_id"><option value="">Ungrouped</option><option v-for="folder in config.folders || []" :key="folder.id" :value="folder.id">{{ folder.name }}</option></select></label>
                     <label class="field full"><span>Odoo URL</span><input v-model.trim="newInstance.url" type="url" placeholder="https://example.odoo.com" required></label>
                     <label class="field"><span>Database</span><input v-model.trim="newInstance.db" required></label>
                     <label class="field"><span>Username</span><input v-model.trim="newInstance.username" autocomplete="username" required></label>
@@ -123,6 +132,16 @@
                 </div>
                 <p v-if="formError" class="text-red-400 text-sm mt-4">{{ formError }}</p>
                 <div class="modal-actions"><button type="button" @click="showInstanceModal = false" class="button ghost">Cancel</button><button class="button primary">Save instance</button></div>
+            </form>
+        </div>
+
+        <div v-if="showFolderModal" class="modal-backdrop" @click.self="showFolderModal = false">
+            <form @submit.prevent="saveFolder" class="panel modal-card">
+                <div class="modal-heading"><div><p class="eyebrow">Workspace</p><h2>{{ newFolder.id ? 'Edit folder' : 'Add folder' }}</h2></div><button type="button" @click="showFolderModal = false" class="icon-button">×</button></div>
+                <label class="field mt-4"><span>Folder name</span><input v-model.trim="newFolder.name" placeholder="Production" required></label>
+                <label class="field mt-4"><span>Description</span><textarea v-model.trim="newFolder.description" rows="3" placeholder="Optional notes"></textarea></label>
+                <p v-if="formError" class="text-red-400 text-sm mt-4">{{ formError }}</p>
+                <div class="modal-actions"><button type="button" @click="showFolderModal = false" class="button ghost">Cancel</button><button class="button primary">Save folder</button></div>
             </form>
         </div>
 

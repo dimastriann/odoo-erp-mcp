@@ -368,12 +368,18 @@ fn list_instances_result(config: &Config, revision: u64) -> ToolExecutionResult 
         .instances
         .iter()
         .map(|instance| {
+            let folder = instance
+                .folder_id
+                .as_ref()
+                .and_then(|folder_id| config.folders.iter().find(|folder| folder.id == *folder_id))
+                .map(|folder| json!({"id": folder.id, "name": folder.name}));
             json!({
                 "id": instance.id,
                 "name": instance.name,
                 "active": instance.active,
                 "mode": instance.get_mode(&config.global_settings.default_mode),
                 "rpc_transport": instance.rpc_transport.as_str(),
+                "folder": folder,
                 "disabled_tools": instance.disabled_tools.clone().unwrap_or_default(),
                 "has_credentials": !instance.password.is_empty()
                     || instance.password_env.is_some()

@@ -81,6 +81,7 @@ mod tests {
             active: true,
             rpc_transport: RpcTransport::Auto,
             disabled_tools: None,
+            folder_id: None,
             mode: None,
             allowed_tools: None,
             permissions: None,

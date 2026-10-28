@@ -1,4 +1,4 @@
-use crate::config::{Config, OdooInstance, OdooPrompt, generate_id};
+use crate::config::{Config, Folder, OdooInstance, OdooPrompt, generate_id};
 use crate::lifecycle::approval::{ApprovalId, approve_approval, list_approvals, reject_approval};
 use crate::mcp::McpRuntime;
 use crate::odoo::ClientManager;
@@ -70,6 +70,8 @@ pub async fn start_ui(config: SharedConfig, runtime: McpRuntime, client_manager:
         .route("/api/instances", post(add_instance))
         .route("/api/instances/{id}", delete(delete_instance))
         .route("/api/instances/{id}/active", post(toggle_active))
+        .route("/api/folders", post(add_folder))
+        .route("/api/folders/{id}", delete(delete_folder))
         .route("/api/prompts", post(add_prompt))
         .route("/api/prompts/{id}", delete(delete_prompt))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
@@ -405,6 +407,41 @@ async fn delete_instance(State(state): State<AppState>, Path(id): Path<String>) 
     StatusCode::OK
 }
 
+async fn add_folder(State(state): State<AppState>, Json(mut folder): Json<Folder>) -> StatusCode {
+    if folder.id.is_empty() {
+        folder.id = generate_id();
+    }
+    {
+        let mut config = state.config.write().unwrap();
+        if let Some(existing) = config.folders.iter_mut().find(|item| item.id == folder.id) {
+            *existing = folder;
+        } else {
+            config.folders.push(folder);
+        }
+        if config.validate().is_err() {
+            return StatusCode::BAD_REQUEST;
+        }
+        config.save().unwrap();
+    }
+    state.runtime.config_changed();
+    StatusCode::OK
+}
+
+async fn delete_folder(State(state): State<AppState>, Path(id): Path<String>) -> StatusCode {
+    {
+        let mut config = state.config.write().unwrap();
+        config.folders.retain(|folder| folder.id != id);
+        for instance in &mut config.instances {
+            if instance.folder_id.as_deref() == Some(id.as_str()) {
+                instance.folder_id = None;
+            }
+        }
+        config.save().unwrap();
+    }
+    state.runtime.config_changed();
+    StatusCode::OK
+}
+
 async fn add_prompt(
     State(state): State<AppState>,
     Json(mut prompt): Json<OdooPrompt>,
@@ -511,6 +548,8 @@ mod tests {
             "MCP tools",
             "RPC transport",
             "Instance tool overrides",
+            "Folders",
+            "Workspace",
         ] {
             assert!(html.contains(control), "missing UI control: {control}");
         }

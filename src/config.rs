@@ -46,6 +46,8 @@ pub struct OdooInstance {
     pub rpc_transport: RpcTransport,
     #[serde(default)]
     pub disabled_tools: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_id: Option<String>,
     #[serde(default)]
     pub mode: Option<String>,
     #[serde(default)]
@@ -359,6 +361,14 @@ fn validate_tool_names(tools: &[String]) -> Result<(), String> {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Folder {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OdooPrompt {
     pub id: String,
     pub name: String,
@@ -370,12 +380,31 @@ pub struct Config {
     #[serde(default)]
     pub global_settings: GlobalSettings,
     pub instances: Vec<OdooInstance>,
+    #[serde(default)]
+    pub folders: Vec<Folder>,
     pub prompts: Vec<OdooPrompt>,
 }
 
 impl Config {
     pub(crate) fn validate(&self) -> Result<(), String> {
         self.global_settings.validate()?;
+        for (index, folder) in self.folders.iter().enumerate() {
+            if folder.id.trim().is_empty() || folder.name.trim().is_empty() {
+                return Err("folder id and name must not be empty".to_string());
+            }
+            if self.folders[..index]
+                .iter()
+                .any(|other| other.id.eq_ignore_ascii_case(&folder.id))
+            {
+                return Err(format!("duplicate folder id '{}'", folder.id));
+            }
+            if self.folders[..index]
+                .iter()
+                .any(|other| other.name.eq_ignore_ascii_case(&folder.name))
+            {
+                return Err(format!("duplicate folder name '{}'", folder.name));
+            }
+        }
         for instance in &self.instances {
             instance
                 .effective_query_settings(&self.global_settings)
@@ -384,6 +413,14 @@ impl Config {
             if let Some(tools) = &instance.disabled_tools {
                 validate_tool_names(tools)
                     .map_err(|error| format!("instance {:?}: {error}", instance.name))?;
+            }
+            if let Some(folder_id) = &instance.folder_id
+                && !self.folders.iter().any(|folder| folder.id == *folder_id)
+            {
+                return Err(format!(
+                    "instance {:?} references unknown folder '{folder_id}'",
+                    instance.name
+                ));
             }
         }
         Ok(())
@@ -645,6 +682,33 @@ mod tests {
     }
 
     #[test]
+    fn folders_are_unique_and_instances_must_reference_existing_folders() {
+        let config: Config = serde_json::from_value(serde_json::json!({
+            "folders": [{"id": "f1", "name": "Production"}],
+            "instances": [{
+                "id": "1", "name": "Prod", "url": "https://odoo.test", "db": "db",
+                "username": "admin", "password": "secret", "active": true,
+                "folder_id": "f1"
+            }],
+            "prompts": []
+        }))
+        .unwrap();
+        assert!(config.validate().is_ok());
+
+        let mut missing = config.clone();
+        missing.instances[0].folder_id = Some("missing".to_string());
+        assert!(missing.validate().is_err());
+
+        let mut duplicate = config.clone();
+        duplicate.folders.push(Folder {
+            id: "f1".to_string(),
+            name: "Other".to_string(),
+            description: String::new(),
+        });
+        assert!(duplicate.validate().is_err());
+    }
+
+    #[test]
     fn disabled_tool_names_are_validated_and_unique() {
         let valid = GlobalSettings {
             disabled_tools: vec!["odoo-delete".to_string()],
@@ -696,6 +760,7 @@ mod tests {
             active: true,
             rpc_transport: RpcTransport::Auto,
             disabled_tools: None,
+            folder_id: None,
             mode: None,
             allowed_tools: None,
             permissions: None,
@@ -725,6 +790,7 @@ mod tests {
             active: true,
             rpc_transport: RpcTransport::Auto,
             disabled_tools: None,
+            folder_id: None,
             mode: Some("crud".into()),
             allowed_tools: None,
             permissions: None,
@@ -750,6 +816,7 @@ mod tests {
             active: false,
             rpc_transport: RpcTransport::Auto,
             disabled_tools: None,
+            folder_id: None,
             mode: Some("read_only".into()),
             allowed_tools: None,
             permissions: None,
@@ -777,6 +844,7 @@ mod tests {
             active: false,
             rpc_transport: RpcTransport::Auto,
             disabled_tools: None,
+            folder_id: None,
             mode: Some("inherit".into()),
             allowed_tools: None,
             permissions: None,

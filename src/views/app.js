@@ -16,17 +16,26 @@ createApp({
         const toolCapability = ref('all');
         const showInstanceModal = ref(false);
         const showPromptModal = ref(false);
+        const showFolderModal = ref(false);
         const newInstance = ref({});
         const newPrompt = ref({});
+        const newFolder = ref({});
+        const folderFilter = ref('');
         const capabilities = ['read', 'create', 'update', 'delete', 'workflow', 'financial', 'admin'];
 
         const activeCount = computed(() => config.value.instances.filter(item => item.active).length);
         const filteredInstances = computed(() => {
             const query = instanceSearch.value.trim().toLowerCase();
-            if (!query) return config.value.instances;
-            return config.value.instances.filter(item => [item.name, item.url, item.db, item.username]
-                .some(value => String(value || '').toLowerCase().includes(query)));
+            return config.value.instances.filter(item => {
+                const matchesFolder = !folderFilter.value
+                    || (folderFilter.value === '__none__' ? !item.folder_id : item.folder_id === folderFilter.value);
+                const matchesQuery = !query || [item.name, item.url, item.db, item.username]
+                    .some(value => String(value || '').toLowerCase().includes(query));
+                return matchesFolder && matchesQuery;
+            });
         });
+        const foldersById = computed(() => Object.fromEntries((config.value.folders || []).map(folder => [folder.id, folder.name])));
+        const getFolderName = instance => foldersById.value[instance.folder_id] || 'Ungrouped';
         const toolCapabilities = computed(() => [...new Set(tools.value.map(tool => tool.capability))].sort());
         const filteredTools = computed(() => {
             const query = toolSearch.value.trim().toLowerCase();
@@ -101,8 +110,8 @@ createApp({
             formError.value = '';
             const scopedPolicy = item?.permissions ? { models: item.permissions.models || {}, operations: item.permissions.operations || {} } : { models: {}, operations: {} };
             newInstance.value = item
-                ? { ...item, disabled_tools: [...(item.disabled_tools || [])], mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false }
-                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, rpc_transport: 'auto', disabled_tools: [], mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false };
+                ? { ...item, folder_id: item.folder_id || '', disabled_tools: [...(item.disabled_tools || [])], mode: item.mode || 'inherit', credential_source: item.password_env ? 'environment' : 'inline', policy_enabled: !!item.permissions, capability_allow: [...(item.permissions?.allow || [])], capability_deny: [...(item.permissions?.deny || [])], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false }
+                : { id: '', name: '', url: '', db: '', username: '', password: '', password_env: '', active: false, rpc_transport: 'auto', folder_id: '', disabled_tools: [], mode: 'inherit', credential_source: 'environment', policy_enabled: false, capability_allow: [], capability_deny: [], scoped_policy_json: JSON.stringify(scopedPolicy, null, 2), confirm_empty_policy: false };
             showInstanceModal.value = true;
         }
 
@@ -130,6 +139,7 @@ createApp({
             delete payload.scoped_policy_json;
             delete payload.confirm_empty_policy;
             payload.disabled_tools = (newInstance.value.disabled_tools || []).length ? newInstance.value.disabled_tools : null;
+            payload.folder_id = payload.folder_id || null;
             if (newInstance.value.credential_source === 'environment') {
                 if (!String(payload.password_env || '').trim()) return void (formError.value = 'Environment variable name is required.');
                 payload.password = '';
@@ -159,6 +169,22 @@ createApp({
             showInstanceModal.value = false;
             await fetchConfig();
         }
+
+        function openFolderModal(item = null) {
+            formError.value = '';
+            newFolder.value = item ? { ...item } : { id: '', name: '', description: '' };
+            showFolderModal.value = true;
+        }
+
+        async function saveFolder() {
+            formError.value = '';
+            const response = await api('/api/folders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newFolder.value) });
+            if (!response.ok) return void (formError.value = 'Could not save this folder. Check the name and try again.');
+            showFolderModal.value = false;
+            await fetchConfig();
+        }
+
+        const deleteFolder = id => remove(`/api/folders/${id}`, 'Delete this folder? Its instances will be ungrouped.');
 
         async function savePrompt() {
             formError.value = '';
@@ -194,6 +220,6 @@ createApp({
         function toggleDarkMode() { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light'); document.documentElement.classList.toggle('light', !isDark.value); }
 
         onMounted(() => { document.documentElement.classList.toggle('light', !isDark.value); fetchVersion(); fetchConfig(); });
-        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, tools, serverVersion, instanceSearch, toolSearch, toolCapability, toolCapabilities, filteredTools, activeCount, filteredInstances, showInstanceModal, showPromptModal, newInstance, newPrompt, capabilities, login, logout, openInstanceModal, openPromptModal, saveInstance, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode, approveApproval, rejectApproval, setToolEnabled, toggleInstanceTool };
+        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, tools, serverVersion, instanceSearch, toolSearch, toolCapability, toolCapabilities, filteredTools, activeCount, filteredInstances, showInstanceModal, showPromptModal, showFolderModal, newInstance, newPrompt, newFolder, folderFilter, foldersById, getFolderName, capabilities, login, logout, openInstanceModal, openPromptModal, openFolderModal, saveInstance, saveFolder, deleteFolder, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode, approveApproval, rejectApproval, setToolEnabled, toggleInstanceTool };
     }
 }).mount('#app');
