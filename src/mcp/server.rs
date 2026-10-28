@@ -5,6 +5,7 @@ use crate::context::{
 };
 use crate::error::AppError;
 use crate::mcp::McpRuntime;
+use crate::observability;
 use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
 use crate::tools::executor::execute_tool;
@@ -78,9 +79,19 @@ pub async fn run_server(
         }
 
         if let Ok(request) = serde_json::from_str::<Value>(&line) {
-            if request.get("method").and_then(Value::as_str) == Some("notifications/initialized") {
+            let method = request
+                .get("method")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let tool = request
+                .pointer("/params/name")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            if method == "notifications/initialized" {
                 runtime.mark_initialized();
             }
+            let started = Instant::now();
             let response = handle_request_with_identity(
                 request,
                 &config,
@@ -89,6 +100,27 @@ pub async fn run_server(
                 &mut client_identity,
             )
             .await;
+            let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let failed = response
+                .as_ref()
+                .and_then(|response| response.pointer("/result/isError"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            observability::metrics().record_request(failed);
+            if method == "tools/call" {
+                observability::metrics().record_tool_call(failed);
+            }
+            observability::log_event(
+                "info",
+                "mcp_request",
+                json!({
+                    "method": method,
+                    "tool": tool,
+                    "duration_ms": duration_ms,
+                    "failed": failed,
+                    "config_revision": runtime.revision()
+                }),
+            );
             if let Some(resp) = response {
                 runtime.send(resp);
             }

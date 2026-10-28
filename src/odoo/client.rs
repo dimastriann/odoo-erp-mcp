@@ -1,5 +1,6 @@
 use crate::config::RpcTransport;
 use crate::error::AppError;
+use crate::observability;
 use crate::odoo::retry::{
     OperationClass, RetryBackoff, RetryEvent, RetryObserver, default_retry_observer,
 };
@@ -243,6 +244,7 @@ impl OdooClient {
         let mut retry_index = 0;
 
         loop {
+            let started = std::time::Instant::now();
             let mut result = self.call_rpc_once(params.clone()).await;
             if matches!(result, Err(AppError::Authentication { .. }))
                 && self.is_auto_transport()
@@ -254,6 +256,8 @@ impl OdooClient {
                 self.set_transport(TRANSPORT_JSONRPC);
                 result = self.call_rpc_once(params.clone()).await;
             }
+            let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            observability::metrics().record_rpc(duration_ms);
             let retryable_error = result
                 .as_ref()
                 .err()
@@ -263,6 +267,7 @@ impl OdooClient {
                 return result;
             }
 
+            observability::metrics().record_retry();
             let entropy = self.next_request_id.load(Ordering::Relaxed) as u64;
             let delay = backoff.delay_for(retry_index, entropy);
             self.retry_observer.on_retry(RetryEvent {

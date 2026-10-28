@@ -2,6 +2,7 @@ use crate::audit;
 use crate::config::{Config, Folder, OdooInstance, OdooPrompt, generate_id};
 use crate::lifecycle::approval::{ApprovalId, approve_approval, list_approvals, reject_approval};
 use crate::mcp::McpRuntime;
+use crate::observability;
 use crate::odoo::ClientManager;
 use crate::tools::catalog::{ToolName, tool_definitions};
 use axum::{
@@ -73,6 +74,7 @@ pub async fn start_ui(config: SharedConfig, runtime: McpRuntime, client_manager:
         .route("/api/approvals/{id}/approve", post(approve))
         .route("/api/approvals/{id}/reject", post(reject))
         .route("/api/global-settings", post(update_global_settings))
+        .route("/api/metrics", get(metrics_endpoint))
         .route("/api/tools", get(get_tools))
         .route("/api/tools", post(update_tools))
         .route("/api/instances", post(add_instance))
@@ -89,6 +91,8 @@ pub async fn start_ui(config: SharedConfig, runtime: McpRuntime, client_manager:
         .route("/app.js", get(app_js))
         .route("/pagination.js", get(pagination_js))
         .route("/styles.css", get(styles_css))
+        .route("/health", get(health))
+        .route("/ready", get(ready))
         .route("/api/version", get(version))
         .route("/api/login", post(login))
         .route("/api/logout", post(logout))
@@ -221,6 +225,30 @@ async fn styles_css() -> impl IntoResponse {
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         include_str!("styles.css"),
     )
+}
+
+async fn health() -> Json<Value> {
+    Json(json!({
+        "status": "ok",
+        "version": env!("CARGO_PKG_VERSION")
+    }))
+}
+
+async fn ready(State(state): State<AppState>) -> Response {
+    let ready = !state.config.read().unwrap().instances.is_empty();
+    let body = json!({
+        "status": if ready { "ready" } else { "not_ready" },
+        "instances": state.config.read().unwrap().instances.len()
+    });
+    if ready {
+        (StatusCode::OK, Json(body)).into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response()
+    }
+}
+
+async fn metrics_endpoint() -> Json<Value> {
+    Json(observability::metrics().snapshot())
 }
 
 async fn version() -> Json<Value> {
@@ -604,6 +632,14 @@ mod tests {
                 "missing UI behavior: {behavior}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn health_endpoint_reports_ok() {
+        let body = health().await.0;
+
+        assert_eq!(body["status"], "ok");
+        assert_eq!(body["version"], env!("CARGO_PKG_VERSION"));
     }
 
     #[tokio::test]

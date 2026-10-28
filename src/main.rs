@@ -5,6 +5,7 @@ mod domain;
 mod error;
 mod lifecycle;
 mod mcp;
+mod observability;
 mod odoo;
 mod policy;
 mod risk;
