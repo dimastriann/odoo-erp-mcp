@@ -242,6 +242,30 @@ kind, and expire after `global_settings.approval_ttl_secs` (default `900`
 seconds). Approval state is stored in `approvals.json` next to `config.json`;
 the file is excluded from version control.
 
+#### Batch mutation semantics
+
+`odoo-create-batch` is all-or-nothing per Odoo create call and verifies every
+returned ID. `odoo-update-batch` and `odoo-delete-batch` execute one item at a
+time and return per-item success or failure, so partial results are possible.
+The whole batch passes risk and approval checks before any item executes. An
+optional idempotency key is scoped per item. Batch size is limited by
+`global_settings.max_batch_size` (default `100`).
+
+#### Live configuration and folders
+
+The MCP server emits `notifications/tools/list_changed` after configuration
+changes and exposes `_meta.configRevision` on tool listings and calls.
+`odoo-list-instances` returns the current active state, folders, and tool
+availability without contacting Odoo. Cached Odoo clients are invalidated when
+an instance is edited, deleted, or toggled active. These updates apply to
+changes made through the admin UI; direct `config.json` edits still require a
+server restart.
+
+Folders are single-level. Each instance may reference one `folder_id`, and the
+`folders` array is stored in `config.json`. Deleting a folder keeps its instances
+and clears their `folder_id` (they become ungrouped). Existing configurations
+without `folders` or `folder_id` load unchanged.
+
 **`mode` options per instance:**
 
 | Value | Behaviour |

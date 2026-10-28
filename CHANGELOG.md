@@ -21,6 +21,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Odoo client cache invalidation without restarting the server.
 - Single-level instance folders persisted in `config.json`.
 - Admin list pagination with 20/50/100/1000 page sizes.
+- Ordered search results and paginated `odoo-read-group` output.
+- Configurable report size limit via `max_report_bytes`.
 
 ### Changed
 
@@ -116,7 +118,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Applied a safe default limit to search operations when callers omit `limit`.
 - Standardized paginated responses with `items`, `offset`, `limit`, and
   `has_more` metadata.
-- Enforced logical operator arity and bounded `in` and `not in` operands.
+- Enforced logical operator arity and bounded `in` and 
+ot in` operands.
 - Exposed query-protection settings in the administration UI while preserving
   valid custom settings during configuration updates.
 

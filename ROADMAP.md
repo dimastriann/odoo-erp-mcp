@@ -345,11 +345,11 @@ Goal: Route writes through authorization, risk assessment, preview, approval, id
 
 ## Stage 4 Definition of Done
 
-- [ ] High-risk mutations cannot run without valid human approval.
-- [ ] Approved payloads cannot be modified before execution.
-- [ ] Duplicate requests do not create duplicate transactions.
-- [ ] Write results are verified and expose an explicit final state.
-- [ ] All lifecycle paths have automated tests.
+- [x] High-risk mutations cannot run without valid human approval.
+- [x] Approved payloads cannot be modified before execution.
+- [x] Duplicate requests do not create duplicate transactions.
+- [x] Write results are verified and expose an explicit final state.
+- [x] All lifecycle paths have automated tests.
 
 ---
 
@@ -363,44 +363,44 @@ enabling high-risk batch tools.
 
 ## 4B.1 Version and transport abstraction
 
-- [ ] S4B-01 — Detect Odoo server version and capabilities at connect time.
-- [ ] S4B-02 — Define a typed RPC transport abstraction: `auto`, `jsonrpc`, `json2`.
-- [ ] S4B-03 — Add per-instance `rpc_transport` and document API-key credentials.
-- [ ] S4B-04 — Implement JSON-2 bearer requests with `X-Odoo-Database`, named arguments, `ids`, and `context`.
-- [ ] S4B-05 — Map JSON-2 HTTP and Odoo error bodies to existing structured errors.
+- [x] S4B-01 — Detect Odoo server version and capabilities at connect time.
+- [x] S4B-02 — Define a typed RPC transport abstraction: `auto`, `jsonrpc`, `json2`.
+- [x] S4B-03 — Add per-instance `rpc_transport` and document API-key credentials.
+- [x] S4B-04 — Implement JSON-2 bearer requests with `X-Odoo-Database`, named arguments, `ids`, and `context`.
+- [x] S4B-05 — Map JSON-2 HTTP and Odoo error bodies to existing structured errors.
 - [ ] S4B-06 — Keep JSON-RPC fallback and warn when it is used against Odoo 19+.
-- [ ] S4B-07 — Add transport contract tests for v17–v20 response shapes.
-- [ ] S4B-08 — Document API-key scopes and the JSON-RPC deprecation path.
+- [x] S4B-07 — Add transport contract tests for v17–v20 response shapes.
+- [x] S4B-08 — Document API-key scopes and the JSON-RPC deprecation path.
 
 ## 4B.2 Version-aware operations
 
-- [ ] S4B-09 — Implement `odoo-get-server-info`.
-- [ ] S4B-10 — Use `has_access` on Odoo 18+ with legacy access fallbacks.
-- [ ] S4B-11 — Use `formatted_read_group` on Odoo 18.4+ with `read_group` fallback.
-- [ ] S4B-12 — Add optional allowlisted `context` to all tool calls.
-- [ ] S4B-13 — Add `order` to search tools and `limit`/`offset`/`orderby` to `odoo-read-group`.
+- [x] S4B-09 — Implement `odoo-get-server-info`.
+- [x] S4B-10 — Use `has_access` on Odoo 18+ with legacy access fallbacks.
+- [x] S4B-11 — Use `formatted_read_group` on Odoo 18.4+ with `read_group` fallback.
+- [x] S4B-12 — Add optional allowlisted `context` to all tool calls.
+- [x] S4B-13 — Add `order` to search tools and `limit`/`offset`/`orderby` to `odoo-read-group`.
 
 ## 4B.3 Read and report tools
 
-- [ ] S4B-14 — Implement `odoo-list-models`.
-- [ ] S4B-15 — Implement `odoo-check-access`.
-- [ ] S4B-16 — Implement `odoo-onchange`.
-- [ ] S4B-17 — Implement `odoo-name-search`.
-- [ ] S4B-18 — Implement `odoo-get-views`.
-- [ ] S4B-19 — Implement `odoo-list-reports`.
-- [ ] S4B-20 — Implement `odoo-render-report` for HTML and PDF.
-- [ ] S4B-21 — Add report size, record, and timeout limits.
+- [x] S4B-14 — Implement `odoo-list-models`.
+- [x] S4B-15 — Implement `odoo-check-access`.
+- [x] S4B-16 — Implement `odoo-onchange`.
+- [x] S4B-17 — Implement `odoo-name-search`.
+- [x] S4B-18 — Implement `odoo-get-views`.
+- [x] S4B-19 — Implement `odoo-list-reports`.
+- [x] S4B-20 — Implement `odoo-render-report` for HTML and PDF.
+- [x] S4B-21 — Add report size, record, and timeout limits.
 
 ## 4B.4 Batch mutations
 
-- [ ] S4B-22 — Implement `odoo-create-batch` with `vals_list` and verification.
-- [ ] S4B-23 — Implement `odoo-update-batch` with per-record results.
-- [ ] S4B-24 — Implement `odoo-delete-batch` with per-id results.
-- [ ] S4B-25 — Define the aggregate batch result schema.
-- [ ] S4B-26 — Route batch operations through risk, approval, idempotency, and verification.
-- [ ] S4B-27 — Add partial-failure, retry, and idempotency tests.
-- [ ] S4B-28 — Default-disable high-risk batch delete/update until approval gating is complete.
-- [ ] S4B-29 — Document batch limits and transaction semantics.
+- [x] S4B-22 — Implement `odoo-create-batch` with `vals_list` and verification.
+- [x] S4B-23 — Implement `odoo-update-batch` with per-record results.
+- [x] S4B-24 — Implement `odoo-delete-batch` with per-id results.
+- [x] S4B-25 — Define the aggregate batch result schema.
+- [x] S4B-26 — Route batch operations through risk, approval, idempotency, and verification.
+- [x] S4B-27 — Add partial-failure, retry, and idempotency tests.
+- [x] S4B-28 — Default-disable high-risk batch delete/update until approval gating is complete.
+- [x] S4B-29 — Document batch limits and transaction semantics.
 
 ## Stage 4B Definition of Done
 
@@ -418,45 +418,45 @@ reconnecting or restarting MCP.
 
 ## 4C.1 Admin list pagination
 
-- [ ] S4C-01 — Add a reusable client-side pagination helper.
-- [ ] S4C-02 — Default 20 rows with 20/50/100/1000 page sizes.
-- [ ] S4C-03 — Apply pagination to instances, prompts, tools, and approvals.
-- [ ] S4C-04 — Reset or clamp pages on search, filter, and list changes.
-- [ ] S4C-05 — Show range and total and persist the page size.
-- [ ] S4C-06 — Add pagination unit and UI contract tests.
+- [x] S4C-01 — Add a reusable client-side pagination helper.
+- [x] S4C-02 — Default 20 rows with 20/50/100/1000 page sizes.
+- [x] S4C-03 — Apply pagination to instances, prompts, tools, and approvals.
+- [x] S4C-04 — Reset or clamp pages on search, filter, and list changes.
+- [x] S4C-05 — Show range and total and persist the page size.
+- [x] S4C-06 — Add pagination unit and UI contract tests.
 
 ## 4C.2 Tool enablement
 
-- [ ] S4C-07 — Add global `disabled_tools` and per-instance `disabled_tools`.
-- [ ] S4C-08 — Add `GET /api/tools` with catalog, capability, and effective enablement.
-- [ ] S4C-09 — Add `POST /api/tools` and per-instance tool overrides.
-- [ ] S4C-10 — Filter `tools/list` by global enablement.
-- [ ] S4C-11 — Reject disabled tools with a distinct `TOOL_DISABLED` error.
-- [ ] S4C-12 — Add a Tools section with search, switches, and capability badges.
-- [ ] S4C-13 — Add per-instance tool override controls to the instance modal.
-- [ ] S4C-14 — Validate tool names and add precedence tests.
+- [x] S4C-07 — Add global `disabled_tools` and per-instance `disabled_tools`.
+- [x] S4C-08 — Add `GET /api/tools` with catalog, capability, and effective enablement.
+- [x] S4C-09 — Add `POST /api/tools` and per-instance tool overrides.
+- [x] S4C-10 — Filter `tools/list` by global enablement.
+- [x] S4C-11 — Reject disabled tools with a distinct `TOOL_DISABLED` error.
+- [x] S4C-12 — Add a Tools section with search, switches, and capability badges.
+- [x] S4C-13 — Add per-instance tool override controls to the instance modal.
+- [x] S4C-14 — Validate tool names and add precedence tests.
 
 ## 4C.3 Live state synchronization
 
-- [ ] S4C-15 — Advertise `tools.listChanged` in `initialize`.
-- [ ] S4C-16 — Serialize MCP responses and notifications through one output channel.
-- [ ] S4C-17 — Send `notifications/tools/list_changed` after configuration changes.
-- [ ] S4C-18 — Add `configRevision` to `tools/list` and tool-call `_meta`.
-- [ ] S4C-19 — Add `odoo-list-instances` with active state, folders, tools, and revision.
-- [ ] S4C-20 — Invalidate cached Odoo clients on instance edit, delete, and active changes.
-- [ ] S4C-21 — Add notification, revision, and cache-invalidation tests.
-- [ ] S4C-22 — Document no-restart behavior and client expectations.
+- [x] S4C-15 — Advertise `tools.listChanged` in `initialize`.
+- [x] S4C-16 — Serialize MCP responses and notifications through one output channel.
+- [x] S4C-17 — Send `notifications/tools/list_changed` after configuration changes.
+- [x] S4C-18 — Add `configRevision` to `tools/list` and tool-call `_meta`.
+- [x] S4C-19 — Add `odoo-list-instances` with active state, folders, tools, and revision.
+- [x] S4C-20 — Invalidate cached Odoo clients on instance edit, delete, and active changes.
+- [x] S4C-21 — Add notification, revision, and cache-invalidation tests.
+- [x] S4C-22 — Document no-restart behavior and client expectations.
 
 ## 4C.4 Instance folders and projects
 
-- [ ] S4C-23 — Add a `Folder` config type and `folder_id` on instances.
-- [ ] S4C-24 — Validate folder IDs, names, and references.
-- [ ] S4C-25 — Add `/api/folders` CRUD and folder assignment.
-- [ ] S4C-26 — Add a folder form, folder filter, and grouped instance list.
-- [ ] S4C-27 — Define folder deletion semantics.
-- [ ] S4C-28 — Include folder metadata in `odoo-list-instances`.
-- [ ] S4C-29 — Add config, API, and UI tests.
-- [ ] S4C-30 — Document the folder schema and migration behavior.
+- [x] S4C-23 — Add a `Folder` config type and `folder_id` on instances.
+- [x] S4C-24 — Validate folder IDs, names, and references.
+- [x] S4C-25 — Add `/api/folders` CRUD and folder assignment.
+- [x] S4C-26 — Add a folder form, folder filter, and grouped instance list.
+- [x] S4C-27 — Define folder deletion semantics.
+- [x] S4C-28 — Include folder metadata in `odoo-list-instances`.
+- [x] S4C-29 — Add config, API, and UI tests.
+- [x] S4C-30 — Document the folder schema and migration behavior.
 
 ## Stage 4C Definition of Done
 
@@ -825,9 +825,9 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 1 — Structured Errors and RPC Reliability | Complete | 29/29 | Structured errors, hardened RPC, and safe read-only retries complete. |
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
-| Stage 4 — Safe Mutation Lifecycle | Integration hardening | 59/59 | Verification and idempotency are wired into mutation execution; approval gating remains the final runtime hardening item. |
-| Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | In progress | 24/29 | JSON-2, version detection, context, report/access/batch tools; ordered search and formatted read-group follow-ups remain. |
-| Stage 4C — Live Administration and Workspace Organization | In progress | 28/30 | Pagination, tool enablement, live notifications, cache invalidation, and folders complete; documentation follow-ups remain. |
+| Stage 4 — Safe Mutation Lifecycle | Complete | 59/59 | Verification, idempotency, and single-use approval gating are wired into mutation execution. |
+| Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | In progress | 28/29 | JSON-2, context, ordered queries, report limits, and read/report/batch tools complete; JSON-RPC deprecation warning remains. |
+| Stage 4C — Live Administration and Workspace Organization | Complete | 30/30 | Pagination, tool enablement, live notifications, cache invalidation, folders, and documentation complete. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |
