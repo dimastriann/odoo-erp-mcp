@@ -368,7 +368,7 @@ enabling high-risk batch tools.
 - [x] S4B-03 — Add per-instance `rpc_transport` and document API-key credentials.
 - [x] S4B-04 — Implement JSON-2 bearer requests with `X-Odoo-Database`, named arguments, `ids`, and `context`.
 - [x] S4B-05 — Map JSON-2 HTTP and Odoo error bodies to existing structured errors.
-- [ ] S4B-06 — Keep JSON-RPC fallback and warn when it is used against Odoo 19+.
+- [x] S4B-06 — Keep JSON-RPC fallback and warn when it is used against Odoo 19+.
 - [x] S4B-07 — Add transport contract tests for v17–v20 response shapes.
 - [x] S4B-08 — Document API-key scopes and the JSON-RPC deprecation path.
 
@@ -826,7 +826,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
 | Stage 4 — Safe Mutation Lifecycle | Complete | 59/59 | Verification, idempotency, and single-use approval gating are wired into mutation execution. |
-| Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | In progress | 28/29 | JSON-2, context, ordered queries, report limits, and read/report/batch tools complete; JSON-RPC deprecation warning remains. |
+| Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | Complete | 29/29 | JSON-2, context, ordered queries, report limits, read/report/batch tools, and deprecation warning complete. |
 | Stage 4C — Live Administration and Workspace Organization | Complete | 30/30 | Pagination, tool enablement, live notifications, cache invalidation, folders, and documentation complete. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |

@@ -248,6 +248,9 @@ impl OdooClient {
                 && self.is_auto_transport()
                 && self.transport() == TRANSPORT_JSON2
             {
+                eprintln!(
+                    "Warning: JSON-2 rejected the credential; falling back to deprecated JSON-RPC. Use an API key with the rpc scope for Odoo 19+."
+                );
                 self.set_transport(TRANSPORT_JSONRPC);
                 result = self.call_rpc_once(params.clone()).await;
             }
