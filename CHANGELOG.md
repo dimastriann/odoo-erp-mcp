@@ -5,6 +5,38 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Durable approval requests for high-risk mutations, a single-use approval
+  workflow, and an approval inbox with approve/reject controls.
+- Odoo 19/20 JSON-2 bearer transport alongside the JSON-RPC compatibility
+  fallback, with automatic version detection and per-instance selection.
+- New tools for model discovery, access checks, onchange evaluation, name
+  search, view metadata, report discovery/rendering, and batch mutations.
+- Allowlisted Odoo context propagation with size and key limits.
+- Global and per-instance tool enablement with `TOOL_DISABLED` responses.
+- Live MCP `tools/list_changed` notifications, configuration revisions, and
+  Odoo client cache invalidation without restarting the server.
+- Single-level instance folders persisted in `config.json`.
+- Admin list pagination with 20/50/100/1000 page sizes.
+
+### Changed
+
+- High-risk mutations now return `approval_required` instead of executing
+  until an administrator approves the exact payload.
+- `tools/list` omits globally disabled tools and advertises
+  `listChanged: true`.
+- Tool responses include `_meta.configRevision` for freshness detection.
+- `config.example.json` documents the new transport, folder, approval, batch,
+  context, and tool-enablement fields.
+
+### Fixed
+
+- Cached Odoo clients are invalidated when an instance is edited, deleted, or
+  toggled active.
+
 ## [0.7.0] — 2026-09-18
 
 ### Added

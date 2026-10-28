@@ -17,7 +17,12 @@ A high-performance, secure Model Context Protocol (MCP) server built in Rust for
     - `odoo-read-group`: Perform aggregated analysis (group by, sums, counts).
     - `odoo-copy`: Quickly duplicate existing records.
     - `odoo-get-metadata`: Inspect model structures and field definitions.
+    - `odoo-list-models`, `odoo-check-access`, `odoo-onchange`, `odoo-name-search`, `odoo-get-views`: Discover models, access, UI semantics, and relation labels.
+    - `odoo-list-reports`, `odoo-render-report`: Discover and render HTML or base64 PDF reports.
+    - `odoo-create-batch`, `odoo-update-batch`, `odoo-delete-batch`: Batch mutations with per-item results and approval gating.
 - **Multi-Instance Support**: Configure and keep **multiple Odoo instances active simultaneously**. Each tool call can target a specific instance by ID or name, or fall back to the default active one.
+- **Folders and Live Configuration**: Organize instances into folders, enable or disable tools globally and per instance, and receive MCP `tools/list_changed` notifications without restarting the server.
+- **Odoo 19/20 Ready**: Per-instance `rpc_transport` supports JSON-RPC fallback or JSON-2 bearer API keys with automatic version detection.
 - **Global & Per-Instance Tool Permissions**:
     - Set a **Global Default Mode** (`crud` or `read_only`) that applies to all instances by default.
     - **Override per instance**: each instance can be set to `crud`, `read_only`, or `inherit` (from global).

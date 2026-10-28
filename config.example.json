@@ -11,8 +11,15 @@
     "max_domain_terms": 100,
     "max_response_records": 1000,
     "max_domain_in_values": 1000,
-    "approval_ttl_secs": 900
+    "approval_ttl_secs": 900,
+    "max_context_keys": 32,
+    "max_context_bytes": 8192,
+    "max_batch_size": 100,
+    "disabled_tools": []
   },
+  "folders": [
+    { "id": "f-production", "name": "Production", "description": "Live ERP" }
+  ],
   "instances": [
     {
       "id": "1",
@@ -23,6 +30,8 @@
       "password_env": "ODOO_PASSWORD",
       "active": true,
       "rpc_transport": "auto",
+      "folder_id": "f-production",
+      "disabled_tools": [],
       "mode": "crud",
       "allowed_tools": null,
       "permissions": {

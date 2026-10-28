@@ -826,8 +826,8 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 2 — Query Protection and Safe Read-Only Core | Complete | 24/24 | Pagination, payload limits, and typed domain security complete. |
 | Stage 3 — Identity, Secrets, and Authorization | Complete | 34/34 | Identity, secret handling, capability policy, and configuration UI complete. |
 | Stage 4 — Safe Mutation Lifecycle | Integration hardening | 59/59 | Verification and idempotency are wired into mutation execution; approval gating remains the final runtime hardening item. |
-| Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | Not started | 0/29 | JSON-2, version-aware operations, new read/report/batch tools. |
-| Stage 4C — Live Administration and Workspace Organization | Not started | 0/30 | Pagination, tool enablement, live state, and folders. |
+| Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | In progress | 24/29 | JSON-2, version detection, context, report/access/batch tools; ordered search and formatted read-group follow-ups remain. |
+| Stage 4C — Live Administration and Workspace Organization | In progress | 28/30 | Pagination, tool enablement, live notifications, cache invalidation, and folders complete; documentation follow-ups remain. |
 | Stage 5 — Audit and Observability | Not started | 0/26 | |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |
