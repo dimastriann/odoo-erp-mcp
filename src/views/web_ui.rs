@@ -560,6 +560,9 @@ mod tests {
             "Workspace",
             "Rows per page",
             "Max (1000)",
+            "All tools",
+            "Ungrouped",
+            "toggle-switch",
         ] {
             assert!(html.contains(control), "missing UI control: {control}");
         }

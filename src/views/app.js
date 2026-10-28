@@ -56,9 +56,34 @@ createApp({
         const toolPaged = computed(() => OdooAdminPagination.paginate(filteredTools.value, toolPage.value, pageSize.value));
         const promptPaged = computed(() => OdooAdminPagination.paginate(config.value.prompts || [], promptPage.value, pageSize.value));
         const approvalPaged = computed(() => OdooAdminPagination.paginate(approvals.value, approvalPage.value, pageSize.value));
+        const toolsTotal = computed(() => tools.value.length);
+        const toolsEnabled = computed(() => tools.value.filter(tool => tool.enabled).length);
+        const toolsDisabled = computed(() => toolsTotal.value - toolsEnabled.value);
+        const folderCounts = computed(() => {
+            const counts = {};
+            for (const instance of config.value.instances) {
+                const key = instance.folder_id && foldersById.value[instance.folder_id] ? instance.folder_id : '__none__';
+                counts[key] = (counts[key] || 0) + 1;
+            }
+            return counts;
+        });
+        const folderCount = id => folderCounts.value[id] || 0;
+        const ungroupedCount = computed(() => folderCounts.value.__none__ || 0);
+        const toolStatsFor = instance => {
+            const disabled = new Set(instance.disabled_tools || []);
+            const active = tools.value.filter(tool => tool.enabled && !disabled.has(tool.name)).length;
+            return { total: tools.value.length, active, disabled: tools.value.length - active };
+        };
 
-        function setPage(pageRef, value) {
-            pageRef.value = Number(value);
+        function setPage(target, value) {
+            const pages = {
+                instance: instancePage,
+                tool: toolPage,
+                prompt: promptPage,
+                approval: approvalPage
+            };
+            const page = pages[target];
+            if (page) page.value = Math.max(1, Number(value) || 1);
         }
         function setPageSize(value) {
             pageSize.value = Number(value);
@@ -246,6 +271,6 @@ createApp({
         function toggleDarkMode() { isDark.value = !isDark.value; localStorage.setItem('theme', isDark.value ? 'dark' : 'light'); document.documentElement.classList.toggle('light', !isDark.value); }
 
         onMounted(() => { document.documentElement.classList.toggle('light', !isDark.value); fetchVersion(); fetchConfig(); });
-        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, tools, serverVersion, instanceSearch, toolSearch, toolCapability, toolCapabilities, filteredTools, pageSize, instancePage, toolPage, promptPage, approvalPage, instancePaged, toolPaged, promptPaged, approvalPaged, setPage, setPageSize, activeCount, filteredInstances, showInstanceModal, showPromptModal, showFolderModal, newInstance, newPrompt, newFolder, folderFilter, foldersById, getFolderName, capabilities, login, logout, openInstanceModal, openPromptModal, openFolderModal, saveInstance, saveFolder, deleteFolder, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode, approveApproval, rejectApproval, setToolEnabled, toggleInstanceTool };
+        return { isDark, authenticated, loginForm, loginError, formError, config, approvals, tools, serverVersion, instanceSearch, toolSearch, toolCapability, toolCapabilities, filteredTools, pageSize, instancePage, toolPage, promptPage, approvalPage, instancePaged, toolPaged, promptPaged, approvalPaged, toolsTotal, toolsEnabled, toolsDisabled, folderCount, ungroupedCount, toolStatsFor, setPage, setPageSize, activeCount, filteredInstances, showInstanceModal, showPromptModal, showFolderModal, newInstance, newPrompt, newFolder, folderFilter, foldersById, getFolderName, capabilities, login, logout, openInstanceModal, openPromptModal, openFolderModal, saveInstance, saveFolder, deleteFolder, savePrompt, deleteInstance, deletePrompt, toggleActive, updateGlobalMode, getInstanceMode, displayMode, toggleCapability, toggleDarkMode, approveApproval, rejectApproval, setToolEnabled, toggleInstanceTool };
     }
 }).mount('#app');
