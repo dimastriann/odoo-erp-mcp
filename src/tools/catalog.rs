@@ -63,11 +63,12 @@ pub(crate) enum ToolName {
     FindRelationPath,
     Workflow,
     ListWorkflows,
+    ExplainRelation,
 }
 
 impl ToolName {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 31] = [
+    pub(crate) const ALL: [Self; 32] = [
         Self::SearchRead,
         Self::SearchCount,
         Self::ReadGroup,
@@ -99,6 +100,7 @@ impl ToolName {
         Self::FindRelationPath,
         Self::Workflow,
         Self::ListWorkflows,
+        Self::ExplainRelation,
     ];
 
     pub(crate) const fn as_str(self) -> &'static str {
@@ -134,6 +136,7 @@ impl ToolName {
             Self::FindRelationPath => "odoo-find-relation-path",
             Self::Workflow => "odoo-workflow",
             Self::ListWorkflows => "odoo-list-workflows",
+            Self::ExplainRelation => "odoo-explain-relation",
         }
     }
 
@@ -166,6 +169,7 @@ impl ToolName {
             | Self::FindRelationPath => Capability::Read,
             Self::Workflow => Capability::Workflow,
             Self::ListWorkflows => Capability::Read,
+            Self::ExplainRelation => Capability::Read,
         }
     }
 
@@ -177,6 +181,7 @@ impl ToolName {
                 | Self::ListReports
                 | Self::ListInstances
                 | Self::ListWorkflows
+                | Self::ExplainRelation
         )
     }
 
@@ -221,6 +226,7 @@ impl TryFrom<&str> for ToolName {
             "odoo-find-relation-path" => Ok(Self::FindRelationPath),
             "odoo-workflow" => Ok(Self::Workflow),
             "odoo-list-workflows" => Ok(Self::ListWorkflows),
+            "odoo-explain-relation" => Ok(Self::ExplainRelation),
             _ => Err(()),
         }
     }
@@ -643,11 +649,12 @@ pub(crate) fn tool_definitions() -> Value {
                     "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
                     "workflow": {
                         "type": "string",
-                        "enum": ["sale_order_confirm", "sale_order_cancel", "invoice_post", "account_move_cancel", "stock_picking_validate", "purchase_order_confirm"]
+                        "enum": ["sale_order_confirm", "sale_order_cancel", "invoice_post", "account_move_cancel", "stock_picking_validate", "purchase_order_confirm", "post_sale_order_message"]
                     },
                     "model": { "type": "string", "description": "Must match the workflow registry model" },
                     "method": { "type": "string", "description": "Must match the workflow registry method" },
                     "ids": { "type": "array", "items": { "type": "integer" }, "minItems": 1 },
+                    "kwargs": { "type": "object", "description": "Workflow-specific arguments; see odoo-list-workflows" },
                     "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256 },
                     "approval_id": { "type": "string" }
                 },
@@ -661,6 +668,20 @@ pub(crate) fn tool_definitions() -> Value {
                 "type": "object",
                 "properties": {},
                 "required": []
+            }
+        },
+        {
+            "name": "odoo-explain-relation",
+            "description": "Explain the relationship path between two models in human-readable form.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "from_model": { "type": "string" },
+                    "to_model": { "type": "string" },
+                    "max_depth": { "type": "integer", "minimum": 1, "maximum": 8, "default": 4 }
+                },
+                "required": ["from_model", "to_model"]
             }
         },
         {

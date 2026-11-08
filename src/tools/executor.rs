@@ -29,7 +29,7 @@ use crate::tools::protection::{QueryLimits, validate_order, validate_response_re
 use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
 use crate::workflows;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -405,12 +405,15 @@ async fn execute_workflow(
     odoo: &OdooClient,
     workflow: &workflows::WorkflowDefinition,
     ids: Vec<i64>,
+    kwargs: Map<String, Value>,
     operation: &Operation,
     context: &RequestContext,
     key: Option<String>,
 ) -> Result<Value, AppError> {
     let Some(key) = key else {
-        return odoo.call_method(workflow.model, workflow.method, ids).await;
+        return odoo
+            .call_method(workflow.model, workflow.method, ids, kwargs)
+            .await;
     };
     let key = IdempotencyKey::new(key)?;
     {
@@ -443,7 +446,9 @@ async fn execute_workflow(
             IdempotencyRecord::for_operation(key.clone(), operation, context, now_seconds(), 900)?;
         storage.insert(record)?;
     }
-    let result = odoo.call_method(workflow.model, workflow.method, ids).await;
+    let result = odoo
+        .call_method(workflow.model, workflow.method, ids, kwargs)
+        .await;
     let mut storage = idempotency_storage()
         .lock()
         .map_err(|_| AppError::internal("Idempotency storage lock is poisoned"))?;
@@ -1204,10 +1209,15 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_idempotency_key(args.idempotency_key.as_deref()) {
                 return ToolExecutionResult::invalid_arguments("workflow", error);
             }
+            let kwargs = match workflows::validate_kwargs(workflow, args.kwargs.as_ref()) {
+                Ok(kwargs) => kwargs,
+                Err(error) => return ToolExecutionResult::Failure(error),
+            };
             let payload = OperationPayload::new(json!({
                 "ids": args.ids,
                 "workflow": args.workflow,
-                "method": args.method
+                "method": args.method,
+                "kwargs": kwargs
             }))
             .expect("workflow payload is an object");
             let operation = Operation::new(OperationKind::Update, args.model.clone(), payload)
@@ -1222,6 +1232,7 @@ pub(crate) async fn execute_tool(
                 odoo,
                 workflow,
                 ids,
+                kwargs,
                 &operation,
                 context,
                 args.idempotency_key,
@@ -1242,11 +1253,39 @@ pub(crate) async fn execute_tool(
                 Err(error) => ToolExecutionResult::Failure(error),
             }
         }
-        ToolName::ListInstances | ToolName::ListWorkflows => {
-            ToolExecutionResult::Failure(AppError::internal(
-                "odoo-list-instances must be handled before the Odoo client is resolved",
-            ))
+        ToolName::ExplainRelation => {
+            let args: RelationPathArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("explain-relation", error);
+                }
+            };
+            let max_depth = args.max_depth.unwrap_or(4).clamp(1, 8);
+            match metadata::relation_path(
+                odoo,
+                &args.from_model,
+                &args.to_model,
+                max_depth,
+                limits.metadata_cache_ttl_secs,
+                limits.max_metadata_fields,
+            )
+            .await
+            {
+                Ok(mut value) => {
+                    let explanation = metadata::explain_relation_path(
+                        &args.from_model,
+                        &args.to_model,
+                        &value["path"],
+                    );
+                    value["explanation"] = Value::String(explanation);
+                    ToolExecutionResult::Success(value)
+                }
+                Err(error) => ToolExecutionResult::Failure(error),
+            }
         }
+        ToolName::ListInstances | ToolName::ListWorkflows => ToolExecutionResult::Failure(
+            AppError::internal("local tool must be handled before the Odoo client is resolved"),
+        ),
     }
 }
 use crate::error::AppError;

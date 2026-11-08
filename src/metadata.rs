@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Mutex;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -178,9 +178,21 @@ struct CacheEntry {
 }
 
 static CACHE: OnceLock<Mutex<HashMap<String, CacheEntry>>> = OnceLock::new();
+static KEY_LOCKS: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = OnceLock::new();
 
 fn cache() -> &'static Mutex<HashMap<String, CacheEntry>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn key_lock(key: &str) -> Arc<tokio::sync::Mutex<()>> {
+    let mut locks = KEY_LOCKS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .unwrap();
+    locks
+        .entry(key.to_string())
+        .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+        .clone()
 }
 
 pub(crate) async fn schema(
@@ -191,14 +203,18 @@ pub(crate) async fn schema(
     include_access: bool,
 ) -> Result<ModelSchema, AppError> {
     let key = format!("{}|{model}|{include_access}", odoo.cache_key());
+    let lock = key_lock(&key);
+    let _guard = lock.lock().await;
     if ttl_secs > 0 {
         let cache = cache().lock().unwrap();
         if let Some(entry) = cache.get(&key)
             && entry.fetched_at.elapsed().as_secs() < ttl_secs
         {
+            crate::observability::metrics().record_metadata_cache(true);
             return Ok(entry.schema.clone());
         }
     }
+    crate::observability::metrics().record_metadata_cache(false);
     let schema = load_schema(odoo, model, max_fields, include_access).await?;
     if ttl_secs > 0 {
         cache().lock().unwrap().insert(
@@ -214,12 +230,14 @@ pub(crate) async fn schema(
 
 pub(crate) fn invalidate_all() {
     cache().lock().unwrap().clear();
+    crate::observability::metrics().record_metadata_invalidation();
 }
 
 pub(crate) fn invalidate_model(odoo: &OdooClient, model: &str) {
     let prefix = format!("{}|{model}|", odoo.cache_key());
     let mut cache = cache().lock().unwrap();
     cache.retain(|key, _| !key.starts_with(&prefix));
+    crate::observability::metrics().record_metadata_invalidation();
 }
 
 pub(crate) async fn enum_values(
@@ -296,9 +314,57 @@ pub(crate) async fn relation_path(
     Ok(json!({"from": from, "to": to, "path": null}))
 }
 
+pub(crate) fn explain_relation_path(from: &str, to: &str, path: &Value) -> String {
+    if from == to {
+        return format!("{from} and {to} are the same model");
+    }
+    let Some(steps) = path.as_array() else {
+        return format!("No relationship path was found from {from} to {to}");
+    };
+    if steps.is_empty() {
+        return format!("No relationship path was found from {from} to {to}");
+    }
+    let explanation = steps
+        .iter()
+        .filter_map(|step| {
+            Some(format!(
+                "{}.{} ({}) -> {}",
+                step.get("from")?.as_str()?,
+                step.get("field")?.as_str()?,
+                step.get("type")?.as_str()?,
+                step.get("relation")?.as_str()?
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{from} reaches {to} via {explanation}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn relation_paths_have_human_readable_explanations() {
+        let path = json!([
+            {"from": "res.partner", "field": "user_ids", "type": "one2many", "relation": "res.users"},
+            {"from": "res.users", "field": "partner_id", "type": "many2one", "relation": "res.partner"}
+        ]);
+        assert_eq!(
+            explain_relation_path("res.partner", "res.users", &path),
+            "res.partner reaches res.users via res.partner.user_ids (one2many) -> res.users, res.users.partner_id (many2one) -> res.partner"
+        );
+        assert!(
+            explain_relation_path("res.partner", "sale.order", &Value::Null)
+                .contains("No relationship")
+        );
+    }
+
+    #[test]
+    fn key_locks_are_stable_per_cache_key() {
+        assert!(Arc::ptr_eq(&key_lock("model-a"), &key_lock("model-a")));
+        assert!(!Arc::ptr_eq(&key_lock("model-a"), &key_lock("model-b")));
+    }
 
     #[test]
     fn selection_parses_pairs_and_plain_values() {

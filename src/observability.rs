@@ -13,6 +13,9 @@ pub(crate) struct Metrics {
     rpc_calls_total: AtomicU64,
     rpc_duration_ms_total: AtomicU64,
     retries_total: AtomicU64,
+    metadata_cache_hits_total: AtomicU64,
+    metadata_cache_misses_total: AtomicU64,
+    metadata_cache_invalidations_total: AtomicU64,
 }
 
 impl Default for Metrics {
@@ -26,6 +29,9 @@ impl Default for Metrics {
             rpc_calls_total: AtomicU64::new(0),
             rpc_duration_ms_total: AtomicU64::new(0),
             retries_total: AtomicU64::new(0),
+            metadata_cache_hits_total: AtomicU64::new(0),
+            metadata_cache_misses_total: AtomicU64::new(0),
+            metadata_cache_invalidations_total: AtomicU64::new(0),
         }
     }
 }
@@ -55,6 +61,21 @@ impl Metrics {
         self.retries_total.fetch_add(1, Ordering::Relaxed);
     }
 
+    pub(crate) fn record_metadata_cache(&self, hit: bool) {
+        if hit {
+            self.metadata_cache_hits_total
+                .fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.metadata_cache_misses_total
+                .fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub(crate) fn record_metadata_invalidation(&self) {
+        self.metadata_cache_invalidations_total
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
     pub(crate) fn snapshot(&self) -> Value {
         json!({
             "requests_total": self.requests_total.load(Ordering::Relaxed),
@@ -64,6 +85,9 @@ impl Metrics {
             "rpc_calls_total": self.rpc_calls_total.load(Ordering::Relaxed),
             "rpc_duration_ms_total": self.rpc_duration_ms_total.load(Ordering::Relaxed),
             "retries_total": self.retries_total.load(Ordering::Relaxed),
+            "metadata_cache_hits_total": self.metadata_cache_hits_total.load(Ordering::Relaxed),
+            "metadata_cache_misses_total": self.metadata_cache_misses_total.load(Ordering::Relaxed),
+            "metadata_cache_invalidations_total": self.metadata_cache_invalidations_total.load(Ordering::Relaxed),
             "uptime_seconds": now_seconds().saturating_sub(self.started_at)
         })
     }
@@ -143,6 +167,9 @@ mod tests {
         metrics.record_tool_call(true);
         metrics.record_rpc(25);
         metrics.record_retry();
+        metrics.record_metadata_cache(true);
+        metrics.record_metadata_cache(false);
+        metrics.record_metadata_invalidation();
         let snapshot = metrics.snapshot();
 
         assert_eq!(snapshot["requests_total"], 2);
@@ -152,6 +179,9 @@ mod tests {
         assert_eq!(snapshot["rpc_calls_total"], 1);
         assert_eq!(snapshot["rpc_duration_ms_total"], 25);
         assert_eq!(snapshot["retries_total"], 1);
+        assert_eq!(snapshot["metadata_cache_hits_total"], 1);
+        assert_eq!(snapshot["metadata_cache_misses_total"], 1);
+        assert_eq!(snapshot["metadata_cache_invalidations_total"], 1);
         assert!(snapshot["uptime_seconds"].is_u64());
     }
 }

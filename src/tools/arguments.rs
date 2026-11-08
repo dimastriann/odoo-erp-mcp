@@ -256,6 +256,8 @@ pub(crate) struct WorkflowArgs {
     pub(crate) method: String,
     pub(crate) ids: Vec<i64>,
     #[serde(default)]
+    pub(crate) kwargs: Option<Map<String, Value>>,
+    #[serde(default)]
     pub(crate) idempotency_key: Option<String>,
     #[serde(default)]
     pub(crate) approval_id: Option<String>,

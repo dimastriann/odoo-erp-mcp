@@ -1018,6 +1018,7 @@ impl OdooClient {
         model: &str,
         method: &str,
         ids: Vec<i64>,
+        kwargs: Map<String, Value>,
     ) -> Result<Value, AppError> {
         let params = json!({
             "service": "object",
@@ -1028,7 +1029,8 @@ impl OdooClient {
                 self.password,
                 model,
                 method,
-                [ids]
+                [ids],
+                kwargs
             ]
         });
 
@@ -1155,6 +1157,9 @@ fn json2_request_body(
         }
         "get_views" => {
             body.insert("views".to_string(), positional_value(0));
+        }
+        "message_post" => {
+            body.insert("ids".to_string(), positional_value(0));
         }
         "action_confirm" | "action_post" | "button_validate" | "action_cancel"
         | "button_cancel" | "button_confirm" => {

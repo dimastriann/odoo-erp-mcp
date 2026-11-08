@@ -723,6 +723,7 @@ mod tests {
             ("odoo-find-relation-path", &["from_model", "to_model"][..]),
             ("odoo-workflow", &["workflow", "model", "method", "ids"][..]),
             ("odoo-list-workflows", &[][..]),
+            ("odoo-explain-relation", &["from_model", "to_model"][..]),
         ];
 
         assert_eq!(tools.len(), expected_contracts.len());
