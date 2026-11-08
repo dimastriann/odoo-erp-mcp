@@ -6,11 +6,16 @@ query-protection invariants.
 
 ## Cross-agent entry points
 
-- `AGENTS.md` is the canonical rule set for Codex and opencode.
+- `AGENTS.md` is the canonical rule set for Codex, opencode, and Claude Code.
 - `CLAUDE.md` imports this file for Claude Code.
-- The reusable commit procedure lives in
-  `.opencode/skills/atomic-commit/SKILL.md` and
-  `.claude/skills/atomic-commit/SKILL.md`. Keep both copies identical.
+- Canonical skills live in `.agents/skills/<name>/SKILL.md`; Codex discovers
+  them natively.
+- opencode and Claude Code use small pointer skills in
+  `.opencode/skills/<name>/SKILL.md` and `.claude/skills/<name>/SKILL.md` that
+  redirect to the canonical file. Keep pointer frontmatter in sync with the
+  canonical skill's `name` and `description`.
+- Reusable procedures: `atomic-commit`, `mcp-tool-extension`,
+  `mutation-lifecycle`.
 
 ## Atomic commits
 
