@@ -338,6 +338,8 @@ async fn handle_request_with_identity(
                 max_context_bytes: effective_settings.max_context_bytes,
                 max_batch_size: effective_settings.max_batch_size,
                 max_report_bytes: effective_settings.max_report_bytes,
+                metadata_cache_ttl_secs: effective_settings.metadata_cache_ttl_secs,
+                max_metadata_fields: effective_settings.max_metadata_fields,
             };
 
             // Enforce Instance Tool Permissions
@@ -710,6 +712,12 @@ mod tests {
             ("odoo-delete-batch", &["model", "ids"][..]),
             ("odoo-list-instances", &[][..]),
             ("odoo-preview", &["model", "kind"][..]),
+            ("odoo-get-model-schema", &["model"][..]),
+            ("odoo-get-relations", &["model"][..]),
+            ("odoo-get-enum-values", &["model"][..]),
+            ("odoo-get-required-fields", &["model"][..]),
+            ("odoo-refresh-metadata", &[][..]),
+            ("odoo-find-relation-path", &["from_model", "to_model"][..]),
         ];
 
         assert_eq!(tools.len(), expected_contracts.len());

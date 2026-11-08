@@ -9,13 +9,15 @@ use crate::lifecycle::idempotency::{
 use crate::lifecycle::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
 use crate::lifecycle::preview;
 use crate::lifecycle::verification::{self, VerificationStatus};
+use crate::metadata;
 use crate::odoo::OdooClient;
 use crate::risk::RiskEvaluator;
 use crate::tools::arguments::{
     CheckAccessArgs, CopyArgs, CreateArgs, CreateBatchArgs, DeleteArgs, DeleteBatchArgs,
-    GetViewsArgs, ListModelsArgs, ListReportsArgs, ModelFieldsArgs, NameSearchArgs, OnchangeArgs,
-    PreviewArgs, ReadArgs, ReadGroupArgs, RenderReportArgs, SearchArgs, SearchDomainArgs,
-    SearchReadArgs, UpdateArgs, UpdateBatchArgs,
+    EnumValuesArgs, GetViewsArgs, ListModelsArgs, ListReportsArgs, ModelFieldsArgs, ModelOnlyArgs,
+    ModelSchemaArgs, NameSearchArgs, OnchangeArgs, PreviewArgs, ReadArgs, ReadGroupArgs,
+    RefreshMetadataArgs, RelationPathArgs, RelationsArgs, RenderReportArgs, SearchArgs,
+    SearchDomainArgs, SearchReadArgs, UpdateArgs, UpdateBatchArgs,
 };
 use crate::tools::catalog::ToolName;
 use crate::tools::context::validate_context;
@@ -982,6 +984,143 @@ pub(crate) async fn execute_tool(
                 Err(error) => ToolExecutionResult::Failure(error),
             }
         }
+        ToolName::GetModelSchema => {
+            let args: ModelSchemaArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return ToolExecutionResult::invalid_arguments("model-schema", error),
+            };
+            match metadata::schema(
+                odoo,
+                &args.model,
+                limits.metadata_cache_ttl_secs,
+                limits.max_metadata_fields,
+                args.include_access,
+            )
+            .await
+            {
+                Ok(schema) => ToolExecutionResult::Success(
+                    serde_json::to_value(schema).expect("model schemas must serialize"),
+                ),
+                Err(error) => ToolExecutionResult::Failure(error),
+            }
+        }
+        ToolName::GetRelations => {
+            let args: RelationsArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return ToolExecutionResult::invalid_arguments("relations", error),
+            };
+            let schema = match metadata::schema(
+                odoo,
+                &args.model,
+                limits.metadata_cache_ttl_secs,
+                limits.max_metadata_fields,
+                false,
+            )
+            .await
+            {
+                Ok(schema) => schema,
+                Err(error) => return ToolExecutionResult::Failure(error),
+            };
+            let mut result = json!({
+                "model": args.model,
+                "outgoing": schema.relations
+            });
+            if args.include_incoming {
+                let limit = match resolve_limit(args.limit, limits.max_query_limit) {
+                    Ok(limit) => limit,
+                    Err(error) => {
+                        return ToolExecutionResult::invalid_arguments("relations limit", error);
+                    }
+                };
+                let incoming = odoo
+                    .get_field_relations(&args.model, args.offset, limit)
+                    .await;
+                let incoming =
+                    match validate_response_record_count(incoming, limits.max_response_records) {
+                        Ok(incoming) => incoming,
+                        Err(error) => return ToolExecutionResult::Failure(error),
+                    };
+                result["incoming"] = incoming;
+            }
+            ToolExecutionResult::Success(result)
+        }
+        ToolName::GetEnumValues => {
+            let args: EnumValuesArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return ToolExecutionResult::invalid_arguments("enum-values", error),
+            };
+            match metadata::enum_values(
+                odoo,
+                &args.model,
+                args.field.as_deref(),
+                limits.metadata_cache_ttl_secs,
+                limits.max_metadata_fields,
+            )
+            .await
+            {
+                Ok(value) => ToolExecutionResult::Success(value),
+                Err(error) => ToolExecutionResult::Failure(error),
+            }
+        }
+        ToolName::GetRequiredFields => {
+            let args: ModelOnlyArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("required-fields", error);
+                }
+            };
+            match metadata::required_fields(
+                odoo,
+                &args.model,
+                limits.metadata_cache_ttl_secs,
+                limits.max_metadata_fields,
+            )
+            .await
+            {
+                Ok(value) => ToolExecutionResult::Success(value),
+                Err(error) => ToolExecutionResult::Failure(error),
+            }
+        }
+        ToolName::RefreshMetadata => {
+            let args: RefreshMetadataArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("refresh-metadata", error);
+                }
+            };
+            match args.model {
+                Some(model) => {
+                    metadata::invalidate_model(odoo, &model);
+                    ToolExecutionResult::Success(json!({"invalidated": model}))
+                }
+                None => {
+                    metadata::invalidate_all();
+                    ToolExecutionResult::Success(json!({"invalidated": "all"}))
+                }
+            }
+        }
+        ToolName::FindRelationPath => {
+            let args: RelationPathArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("relation-path", error);
+                }
+            };
+            let max_depth = args.max_depth.unwrap_or(4).clamp(1, 8);
+            match metadata::relation_path(
+                odoo,
+                &args.from_model,
+                &args.to_model,
+                max_depth,
+                limits.metadata_cache_ttl_secs,
+                limits.max_metadata_fields,
+            )
+            .await
+            {
+                Ok(value) => ToolExecutionResult::Success(value),
+                Err(error) => ToolExecutionResult::Failure(error),
+            }
+        }
         ToolName::ListInstances => ToolExecutionResult::Failure(AppError::internal(
             "odoo-list-instances must be handled before the Odoo client is resolved",
         )),
@@ -1007,6 +1146,8 @@ mod tests {
         max_context_bytes: 8_192,
         max_batch_size: 100,
         max_report_bytes: 10_485_760,
+        metadata_cache_ttl_secs: 300,
+        max_metadata_fields: 500,
     };
 
     #[tokio::test]
@@ -1320,6 +1461,52 @@ mod tests {
             requests[1]["params"]["args"][6]["orderby"],
             "country_id desc"
         );
+    }
+
+    #[tokio::test]
+    async fn model_schema_parses_fields_relations_and_access() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!({
+                "name": {"type": "char", "string": "Name", "required": true},
+                "partner_id": {"type": "many2one", "relation": "res.partner"},
+                "state": {
+                    "type": "selection",
+                    "selection": [["draft", "Draft"], ["done", "Done"]]
+                }
+            })),
+            json_rpc_success(json!(true)),
+            json_rpc_success(json!(true)),
+            json_rpc_success(json!(true)),
+            json_rpc_success(json!(true)),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::GetModelSchema,
+            json!({"model": "res.partner", "include_access": true}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        let ToolExecutionResult::Success(value) = result else {
+            panic!("schema should be returned");
+        };
+        assert_eq!(value["required_fields"], json!(["name"]));
+        assert_eq!(value["relations"][0]["relation"], "res.partner");
+        assert_eq!(value["enums"]["state"][1]["value"], "done");
+        assert_eq!(value["access"]["read"], true);
     }
 
     #[tokio::test]

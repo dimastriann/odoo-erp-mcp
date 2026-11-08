@@ -17,6 +17,8 @@
     "max_batch_size": 100,
     "max_report_bytes": 10485760,
     "audit_retention_events": 10000,
+    "metadata_cache_ttl_secs": 300,
+    "max_metadata_fields": 500,
     "disabled_tools": []
   },
   "folders": [

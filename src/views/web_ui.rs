@@ -180,6 +180,7 @@ async fn update_global_settings(
             tokio::spawn(async move {
                 manager.invalidate_all().await;
             });
+            crate::metadata::invalidate_all();
             state.runtime.config_changed();
             StatusCode::OK.into_response()
         }
@@ -198,6 +199,7 @@ async fn toggle_active(State(state): State<AppState>, Path(id): Path<String>) ->
     tokio::spawn(async move {
         manager.invalidate(&invalidate_id).await;
     });
+    crate::metadata::invalidate_all();
     state.runtime.config_changed();
     StatusCode::OK
 }
@@ -317,6 +319,7 @@ async fn update_tools(
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
     drop(config);
+    crate::metadata::invalidate_all();
     state.runtime.config_changed();
     StatusCode::OK.into_response()
 }
@@ -426,6 +429,7 @@ async fn add_instance(
     tokio::spawn(async move {
         manager.invalidate(&instance_id).await;
     });
+    crate::metadata::invalidate_all();
     state.runtime.config_changed();
     StatusCode::OK
 }
@@ -466,6 +470,7 @@ async fn delete_instance(State(state): State<AppState>, Path(id): Path<String>) 
     tokio::spawn(async move {
         manager.invalidate(&invalidate_id).await;
     });
+    crate::metadata::invalidate_all();
     state.runtime.config_changed();
     StatusCode::OK
 }
@@ -486,6 +491,7 @@ async fn add_folder(State(state): State<AppState>, Json(mut folder): Json<Folder
         }
         config.save().unwrap();
     }
+    crate::metadata::invalidate_all();
     state.runtime.config_changed();
     StatusCode::OK
 }
@@ -501,6 +507,7 @@ async fn delete_folder(State(state): State<AppState>, Path(id): Path<String>) ->
         }
         config.save().unwrap();
     }
+    crate::metadata::invalidate_all();
     state.runtime.config_changed();
     StatusCode::OK
 }
@@ -522,6 +529,7 @@ async fn add_prompt(
 
     config.save().unwrap();
     drop(config);
+    crate::metadata::invalidate_all();
     state.runtime.config_changed();
     StatusCode::OK
 }
@@ -531,6 +539,7 @@ async fn delete_prompt(State(state): State<AppState>, Path(id): Path<String>) ->
     config.prompts.retain(|p| p.id != id);
     config.save().unwrap();
     drop(config);
+    crate::metadata::invalidate_all();
     state.runtime.config_changed();
     StatusCode::OK
 }

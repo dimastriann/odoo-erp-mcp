@@ -91,6 +91,8 @@ mod tests {
         max_context_bytes: 256,
         max_batch_size: 100,
         max_report_bytes: 10_485_760,
+        metadata_cache_ttl_secs: 300,
+        max_metadata_fields: 500,
     };
 
     fn context(value: Value) -> Map<String, Value> {

@@ -264,6 +264,8 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
             max_batch_size: 100,
             max_report_bytes: 10_485_760,
             audit_retention_events: 10_000,
+            metadata_cache_ttl_secs: 300,
+            max_metadata_fields: 500,
             disabled_tools: Vec::new(),
         },
         folders: Vec::new(),

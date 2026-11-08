@@ -219,6 +219,10 @@ pub struct GlobalSettings {
     pub max_report_bytes: usize,
     #[serde(default = "default_audit_retention_events")]
     pub audit_retention_events: usize,
+    #[serde(default = "default_metadata_cache_ttl_secs")]
+    pub metadata_cache_ttl_secs: u64,
+    #[serde(default = "default_max_metadata_fields")]
+    pub max_metadata_fields: usize,
     #[serde(default)]
     pub disabled_tools: Vec<String>,
 }
@@ -291,6 +295,14 @@ fn default_audit_retention_events() -> usize {
     10_000
 }
 
+fn default_metadata_cache_ttl_secs() -> u64 {
+    300
+}
+
+fn default_max_metadata_fields() -> usize {
+    500
+}
+
 impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
@@ -311,6 +323,8 @@ impl Default for GlobalSettings {
             max_batch_size: default_max_batch_size(),
             max_report_bytes: default_max_report_bytes(),
             audit_retention_events: default_audit_retention_events(),
+            metadata_cache_ttl_secs: default_metadata_cache_ttl_secs(),
+            max_metadata_fields: default_max_metadata_fields(),
             disabled_tools: Vec::new(),
         }
     }
@@ -326,6 +340,7 @@ impl GlobalSettings {
             ("rpc_request_timeout_secs", self.rpc_request_timeout_secs),
             ("max_query_limit", self.max_query_limit),
             ("approval_ttl_secs", self.approval_ttl_secs),
+            ("metadata_cache_ttl_secs", self.metadata_cache_ttl_secs),
         ];
         for (name, value) in positive_values {
             if value == 0 {
@@ -346,6 +361,7 @@ impl GlobalSettings {
             ("max_batch_size", self.max_batch_size),
             ("max_report_bytes", self.max_report_bytes),
             ("audit_retention_events", self.audit_retention_events),
+            ("max_metadata_fields", self.max_metadata_fields),
         ];
         for (name, value) in positive_sizes {
             if value == 0 {

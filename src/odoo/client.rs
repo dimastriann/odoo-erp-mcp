@@ -954,6 +954,65 @@ impl OdooClient {
         self.call_rpc(params, OperationClass::ReadOnly).await
     }
 
+    pub(crate) fn cache_key(&self) -> String {
+        format!("{}|{}", self.base_url, self.db)
+    }
+
+    pub async fn get_all_metadata(&self, model: &str) -> Result<Value, AppError> {
+        let params = json!({
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+                self.db,
+                self.uid,
+                self.password,
+                model,
+                "fields_get",
+                [false],
+                { "attributes": ["string", "help", "type", "relation", "selection", "required", "readonly", "compute", "default"] }
+            ]
+        });
+
+        self.call_rpc(params, OperationClass::ReadOnly).await
+    }
+
+    pub async fn get_model_access(&self, model: &str) -> Result<Value, AppError> {
+        let mut access = Map::new();
+        for operation in ["read", "create", "write", "unlink"] {
+            let result = self.check_access(model, operation, Vec::new()).await?;
+            access.insert(
+                operation.to_string(),
+                result
+                    .get("allowed")
+                    .and_then(Value::as_bool)
+                    .map(Value::Bool)
+                    .unwrap_or(Value::Bool(false)),
+            );
+        }
+        Ok(Value::Object(access))
+    }
+
+    pub async fn get_field_relations(
+        &self,
+        model: &str,
+        offset: Option<u64>,
+        limit: u64,
+    ) -> Result<Value, AppError> {
+        let domain = json!([
+            ["relation", "=", model],
+            ["ttype", "in", ["many2one", "one2many", "many2many"]]
+        ]);
+        self.search_read(
+            "ir.model.fields",
+            domain,
+            json!(["model", "name", "ttype", "relation", "field_description"]),
+            offset,
+            limit,
+            None,
+        )
+        .await
+    }
+
     pub async fn search(
         &self,
         model: &str,

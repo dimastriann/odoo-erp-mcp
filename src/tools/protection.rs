@@ -14,6 +14,8 @@ pub(crate) struct QueryLimits {
     pub(crate) max_context_bytes: usize,
     pub(crate) max_batch_size: usize,
     pub(crate) max_report_bytes: usize,
+    pub(crate) metadata_cache_ttl_secs: u64,
+    pub(crate) max_metadata_fields: usize,
 }
 
 pub(crate) fn validate_response_record_count(

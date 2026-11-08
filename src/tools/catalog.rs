@@ -55,11 +55,17 @@ pub(crate) enum ToolName {
     DeleteBatch,
     ListInstances,
     Preview,
+    GetModelSchema,
+    GetRelations,
+    GetEnumValues,
+    GetRequiredFields,
+    RefreshMetadata,
+    FindRelationPath,
 }
 
 impl ToolName {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 23] = [
+    pub(crate) const ALL: [Self; 29] = [
         Self::SearchRead,
         Self::SearchCount,
         Self::ReadGroup,
@@ -83,6 +89,12 @@ impl ToolName {
         Self::DeleteBatch,
         Self::ListInstances,
         Self::Preview,
+        Self::GetModelSchema,
+        Self::GetRelations,
+        Self::GetEnumValues,
+        Self::GetRequiredFields,
+        Self::RefreshMetadata,
+        Self::FindRelationPath,
     ];
 
     pub(crate) const fn as_str(self) -> &'static str {
@@ -110,6 +122,12 @@ impl ToolName {
             Self::DeleteBatch => "odoo-delete-batch",
             Self::ListInstances => "odoo-list-instances",
             Self::Preview => "odoo-preview",
+            Self::GetModelSchema => "odoo-get-model-schema",
+            Self::GetRelations => "odoo-get-relations",
+            Self::GetEnumValues => "odoo-get-enum-values",
+            Self::GetRequiredFields => "odoo-get-required-fields",
+            Self::RefreshMetadata => "odoo-refresh-metadata",
+            Self::FindRelationPath => "odoo-find-relation-path",
         }
     }
 
@@ -133,7 +151,13 @@ impl ToolName {
             | Self::ListReports
             | Self::RenderReport
             | Self::ListInstances
-            | Self::Preview => Capability::Read,
+            | Self::Preview
+            | Self::GetModelSchema
+            | Self::GetRelations
+            | Self::GetEnumValues
+            | Self::GetRequiredFields
+            | Self::RefreshMetadata
+            | Self::FindRelationPath => Capability::Read,
         }
     }
 
@@ -177,6 +201,12 @@ impl TryFrom<&str> for ToolName {
             "odoo-delete-batch" => Ok(Self::DeleteBatch),
             "odoo-list-instances" => Ok(Self::ListInstances),
             "odoo-preview" => Ok(Self::Preview),
+            "odoo-get-model-schema" => Ok(Self::GetModelSchema),
+            "odoo-get-relations" => Ok(Self::GetRelations),
+            "odoo-get-enum-values" => Ok(Self::GetEnumValues),
+            "odoo-get-required-fields" => Ok(Self::GetRequiredFields),
+            "odoo-refresh-metadata" => Ok(Self::RefreshMetadata),
+            "odoo-find-relation-path" => Ok(Self::FindRelationPath),
             _ => Err(()),
         }
     }
@@ -509,6 +539,85 @@ pub(crate) fn tool_definitions() -> Value {
                     "ids": { "type": "array", "items": { "type": "integer" } }
                 },
                 "required": ["model", "kind"]
+            }
+        },
+        {
+            "name": "odoo-get-model-schema",
+            "description": "Return typed field metadata, required fields, relations, enums, and access for a model.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "model": { "type": "string" },
+                    "include_access": { "type": "boolean", "default": true }
+                },
+                "required": ["model"]
+            }
+        },
+        {
+            "name": "odoo-get-relations",
+            "description": "List outgoing and optional incoming relational fields for a model.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "model": { "type": "string" },
+                    "include_incoming": { "type": "boolean", "default": false },
+                    "offset": { "type": "integer", "minimum": 0 },
+                    "limit": { "type": "integer", "minimum": 1, "default": 100 }
+                },
+                "required": ["model"]
+            }
+        },
+        {
+            "name": "odoo-get-enum-values",
+            "description": "Return selection values for one field or all enum fields on a model.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "model": { "type": "string" },
+                    "field": { "type": "string" }
+                },
+                "required": ["model"]
+            }
+        },
+        {
+            "name": "odoo-get-required-fields",
+            "description": "Return required fields for a model.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "model": { "type": "string" }
+                },
+                "required": ["model"]
+            }
+        },
+        {
+            "name": "odoo-refresh-metadata",
+            "description": "Invalidate cached model metadata for one model or all models.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "model": { "type": "string" }
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "odoo-find-relation-path",
+            "description": "Find a relationship path between two models using the metadata graph.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "from_model": { "type": "string" },
+                    "to_model": { "type": "string" },
+                    "max_depth": { "type": "integer", "minimum": 1, "maximum": 8, "default": 4 }
+                },
+                "required": ["from_model", "to_model"]
             }
         },
         {

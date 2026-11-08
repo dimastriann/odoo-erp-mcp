@@ -205,6 +205,51 @@ pub(crate) struct UpdateBatchArgs {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct ModelSchemaArgs {
+    pub(crate) model: String,
+    #[serde(default = "default_true")]
+    pub(crate) include_access: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RelationsArgs {
+    pub(crate) model: String,
+    #[serde(default)]
+    pub(crate) include_incoming: bool,
+    pub(crate) offset: Option<u64>,
+    pub(crate) limit: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct EnumValuesArgs {
+    pub(crate) model: String,
+    #[serde(default)]
+    pub(crate) field: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct ModelOnlyArgs {
+    pub(crate) model: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RefreshMetadataArgs {
+    #[serde(default)]
+    pub(crate) model: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RelationPathArgs {
+    pub(crate) from_model: String,
+    pub(crate) to_model: String,
+    pub(crate) max_depth: Option<usize>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct PreviewArgs {
     pub(crate) model: String,
     pub(crate) kind: String,
