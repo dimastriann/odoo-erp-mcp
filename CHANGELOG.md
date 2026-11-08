@@ -17,6 +17,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   and retry metrics, and `/health`, `/ready`, and `/api/metrics` endpoints.
 - `odoo-preview` for non-mutating create/update/delete previews, plus audit
   events for previews, verification results, and tool spans with request IDs.
+- Typed model schema tools (`odoo-get-model-schema`, relations, enum values,
+  required fields, relation-path search) with a per-instance TTL metadata cache.
+- Curated `odoo-workflow` actions for sales confirmation, invoice posting, stock
+  validation, purchase confirmation, and cancellation, protected by policy and
+  approval gating.
 
 ## [0.8.0] — 2026-10-28
 
