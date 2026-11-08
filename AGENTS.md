@@ -15,7 +15,7 @@ query-protection invariants.
   redirect to the canonical file. Keep pointer frontmatter in sync with the
   canonical skill's `name` and `description`.
 - Reusable procedures: `atomic-commit`, `mcp-tool-extension`,
-  `mutation-lifecycle`.
+  `mutation-lifecycle`, `release`, `security-review`, `odoo-compat`, `web-ui`.
 
 ## Atomic commits
 
