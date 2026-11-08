@@ -411,6 +411,14 @@ async fn handle_request_with_identity(
 
             let request_context =
                 request_context(client_identity, &params, instance_obj.name.clone());
+            let span = observability::Span::new(
+                "tool_call",
+                json!({
+                    "request_id": request_context.request_id.to_string(),
+                    "tool": tool_name.as_str(),
+                    "model": model
+                }),
+            );
             let started = Instant::now();
             let _ = audit::record(
                 AuditEvent::new(AuditEventKind::ExecutionStarted, AuditOutcome::Pending)
@@ -439,6 +447,20 @@ async fn handle_request_with_identity(
                         "tool": tool_name.as_str(),
                         "model": model
                     })),
+            );
+            let outcome_label = match outcome {
+                AuditOutcome::Success => "success",
+                AuditOutcome::Pending => "approval_required",
+                AuditOutcome::Failure | AuditOutcome::Denied | AuditOutcome::Unknown => "failure",
+                AuditOutcome::Allowed => "allowed",
+            };
+            span.finish(
+                outcome_label,
+                json!({
+                    "request_id": request_context.request_id.to_string(),
+                    "tool": tool_name.as_str(),
+                    "model": model
+                }),
             );
 
             Some(respond(result))
@@ -687,6 +709,7 @@ mod tests {
             ("odoo-update-batch", &["model", "records"][..]),
             ("odoo-delete-batch", &["model", "ids"][..]),
             ("odoo-list-instances", &[][..]),
+            ("odoo-preview", &["model", "kind"][..]),
         ];
 
         assert_eq!(tools.len(), expected_contracts.len());

@@ -205,6 +205,16 @@ pub(crate) struct UpdateBatchArgs {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct PreviewArgs {
+    pub(crate) model: String,
+    pub(crate) kind: String,
+    #[serde(default)]
+    pub(crate) vals: Option<Map<String, Value>>,
+    #[serde(default)]
+    pub(crate) ids: Option<Vec<i64>>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct DeleteBatchArgs {
     pub(crate) model: String,
     pub(crate) ids: Vec<i64>,

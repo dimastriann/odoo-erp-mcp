@@ -54,11 +54,12 @@ pub(crate) enum ToolName {
     UpdateBatch,
     DeleteBatch,
     ListInstances,
+    Preview,
 }
 
 impl ToolName {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 22] = [
+    pub(crate) const ALL: [Self; 23] = [
         Self::SearchRead,
         Self::SearchCount,
         Self::ReadGroup,
@@ -81,6 +82,7 @@ impl ToolName {
         Self::UpdateBatch,
         Self::DeleteBatch,
         Self::ListInstances,
+        Self::Preview,
     ];
 
     pub(crate) const fn as_str(self) -> &'static str {
@@ -107,6 +109,7 @@ impl ToolName {
             Self::UpdateBatch => "odoo-update-batch",
             Self::DeleteBatch => "odoo-delete-batch",
             Self::ListInstances => "odoo-list-instances",
+            Self::Preview => "odoo-preview",
         }
     }
 
@@ -129,7 +132,8 @@ impl ToolName {
             | Self::GetViews
             | Self::ListReports
             | Self::RenderReport
-            | Self::ListInstances => Capability::Read,
+            | Self::ListInstances
+            | Self::Preview => Capability::Read,
         }
     }
 
@@ -172,6 +176,7 @@ impl TryFrom<&str> for ToolName {
             "odoo-update-batch" => Ok(Self::UpdateBatch),
             "odoo-delete-batch" => Ok(Self::DeleteBatch),
             "odoo-list-instances" => Ok(Self::ListInstances),
+            "odoo-preview" => Ok(Self::Preview),
             _ => Err(()),
         }
     }
@@ -489,6 +494,21 @@ pub(crate) fn tool_definitions() -> Value {
                     "approval_id": { "type": "string" }
                 },
                 "required": ["model", "ids"]
+            }
+        },
+        {
+            "name": "odoo-preview",
+            "description": "Preview a create, update, or delete operation without writing to Odoo.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "model": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["create", "update", "delete"] },
+                    "vals": { "type": "object" },
+                    "ids": { "type": "array", "items": { "type": "integer" } }
+                },
+                "required": ["model", "kind"]
             }
         },
         {

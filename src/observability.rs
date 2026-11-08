@@ -1,7 +1,8 @@
 use serde_json::{Value, json};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
 pub(crate) struct Metrics {
     started_at: u64,
@@ -72,6 +73,45 @@ static METRICS: OnceLock<Metrics> = OnceLock::new();
 
 pub(crate) fn metrics() -> &'static Metrics {
     METRICS.get_or_init(Metrics::default)
+}
+
+pub(crate) struct Span {
+    id: String,
+    operation: &'static str,
+    started: Instant,
+    fields: Value,
+}
+
+impl Span {
+    pub(crate) fn new(operation: &'static str, fields: Value) -> Self {
+        let span = Self {
+            id: Uuid::new_v4().to_string(),
+            operation,
+            started: Instant::now(),
+            fields: crate::audit::redact_details(fields),
+        };
+        log_event(
+            "info",
+            "span_started",
+            json!({"span_id": span.id, "operation": span.operation, "fields": span.fields}),
+        );
+        span
+    }
+
+    pub(crate) fn finish(self, outcome: &str, extra: Value) {
+        let duration_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        log_event(
+            "info",
+            "span_finished",
+            json!({
+                "span_id": self.id,
+                "operation": self.operation,
+                "duration_ms": duration_ms,
+                "outcome": outcome,
+                "fields": crate::audit::redact_details(extra)
+            }),
+        );
+    }
 }
 
 pub(crate) fn log_event(level: &str, event: &str, fields: Value) {

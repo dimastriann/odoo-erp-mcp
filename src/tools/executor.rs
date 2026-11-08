@@ -1,3 +1,4 @@
+use crate::audit::{self, AuditEvent, AuditEventKind, AuditOutcome};
 use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
 use crate::lifecycle::approval::{self, ApprovalId};
@@ -6,14 +7,15 @@ use crate::lifecycle::idempotency::{
     InMemoryIdempotencyStorage,
 };
 use crate::lifecycle::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
+use crate::lifecycle::preview;
 use crate::lifecycle::verification::{self, VerificationStatus};
 use crate::odoo::OdooClient;
 use crate::risk::RiskEvaluator;
 use crate::tools::arguments::{
     CheckAccessArgs, CopyArgs, CreateArgs, CreateBatchArgs, DeleteArgs, DeleteBatchArgs,
     GetViewsArgs, ListModelsArgs, ListReportsArgs, ModelFieldsArgs, NameSearchArgs, OnchangeArgs,
-    ReadArgs, ReadGroupArgs, RenderReportArgs, SearchArgs, SearchDomainArgs, SearchReadArgs,
-    UpdateArgs, UpdateBatchArgs,
+    PreviewArgs, ReadArgs, ReadGroupArgs, RenderReportArgs, SearchArgs, SearchDomainArgs,
+    SearchReadArgs, UpdateArgs, UpdateBatchArgs,
 };
 use crate::tools::catalog::ToolName;
 use crate::tools::context::validate_context;
@@ -51,7 +53,7 @@ async fn execute_idempotent(
     key: Option<String>,
 ) -> Result<Value, AppError> {
     let Some(key) = key else {
-        return execute_verified(odoo, operation).await;
+        return execute_verified(odoo, operation, context).await;
     };
     let key = IdempotencyKey::new(key)?;
     {
@@ -84,7 +86,7 @@ async fn execute_idempotent(
             IdempotencyRecord::for_operation(key.clone(), operation, context, now_seconds(), 900)?;
         storage.insert(record)?;
     }
-    let result = execute_verified(odoo, operation).await;
+    let result = execute_verified(odoo, operation, context).await;
     let mut storage = idempotency_storage()
         .lock()
         .map_err(|_| AppError::internal("Idempotency storage lock is poisoned"))?;
@@ -99,7 +101,11 @@ async fn execute_idempotent(
     result
 }
 
-async fn execute_verified(odoo: &OdooClient, operation: &Operation) -> Result<Value, AppError> {
+async fn execute_verified(
+    odoo: &OdooClient,
+    operation: &Operation,
+    context: &RequestContext,
+) -> Result<Value, AppError> {
     let response = OperationExecutor::new(odoo).execute(operation).await?;
     let verification = match operation.kind {
         OperationKind::Create | OperationKind::Copy => {
@@ -111,7 +117,29 @@ async fn execute_verified(odoo: &OdooClient, operation: &Operation) -> Result<Va
         OperationKind::Update => verification::verify_update(odoo, operation).await?,
         OperationKind::Delete => verification::verify_delete(odoo, operation).await?,
     };
-    if verification.status != VerificationStatus::Verified {
+    let verified = verification.status == VerificationStatus::Verified;
+    let _ = audit::record(
+        AuditEvent::new(
+            if verified {
+                AuditEventKind::VerificationSucceeded
+            } else {
+                AuditEventKind::VerificationFailed
+            },
+            if verified {
+                AuditOutcome::Success
+            } else {
+                AuditOutcome::Failure
+            },
+        )
+        .with_context(context)
+        .with_operation(operation)
+        .with_details(json!({
+            "status": verification.status,
+            "checked_records": verification.checked_records,
+            "mismatches": verification.mismatches
+        })),
+    );
+    if !verified {
         return Err(AppError::internal(format!(
             "Mutation verification failed: {:?}",
             verification.mismatches
@@ -876,6 +904,84 @@ pub(crate) async fn execute_tool(
             };
             execute_delete_batch(odoo, args, context, limits, approval_ttl_secs).await
         }
+        ToolName::Preview => {
+            let args: PreviewArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return ToolExecutionResult::invalid_arguments("preview", error),
+            };
+            let kind = match args.kind.as_str() {
+                "create" => OperationKind::Create,
+                "update" => OperationKind::Update,
+                "delete" => OperationKind::Delete,
+                _ => {
+                    return ToolExecutionResult::Failure(AppError::input_validation(
+                        "kind must be one of create, update, or delete",
+                    ));
+                }
+            };
+            let ids = args.ids.unwrap_or_default();
+            if kind != OperationKind::Create {
+                if ids.is_empty() {
+                    return ToolExecutionResult::Failure(AppError::input_validation(
+                        "ids are required for update and delete previews",
+                    ));
+                }
+                if let Err(error) = validate_read_id_count(&ids, limits.max_read_ids) {
+                    return ToolExecutionResult::invalid_arguments("preview IDs", error);
+                }
+            }
+            let payload = match kind {
+                OperationKind::Create => {
+                    let Some(vals) = args.vals else {
+                        return ToolExecutionResult::Failure(AppError::input_validation(
+                            "vals are required for create previews",
+                        ));
+                    };
+                    json!({"vals": vals})
+                }
+                OperationKind::Update => {
+                    let Some(vals) = args.vals else {
+                        return ToolExecutionResult::Failure(AppError::input_validation(
+                            "vals are required for update previews",
+                        ));
+                    };
+                    json!({"ids": ids, "vals": vals})
+                }
+                OperationKind::Delete => json!({"ids": ids}),
+                OperationKind::Copy => unreachable!("preview does not support copy"),
+            };
+            let payload = match OperationPayload::new(payload) {
+                Ok(payload) => payload,
+                Err(error) => {
+                    return ToolExecutionResult::Failure(AppError::input_validation(error));
+                }
+            };
+            let operation = Operation::new(kind, args.model, payload);
+            let preview = match kind {
+                OperationKind::Create => preview::preview_create(odoo, &operation).await,
+                OperationKind::Update => preview::preview_update(odoo, &operation).await,
+                OperationKind::Delete => preview::preview_delete(odoo, &operation).await,
+                OperationKind::Copy => unreachable!("preview does not support copy"),
+            };
+            match preview {
+                Ok(preview) => {
+                    let _ = audit::record(
+                        AuditEvent::new(AuditEventKind::PreviewGenerated, AuditOutcome::Success)
+                            .with_context(context)
+                            .with_operation(&operation)
+                            .with_details(json!({
+                                "kind": args.kind,
+                                "affected": preview.summary.affected_count
+                            })),
+                    );
+                    ToolExecutionResult::Success(
+                        serde_json::to_value(preview)
+                            .expect("preview responses must be serializable"),
+                    )
+                }
+                Err(error) => ToolExecutionResult::Failure(error),
+            }
+        }
         ToolName::ListInstances => ToolExecutionResult::Failure(AppError::internal(
             "odoo-list-instances must be handled before the Odoo client is resolved",
         )),
@@ -1214,6 +1320,39 @@ mod tests {
             requests[1]["params"]["args"][6]["orderby"],
             "country_id desc"
         );
+    }
+
+    #[tokio::test]
+    async fn preview_delete_reads_records_without_writing() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!([{"id": 1, "display_name": "Alpha"}])),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Preview,
+            json!({"model": "res.partner", "kind": "delete", "ids": [1]}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        let ToolExecutionResult::Success(value) = result else {
+            panic!("preview should succeed");
+        };
+        assert_eq!(value["summary"]["affected_count"], 1);
+        assert_eq!(server.requests().await.len(), 2);
     }
 
     #[tokio::test]

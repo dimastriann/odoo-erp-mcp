@@ -23,6 +23,7 @@ const MAX_DETAIL_STRING: usize = 512;
 pub(crate) enum AuditEventKind {
     PolicyDecision,
     ToolDisabled,
+    PreviewGenerated,
     ApprovalRequested,
     ApprovalDecided,
     ExecutionStarted,
