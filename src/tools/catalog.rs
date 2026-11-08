@@ -61,11 +61,13 @@ pub(crate) enum ToolName {
     GetRequiredFields,
     RefreshMetadata,
     FindRelationPath,
+    Workflow,
+    ListWorkflows,
 }
 
 impl ToolName {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 29] = [
+    pub(crate) const ALL: [Self; 31] = [
         Self::SearchRead,
         Self::SearchCount,
         Self::ReadGroup,
@@ -95,6 +97,8 @@ impl ToolName {
         Self::GetRequiredFields,
         Self::RefreshMetadata,
         Self::FindRelationPath,
+        Self::Workflow,
+        Self::ListWorkflows,
     ];
 
     pub(crate) const fn as_str(self) -> &'static str {
@@ -128,6 +132,8 @@ impl ToolName {
             Self::GetRequiredFields => "odoo-get-required-fields",
             Self::RefreshMetadata => "odoo-refresh-metadata",
             Self::FindRelationPath => "odoo-find-relation-path",
+            Self::Workflow => "odoo-workflow",
+            Self::ListWorkflows => "odoo-list-workflows",
         }
     }
 
@@ -158,18 +164,24 @@ impl ToolName {
             | Self::GetRequiredFields
             | Self::RefreshMetadata
             | Self::FindRelationPath => Capability::Read,
+            Self::Workflow => Capability::Workflow,
+            Self::ListWorkflows => Capability::Read,
         }
     }
 
     pub(crate) const fn requires_model(self) -> bool {
         !matches!(
             self,
-            Self::GetServerInfo | Self::ListModels | Self::ListReports | Self::ListInstances
+            Self::GetServerInfo
+                | Self::ListModels
+                | Self::ListReports
+                | Self::ListInstances
+                | Self::ListWorkflows
         )
     }
 
     pub(crate) const fn requires_client(self) -> bool {
-        !matches!(self, Self::ListInstances)
+        !matches!(self, Self::ListInstances | Self::ListWorkflows)
     }
 }
 
@@ -207,6 +219,8 @@ impl TryFrom<&str> for ToolName {
             "odoo-get-required-fields" => Ok(Self::GetRequiredFields),
             "odoo-refresh-metadata" => Ok(Self::RefreshMetadata),
             "odoo-find-relation-path" => Ok(Self::FindRelationPath),
+            "odoo-workflow" => Ok(Self::Workflow),
+            "odoo-list-workflows" => Ok(Self::ListWorkflows),
             _ => Err(()),
         }
     }
@@ -621,8 +635,37 @@ pub(crate) fn tool_definitions() -> Value {
             }
         },
         {
+            "name": "odoo-workflow",
+            "description": "Execute a curated Odoo workflow such as confirming a sales order or validating a transfer. High-risk; requires approval.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "workflow": {
+                        "type": "string",
+                        "enum": ["sale_order_confirm", "sale_order_cancel", "invoice_post", "account_move_cancel", "stock_picking_validate", "purchase_order_confirm"]
+                    },
+                    "model": { "type": "string", "description": "Must match the workflow registry model" },
+                    "method": { "type": "string", "description": "Must match the workflow registry method" },
+                    "ids": { "type": "array", "items": { "type": "integer" }, "minItems": 1 },
+                    "idempotency_key": { "type": "string", "minLength": 1, "maxLength": 256 },
+                    "approval_id": { "type": "string" }
+                },
+                "required": ["workflow", "model", "method", "ids"]
+            }
+        },
+        {
+            "name": "odoo-list-workflows",
+            "description": "List curated Odoo workflow names, target models, and methods.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
             "name": "odoo-list-instances",
-            "description": "List configured Odoo instances, folders, and active state without contacting Odoo.",
+            "description": "List configured Odoo instances, folders, and active state without touching Odoo records.",
             "inputSchema": {
                 "type": "object",
                 "properties": {},

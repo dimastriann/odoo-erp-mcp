@@ -1013,6 +1013,28 @@ impl OdooClient {
         .await
     }
 
+    pub async fn call_method(
+        &self,
+        model: &str,
+        method: &str,
+        ids: Vec<i64>,
+    ) -> Result<Value, AppError> {
+        let params = json!({
+            "service": "object",
+            "method": "execute_kw",
+            "args": [
+                self.db,
+                self.uid,
+                self.password,
+                model,
+                method,
+                [ids]
+            ]
+        });
+
+        self.call_rpc(params, OperationClass::Mutation).await
+    }
+
     pub async fn search(
         &self,
         model: &str,
@@ -1133,6 +1155,10 @@ fn json2_request_body(
         }
         "get_views" => {
             body.insert("views".to_string(), positional_value(0));
+        }
+        "action_confirm" | "action_post" | "button_validate" | "action_cancel"
+        | "button_cancel" | "button_confirm" => {
+            body.insert("ids".to_string(), positional_value(0));
         }
         _ => {
             return Err(AppError::protocol(format!(

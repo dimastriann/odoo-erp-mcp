@@ -6,7 +6,9 @@ use crate::lifecycle::idempotency::{
     IdempotencyKey, IdempotencyRecord, IdempotencyState, IdempotencyStorage,
     InMemoryIdempotencyStorage,
 };
-use crate::lifecycle::operation::{Operation, OperationExecutor, OperationKind, OperationPayload};
+use crate::lifecycle::operation::{
+    Operation, OperationClass, OperationExecutor, OperationKind, OperationPayload,
+};
 use crate::lifecycle::preview;
 use crate::lifecycle::verification::{self, VerificationStatus};
 use crate::metadata;
@@ -17,7 +19,7 @@ use crate::tools::arguments::{
     EnumValuesArgs, GetViewsArgs, ListModelsArgs, ListReportsArgs, ModelFieldsArgs, ModelOnlyArgs,
     ModelSchemaArgs, NameSearchArgs, OnchangeArgs, PreviewArgs, ReadArgs, ReadGroupArgs,
     RefreshMetadataArgs, RelationPathArgs, RelationsArgs, RenderReportArgs, SearchArgs,
-    SearchDomainArgs, SearchReadArgs, UpdateArgs, UpdateBatchArgs,
+    SearchDomainArgs, SearchReadArgs, UpdateArgs, UpdateBatchArgs, WorkflowArgs,
 };
 use crate::tools::catalog::ToolName;
 use crate::tools::context::validate_context;
@@ -26,6 +28,7 @@ use crate::tools::pagination::{add_total_count, fetch_limit, paginated_result, r
 use crate::tools::protection::{QueryLimits, validate_order, validate_response_record_count};
 use crate::tools::records::validate_read_id_count;
 use crate::tools::result::ToolExecutionResult;
+use crate::workflows;
 use serde_json::{Value, json};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -396,6 +399,63 @@ async fn execute_delete_batch(
         ));
     }
     batch_result("delete", items)
+}
+
+async fn execute_workflow(
+    odoo: &OdooClient,
+    workflow: &workflows::WorkflowDefinition,
+    ids: Vec<i64>,
+    operation: &Operation,
+    context: &RequestContext,
+    key: Option<String>,
+) -> Result<Value, AppError> {
+    let Some(key) = key else {
+        return odoo.call_method(workflow.model, workflow.method, ids).await;
+    };
+    let key = IdempotencyKey::new(key)?;
+    {
+        let mut storage = idempotency_storage()
+            .lock()
+            .map_err(|_| AppError::internal("Idempotency storage lock is poisoned"))?;
+        if let Some(existing) = storage.get(&key)? {
+            existing.ensure_reuse_allowed(operation, context)?;
+            match existing.state {
+                IdempotencyState::Succeeded => {
+                    return existing
+                        .stored_result()
+                        .cloned()
+                        .ok_or_else(|| AppError::internal("Stored idempotency result is missing"));
+                }
+                IdempotencyState::Pending => {
+                    return Err(AppError::authorization(
+                        "An identical idempotent request is already in progress",
+                    ));
+                }
+                IdempotencyState::Failed | IdempotencyState::Unknown => {
+                    return Err(AppError::internal(
+                        "Idempotent request has an unresolved state",
+                    ));
+                }
+                IdempotencyState::Expired => {}
+            }
+        }
+        let record =
+            IdempotencyRecord::for_operation(key.clone(), operation, context, now_seconds(), 900)?;
+        storage.insert(record)?;
+    }
+    let result = odoo.call_method(workflow.model, workflow.method, ids).await;
+    let mut storage = idempotency_storage()
+        .lock()
+        .map_err(|_| AppError::internal("Idempotency storage lock is poisoned"))?;
+    let mut record = storage
+        .get(&key)?
+        .ok_or_else(|| AppError::internal("Idempotency record disappeared during execution"))?;
+    match &result {
+        Ok(value) => record.succeed(value.clone())?,
+        Err(error) => record.fail(json!({"error": error.to_string()}))?,
+    }
+    storage.update(record)?;
+    result
 }
 
 fn validate_query_domain(domain: &Value, limits: QueryLimits) -> Result<(), String> {
@@ -1121,9 +1181,72 @@ pub(crate) async fn execute_tool(
                 Err(error) => ToolExecutionResult::Failure(error),
             }
         }
-        ToolName::ListInstances => ToolExecutionResult::Failure(AppError::internal(
-            "odoo-list-instances must be handled before the Odoo client is resolved",
-        )),
+        ToolName::Workflow => {
+            let args: WorkflowArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return ToolExecutionResult::invalid_arguments("workflow", error),
+            };
+            let workflow = match workflows::find(&args.workflow) {
+                Some(workflow) => workflow,
+                None => {
+                    return ToolExecutionResult::Failure(AppError::input_validation(format!(
+                        "unknown workflow {:?}",
+                        args.workflow
+                    )));
+                }
+            };
+            if let Err(error) = workflows::validate_target(workflow, &args.model, &args.method) {
+                return ToolExecutionResult::Failure(error);
+            }
+            if let Err(error) = validate_read_id_count(&args.ids, limits.max_read_ids) {
+                return ToolExecutionResult::invalid_arguments("workflow IDs", error);
+            }
+            if let Err(error) = validate_idempotency_key(args.idempotency_key.as_deref()) {
+                return ToolExecutionResult::invalid_arguments("workflow", error);
+            }
+            let payload = OperationPayload::new(json!({
+                "ids": args.ids,
+                "workflow": args.workflow,
+                "method": args.method
+            }))
+            .expect("workflow payload is an object");
+            let operation = Operation::new(OperationKind::Update, args.model.clone(), payload)
+                .classified(OperationClass::Workflow);
+            if let Err(result) =
+                authorize_mutation(&operation, context, args.approval_id, approval_ttl_secs)
+            {
+                return result;
+            }
+            let ids = args.ids.clone();
+            match execute_workflow(
+                odoo,
+                workflow,
+                ids,
+                &operation,
+                context,
+                args.idempotency_key,
+            )
+            .await
+            {
+                Ok(value) => {
+                    let _ = audit::record(
+                        AuditEvent::new(AuditEventKind::ExecutionSucceeded, AuditOutcome::Success)
+                            .with_context(context)
+                            .with_operation(&operation)
+                            .with_details(
+                                json!({"workflow": args.workflow, "method": args.method}),
+                            ),
+                    );
+                    ToolExecutionResult::Success(value)
+                }
+                Err(error) => ToolExecutionResult::Failure(error),
+            }
+        }
+        ToolName::ListInstances | ToolName::ListWorkflows => {
+            ToolExecutionResult::Failure(AppError::internal(
+                "odoo-list-instances must be handled before the Odoo client is resolved",
+            ))
+        }
     }
 }
 use crate::error::AppError;
@@ -1461,6 +1584,55 @@ mod tests {
             requests[1]["params"]["args"][6]["orderby"],
             "country_id desc"
         );
+    }
+
+    #[tokio::test]
+    async fn workflows_validate_registry_and_require_approval() {
+        let server = MockOdooServer::start(authentication_success(7)).await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let mismatched = execute_tool(
+            ToolName::Workflow,
+            json!({
+                "workflow": "sale_order_confirm",
+                "model": "res.partner",
+                "method": "action_confirm",
+                "ids": [1]
+            }),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+        assert!(matches!(
+            mismatched,
+            ToolExecutionResult::Failure(AppError::InputValidation { .. })
+        ));
+
+        let pending = execute_tool(
+            ToolName::Workflow,
+            json!({
+                "workflow": "sale_order_confirm",
+                "model": "sale.order",
+                "method": "action_confirm",
+                "ids": [1]
+            }),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+        assert!(matches!(pending, ToolExecutionResult::ApprovalRequired(_)));
+        assert_eq!(server.requests().await.len(), 1);
     }
 
     #[tokio::test]

@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 mod audit;
 mod config;
 mod context;
@@ -15,6 +16,7 @@ mod secret;
 mod test_support;
 mod tools;
 mod views;
+mod workflows;
 
 use config::Config;
 use mcp::McpRuntime;

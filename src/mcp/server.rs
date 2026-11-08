@@ -239,6 +239,9 @@ async fn handle_request_with_identity(
                     let conf = config.read().unwrap();
                     match tool_name {
                         ToolName::ListInstances => list_instances_result(&conf, revision),
+                        ToolName::ListWorkflows => {
+                            ToolExecutionResult::Success(crate::workflows::definitions())
+                        }
                         _ => ToolExecutionResult::Failure(AppError::internal(
                             "local tool is not implemented",
                         )),
@@ -718,6 +721,8 @@ mod tests {
             ("odoo-get-required-fields", &["model"][..]),
             ("odoo-refresh-metadata", &[][..]),
             ("odoo-find-relation-path", &["from_model", "to_model"][..]),
+            ("odoo-workflow", &["workflow", "model", "method", "ids"][..]),
+            ("odoo-list-workflows", &[][..]),
         ];
 
         assert_eq!(tools.len(), expected_contracts.len());

@@ -250,6 +250,18 @@ fn default_true() -> bool {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct WorkflowArgs {
+    pub(crate) workflow: String,
+    pub(crate) model: String,
+    pub(crate) method: String,
+    pub(crate) ids: Vec<i64>,
+    #[serde(default)]
+    pub(crate) idempotency_key: Option<String>,
+    #[serde(default)]
+    pub(crate) approval_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct PreviewArgs {
     pub(crate) model: String,
     pub(crate) kind: String,
