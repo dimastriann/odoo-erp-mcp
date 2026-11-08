@@ -475,10 +475,10 @@ Goal: Make operations traceable without exposing secrets or unrestricted sensiti
 
 - [x] S5-01 — Define a versioned audit-event schema.
 - [x] S5-02 — Record authorization decisions.
-- [ ] S5-03 — Record preview generation.
+- [x] S5-03 — Record preview generation.
 - [x] S5-04 — Record approvals and rejections.
 - [x] S5-05 — Record execution attempts.
-- [ ] S5-06 — Record verification results.
+- [x] S5-06 — Record verification results.
 - [x] S5-07 — Record failed, denied, and unknown operations.
 - [x] S5-08 — Add a field-redaction policy.
 - [x] S5-09 — Add an audit-payload size limit.
@@ -492,12 +492,12 @@ Goal: Make operations traceable without exposing secrets or unrestricted sensiti
 ## 5.2 Runtime observability
 
 - [x] S5-16 — Add structured logging.
-- [ ] S5-17 — Include correlation IDs in all operation logs.
+- [x] S5-17 — Include correlation IDs in all operation logs.
 - [x] S5-18 — Record operation duration.
 - [x] S5-19 — Record Odoo RPC latency.
 - [x] S5-20 — Add request and error counters.
 - [x] S5-21 — Add retry counters.
-- [ ] S5-22 — Add tracing spans.
+- [x] S5-22 — Add tracing spans.
 - [x] S5-23 — Add log and trace redaction.
 - [x] S5-24 — Add a health endpoint.
 - [x] S5-25 — Add a readiness endpoint.
@@ -505,10 +505,10 @@ Goal: Make operations traceable without exposing secrets or unrestricted sensiti
 
 ## Stage 5 Definition of Done
 
-- [ ] All write-lifecycle events are traceable.
-- [ ] Audit storage excludes secrets and unrestricted sensitive values.
-- [ ] Requests can be traced from MCP through Odoo RPC.
-- [ ] Health, readiness, and runtime metrics are available where applicable.
+- [x] All write-lifecycle events are traceable.
+- [x] Audit storage excludes secrets and unrestricted sensitive values.
+- [x] Requests can be traced from MCP through Odoo RPC.
+- [x] Health, readiness, and runtime metrics are available where applicable.
 
 ---
 
@@ -828,7 +828,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 4 — Safe Mutation Lifecycle | Complete | 59/59 | Verification, idempotency, and single-use approval gating are wired into mutation execution. |
 | Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | Complete | 29/29 | JSON-2, context, ordered queries, report limits, read/report/batch tools, and deprecation warning complete. |
 | Stage 4C — Live Administration and Workspace Organization | Complete | 30/30 | Pagination, tool enablement, live notifications, cache invalidation, folders, and documentation complete. |
-| Stage 5 - Audit and Observability | In progress | 22/26 | Hash-chained audit trail, query/export, structured logs, metrics, health, readiness, and retry/RPC counters complete; preview/verification audit hooks, correlation IDs in logs, and tracing spans remain. |
+| Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
 | Stage 6 — Odoo Semantic and Workflow Layer | Not started | 0/37 | |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |
 | Stage 8 — Remote MCP and Enterprise Readiness | Not started | 0/22 | |

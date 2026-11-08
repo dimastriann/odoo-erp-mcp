@@ -20,6 +20,7 @@ A high-performance, secure Model Context Protocol (MCP) server built in Rust for
     - `odoo-list-models`, `odoo-check-access`, `odoo-onchange`, `odoo-name-search`, `odoo-get-views`: Discover models, access, UI semantics, and relation labels.
     - `odoo-list-reports`, `odoo-render-report`: Discover and render HTML or base64 PDF reports.
     - `odoo-create-batch`, `odoo-update-batch`, `odoo-delete-batch`: Batch mutations with per-item results and approval gating.
+    - `odoo-preview`: Preview create, update, or delete operations without writing.
 - **Multi-Instance Support**: Configure and keep **multiple Odoo instances active simultaneously**. Each tool call can target a specific instance by ID or name, or fall back to the default active one.
 - **Folders and Live Configuration**: Organize instances into folders, enable or disable tools globally and per instance, and receive MCP `tools/list_changed` notifications without restarting the server.
 - **Odoo 19/20 Ready**: Per-instance `rpc_transport` supports JSON-RPC fallback or JSON-2 bearer API keys with automatic version detection.
@@ -253,7 +254,8 @@ optional idempotency key is scoped per item. Batch size is limited by
 
 #### Live configuration and folders
 
-The MCP server emits `notifications/tools/list_changed` after configuration
+The MCP server emits 
+otifications/tools/list_changed` after configuration
 changes and exposes `_meta.configRevision` on tool listings and calls.
 `odoo-list-instances` returns the current active state, folders, and tool
 availability without contacting Odoo. Cached Odoo clients are invalidated when
@@ -283,8 +285,9 @@ Runtime observability is available through:
 - `GET /api/metrics` — request, tool, RPC latency, and retry counters.
 
 MCP request logs are emitted as JSON on stderr with method, tool, duration,
-failure state, and configuration revision. RPC latency and retry counters are
-recorded for every Odoo call.
+failure state, and configuration revision. Tool operations also emit
+`span_started`/`span_finished` events with a span ID and request ID. RPC
+latency and retry counters are recorded for every Odoo call.
 
 **`mode` options per instance:**
 

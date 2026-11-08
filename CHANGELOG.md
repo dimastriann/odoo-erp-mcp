@@ -15,6 +15,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   query/export endpoints, and `audit.log.jsonl` persistence.
 - Structured JSON request logs, request/error and tool counters, RPC latency
   and retry metrics, and `/health`, `/ready`, and `/api/metrics` endpoints.
+- `odoo-preview` for non-mutating create/update/delete previews, plus audit
+  events for previews, verification results, and tool spans with request IDs.
 
 ## [0.8.0] — 2026-10-28
 
