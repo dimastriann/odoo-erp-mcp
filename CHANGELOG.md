@@ -20,8 +20,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Typed model schema tools (`odoo-get-model-schema`, relations, enum values,
   required fields, relation-path search) with a per-instance TTL metadata cache.
 - Curated `odoo-workflow` actions for sales confirmation, invoice posting, stock
-  validation, purchase confirmation, and cancellation, protected by policy and
-  approval gating.
+  validation, purchase confirmation, cancellation, and chatter messages, with
+  method-specific argument validation, policy checks, and approval gating.
+- `odoo-explain-relation`, deduplicated concurrent metadata cache misses, and
+  metadata cache hit/miss/invalidation metrics.
 
 ## [0.8.0] — 2026-10-28
 

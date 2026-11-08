@@ -534,10 +534,10 @@ Goal: Let agents discover Odoo semantics and invoke curated business workflows s
 - [x] S6-11 — Create a metadata-cache abstraction.
 - [x] S6-12 — Scope cache entries per instance.
 - [x] S6-13 — Add configurable TTL.
-- [ ] S6-14 — Deduplicate concurrent cache misses.
+- [x] S6-14 — Deduplicate concurrent cache misses.
 - [x] S6-15 — Add a manual refresh operation.
 - [x] S6-16 — Invalidate cache entries when instance configuration changes.
-- [ ] S6-17 — Add cache metrics.
+- [x] S6-17 — Add cache metrics.
 - [x] S6-18 — Add cache-correctness tests.
 
 ## 6.3 Relationship graph
@@ -547,14 +547,14 @@ Goal: Let agents discover Odoo semantics and invoke curated business workflows s
 - [x] S6-21 — Add One2many traversal.
 - [x] S6-22 — Add Many2many traversal.
 - [x] S6-23 — Add relationship-path search with a depth limit.
-- [ ] S6-24 — Add a relationship-explanation tool.
+- [x] S6-24 — Add a relationship-explanation tool.
 - [x] S6-25 — Add cycle and large-graph protection.
 
 ## 6.4 Curated workflow methods
 
 - [x] S6-26 — Define a workflow-method registry.
 - [x] S6-27 — Apply a strict method allowlist.
-- [ ] S6-28 — Add method-specific argument schemas.
+- [x] S6-28 — Add method-specific argument schemas.
 - [x] S6-29 — Integrate workflows with capability policy.
 - [x] S6-30 — Integrate workflows with risk assessment and approval.
 - [x] S6-31 — Implement an internal generic method caller.
@@ -567,10 +567,10 @@ Goal: Let agents discover Odoo semantics and invoke curated business workflows s
 
 ## Stage 6 Definition of Done
 
-- [ ] Agents can discover schemas and relationships without guessing.
-- [ ] Metadata queries use a per-instance cache.
-- [ ] No arbitrary public method execution is exposed.
-- [ ] Workflows pass through policy, approval, verification, and audit.
+- [x] Agents can discover schemas and relationships without guessing.
+- [x] Metadata queries use a per-instance cache.
+- [x] No arbitrary public method execution is exposed.
+- [x] Workflows pass through policy, approval, verification, and audit.
 
 ---
 
@@ -829,7 +829,7 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 4B — Odoo 19/20 Compatibility and Tool Catalog Expansion | Complete | 29/29 | JSON-2, context, ordered queries, report limits, read/report/batch tools, and deprecation warning complete. |
 | Stage 4C — Live Administration and Workspace Organization | Complete | 30/30 | Pagination, tool enablement, live notifications, cache invalidation, folders, and documentation complete. |
 | Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
-| Stage 6 - Odoo Semantic and Workflow Layer | In progress | 33/37 | Typed schema/relations/enums/required fields, metadata cache, relation path search, and curated approval-gated workflows complete; cache dedup/metrics, relation explanation, and method-specific arg schemas remain. |
+| Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
 | Stage 7 — Business Tools and Analytics | Not started | 0/28 | |
 | Stage 8 — Remote MCP and Enterprise Readiness | Not started | 0/22 | |
 | Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |
