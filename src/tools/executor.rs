@@ -494,7 +494,15 @@ pub(crate) async fn execute_tool(
         ));
     }
     let mut odoo_context = arguments.get("context").and_then(Value::as_object).cloned();
-    if let Some(company_id) = arguments.get("company_id").and_then(Value::as_i64) {
+    if let Some(company) = arguments.get("company_id") {
+        let company_id = match company.as_i64() {
+            Some(company_id) if company_id > 0 => company_id,
+            _ => {
+                return ToolExecutionResult::Failure(AppError::input_validation(
+                    "company_id must be a positive integer",
+                ));
+            }
+        };
         odoo_context
             .get_or_insert_with(Map::new)
             .entry("company_id".to_string())
@@ -1807,6 +1815,78 @@ mod tests {
             json!(["create_date:month"])
         );
         assert_eq!(requests[1]["params"]["args"][6]["context"]["company_id"], 2);
+    }
+
+    #[tokio::test]
+    async fn aggregate_rejects_non_positive_company_id_before_rpc() {
+        let server = MockOdooServer::start(authentication_success(7)).await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Aggregate,
+            json!({"model": "res.partner", "fields": ["id:count"], "company_id": 0}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            ToolExecutionResult::Failure(AppError::InputValidation { .. })
+        ));
+        assert_eq!(server.requests().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn business_report_resolves_company_currency() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!([{"state": "sale", "amount_total": 10}])),
+            json_rpc_success(json!([{"id": 2, "currency_id": [1, "USD"]}])),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::BusinessReport,
+            json!({"report": "sales_summary", "company_id": 2}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        let ToolExecutionResult::Success(value) = result else {
+            panic!("expected success");
+        };
+        assert_eq!(value["company_id"], 2);
+        assert_eq!(value["currency"], json!([1, "USD"]));
+        let requests = server.requests().await;
+        assert_eq!(requests[1]["params"]["args"][6]["context"]["company_id"], 2);
+        assert_eq!(requests[2]["params"]["args"][3], "res.company");
+        assert_eq!(requests[2]["params"]["args"][4], "read");
+        assert_eq!(requests[2]["params"]["args"][5], json!([[2]]));
+        assert_eq!(
+            requests[2]["params"]["args"][6]["fields"],
+            json!(["currency_id"])
+        );
     }
 
     #[tokio::test]

@@ -140,6 +140,10 @@ fn low_stock_domain() -> Value {
     json!([["qty_to_order", ">", 0]])
 }
 
+fn crm_conversion_domain() -> Value {
+    json!([["type", "in", ["lead", "opportunity"]]])
+}
+
 pub(crate) const REPORTS: &[BusinessReport] = &[
     BusinessReport {
         name: "sales_summary",
@@ -296,6 +300,17 @@ pub(crate) const REPORTS: &[BusinessReport] = &[
         domain: crm_leads_domain,
     },
     BusinessReport {
+        name: "crm_conversion",
+        model: "crm.lead",
+        description: "Lead-to-opportunity conversion rate",
+        date_field: Some("create_date"),
+        groupby: &["type"],
+        fields: &["id:count"],
+        orderby: None,
+        limit: 2,
+        domain: crm_conversion_domain,
+    },
+    BusinessReport {
         name: "customer_activity",
         model: "mail.activity",
         description: "Partner activities grouped by activity type",
@@ -362,6 +377,47 @@ pub(crate) const REPORTS: &[BusinessReport] = &[
         domain: purchase_domain,
     },
 ];
+
+fn currency_from_companies(companies: &Value) -> Option<Value> {
+    companies
+        .as_array()
+        .and_then(|rows| rows.first())
+        .and_then(|row| row.get("currency_id"))
+        .cloned()
+}
+
+fn transform_report_rows(name: &str, rows: &[Value]) -> Result<Value, AppError> {
+    match name {
+        "crm_conversion" => {
+            let mut leads = 0;
+            let mut opportunities = 0;
+            for row in rows {
+                let count = ["id_count", "__count", "type_count"]
+                    .iter()
+                    .find_map(|key| row.get(*key).and_then(Value::as_u64))
+                    .unwrap_or(0);
+                match row.get("type").and_then(Value::as_str) {
+                    Some("lead") => leads += count,
+                    Some("opportunity") => opportunities += count,
+                    _ => {}
+                }
+            }
+            let total = leads + opportunities;
+            let conversion_rate = if total == 0 {
+                0.0
+            } else {
+                opportunities as f64 / total as f64
+            };
+            Ok(json!([{
+                "leads": leads,
+                "opportunities": opportunities,
+                "total": total,
+                "conversion_rate": conversion_rate
+            }]))
+        }
+        _ => Ok(Value::Array(rows.to_vec())),
+    }
+}
 
 pub(crate) fn find(name: &str) -> Option<&'static BusinessReport> {
     REPORTS.iter().find(|report| report.name == name)
@@ -517,6 +573,16 @@ pub(crate) async fn run(
     let rows = rows
         .as_array()
         .ok_or_else(|| AppError::protocol("Odoo read_group returned a non-array result"))?;
+    let rows = transform_report_rows(report.name, rows)?;
+    let currency = match company_id {
+        Some(company_id) => {
+            let companies = odoo
+                .read("res.company", vec![company_id], json!(["currency_id"]))
+                .await?;
+            currency_from_companies(&companies)
+        }
+        None => None,
+    };
     Ok(json!({
         "report": report.name,
         "model": report.model,
@@ -526,6 +592,7 @@ pub(crate) async fn run(
         "fields": fields,
         "limit": limit,
         "company_id": company_id,
+        "currency": currency,
         "rows": rows
     }))
 }
@@ -540,6 +607,26 @@ mod tests {
         assert!(find("account_receivable").is_some());
         assert!(find("unknown").is_none());
         assert_eq!(definitions().as_array().unwrap().len(), REPORTS.len());
+    }
+
+    #[test]
+    fn company_currency_is_extracted_from_read_results() {
+        let companies = json!([{"id": 1, "currency_id": [2, "USD"]}]);
+        assert_eq!(currency_from_companies(&companies), Some(json!([2, "USD"])));
+        assert!(currency_from_companies(&json!([])).is_none());
+    }
+
+    #[test]
+    fn crm_conversion_is_derived_from_group_counts() {
+        let rows = vec![
+            json!({"type": "lead", "id_count": 10}),
+            json!({"type": "opportunity", "id_count": 5}),
+        ];
+        let converted = transform_report_rows("crm_conversion", &rows).unwrap();
+        assert_eq!(converted[0]["leads"], 10);
+        assert_eq!(converted[0]["opportunities"], 5);
+        assert_eq!(converted[0]["total"], 15);
+        assert!((converted[0]["conversion_rate"].as_f64().unwrap() - 1.0 / 3.0).abs() < 1e-9);
     }
 
     #[test]

@@ -10,10 +10,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - Protected aggregation (`odoo-aggregate`) with typed metrics, typed
-  group-by expressions, and optional company context.
+  group-by expressions, and optional company context. Business reports resolve
+  the selected company's currency when a company is supplied.
 - Curated business reports for sales, inventory, CRM, accounting, and
   purchasing, including inactive customers, stock levels, pending deliveries,
-  leads, activities, overdue invoices, cash flow, and supplier analysis.
+  lead conversion, activities, overdue invoices, cash flow, and supplier
+  analysis.
   These reports still require live Odoo validation before they are considered
   stable.
 

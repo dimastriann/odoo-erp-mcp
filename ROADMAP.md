@@ -584,7 +584,7 @@ Goal: Expose stable, protected tools expressed in business language.
 - [x] S7-02 — Create typed group-by expressions.
 - [x] S7-03 — Add date-interval validation.
 - [x] S7-04 — Add ranking and maximum-group protection.
-- [ ] S7-05 — Add currency and company context.
+- [x] S7-05 — Add currency and company context.
 - [x] S7-06 — Create a generic aggregation response.
 - [x] S7-07 — Add aggregation query protection.
 
@@ -608,7 +608,7 @@ Goal: Expose stable, protected tools expressed in business language.
 
 - [x] S7-18 — Implement CRM pipeline reporting.
 - [x] S7-19 — Implement lead queries.
-- [ ] S7-20 — Implement conversion-rate analysis.
+- [x] S7-20 — Implement conversion-rate analysis.
 - [x] S7-21 — Implement customer-activity summaries.
 
 ## 7.5 Accounting tools
@@ -830,6 +830,6 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 4C — Live Administration and Workspace Organization | Complete | 30/30 | Pagination, tool enablement, live notifications, cache invalidation, folders, and documentation complete. |
 | Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
 | Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
-| Stage 7 - Business Tools and Analytics | In progress | 26/28 | Aggregation protection, typed metrics/group-bys, company context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; currency context, conversion-rate analysis, and live Odoo validation remain. |
+| Stage 7 - Business Tools and Analytics | In progress | 28/28 | Aggregation protection, typed metrics/group-bys, company and currency context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; live Odoo validation remains. |
 | Stage 8 — Remote MCP and Enterprise Readiness | Not started | 0/22 | |
 | Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |
