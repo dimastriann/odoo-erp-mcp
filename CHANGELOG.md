@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Protected aggregation (`odoo-aggregate`) and curated business reports for
+  sales, inventory, CRM pipeline, receivables/payables, and pending purchases.
+  These reports still require live Odoo validation before they are considered
+  stable.
+
 ## [0.9.0] - 2026-11-14
 
 ### Added
