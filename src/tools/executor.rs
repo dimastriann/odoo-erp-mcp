@@ -1,3 +1,4 @@
+use crate::analytics;
 use crate::audit::{self, AuditEvent, AuditEventKind, AuditOutcome};
 use crate::context::RequestContext;
 use crate::domain::{DomainLimits, validate_domain_security};
@@ -15,11 +16,12 @@ use crate::metadata;
 use crate::odoo::OdooClient;
 use crate::risk::RiskEvaluator;
 use crate::tools::arguments::{
-    CheckAccessArgs, CopyArgs, CreateArgs, CreateBatchArgs, DeleteArgs, DeleteBatchArgs,
-    EnumValuesArgs, GetViewsArgs, ListModelsArgs, ListReportsArgs, ModelFieldsArgs, ModelOnlyArgs,
-    ModelSchemaArgs, NameSearchArgs, OnchangeArgs, PreviewArgs, ReadArgs, ReadGroupArgs,
-    RefreshMetadataArgs, RelationPathArgs, RelationsArgs, RenderReportArgs, SearchArgs,
-    SearchDomainArgs, SearchReadArgs, UpdateArgs, UpdateBatchArgs, WorkflowArgs,
+    AggregateArgs, BusinessReportArgs, CheckAccessArgs, CopyArgs, CreateArgs, CreateBatchArgs,
+    DeleteArgs, DeleteBatchArgs, EnumValuesArgs, GetViewsArgs, ListModelsArgs, ListReportsArgs,
+    ModelFieldsArgs, ModelOnlyArgs, ModelSchemaArgs, NameSearchArgs, OnchangeArgs, PreviewArgs,
+    ReadArgs, ReadGroupArgs, RefreshMetadataArgs, RelationPathArgs, RelationsArgs,
+    RenderReportArgs, SearchArgs, SearchDomainArgs, SearchReadArgs, UpdateArgs, UpdateBatchArgs,
+    WorkflowArgs,
 };
 use crate::tools::catalog::ToolName;
 use crate::tools::context::validate_context;
@@ -1253,6 +1255,73 @@ pub(crate) async fn execute_tool(
                 Err(error) => ToolExecutionResult::Failure(error),
             }
         }
+        ToolName::Aggregate => {
+            let args: AggregateArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return ToolExecutionResult::invalid_arguments("aggregate", error),
+            };
+            if let Err(error) = validate_query_domain(&args.domain, limits) {
+                return ToolExecutionResult::invalid_arguments("aggregate domain", error);
+            }
+            let fields = args.fields.as_array().cloned().unwrap_or_default();
+            if fields.is_empty() || fields.len() > limits.max_requested_fields {
+                return ToolExecutionResult::Failure(AppError::input_validation(format!(
+                    "aggregate fields must contain between 1 and {} entries",
+                    limits.max_requested_fields
+                )));
+            }
+            let groupby = args.groupby.as_array().cloned().unwrap_or_default();
+            if groupby.len() > 3 {
+                return ToolExecutionResult::Failure(AppError::input_validation(
+                    "aggregate groupby supports at most 3 fields",
+                ));
+            }
+            if let Some(orderby) = args.orderby.as_deref()
+                && let Err(error) = validate_order(orderby)
+            {
+                return ToolExecutionResult::invalid_arguments("aggregate orderby", error);
+            }
+            let limit = match resolve_limit(args.limit, limits.max_query_limit) {
+                Ok(limit) => limit,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("aggregate limit", error);
+                }
+            };
+            let result = odoo
+                .read_group(
+                    &args.model,
+                    args.domain,
+                    Value::Array(fields),
+                    Value::Array(groupby),
+                    args.offset,
+                    limit,
+                    args.orderby.as_deref(),
+                )
+                .await;
+            ToolExecutionResult::from_app_error(validate_response_record_count(
+                result,
+                limits.max_response_records,
+            ))
+        }
+        ToolName::BusinessReport => {
+            let args: BusinessReportArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => {
+                    return ToolExecutionResult::invalid_arguments("business-report", error);
+                }
+            };
+            ToolExecutionResult::from_app_error(
+                analytics::run(
+                    odoo,
+                    &args.report,
+                    args.date_from.as_deref(),
+                    args.date_to.as_deref(),
+                    args.limit,
+                    limits.max_query_limit,
+                )
+                .await,
+            )
+        }
         ToolName::ExplainRelation => {
             let args: RelationPathArgs = match serde_json::from_value(arguments) {
                 Ok(args) => args,
@@ -1283,9 +1352,11 @@ pub(crate) async fn execute_tool(
                 Err(error) => ToolExecutionResult::Failure(error),
             }
         }
-        ToolName::ListInstances | ToolName::ListWorkflows => ToolExecutionResult::Failure(
-            AppError::internal("local tool must be handled before the Odoo client is resolved"),
-        ),
+        ToolName::ListInstances | ToolName::ListWorkflows | ToolName::ListBusinessReports => {
+            ToolExecutionResult::Failure(AppError::internal(
+                "local tool must be handled before the Odoo client is resolved",
+            ))
+        }
     }
 }
 use crate::error::AppError;

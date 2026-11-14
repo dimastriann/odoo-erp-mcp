@@ -64,11 +64,14 @@ pub(crate) enum ToolName {
     Workflow,
     ListWorkflows,
     ExplainRelation,
+    Aggregate,
+    ListBusinessReports,
+    BusinessReport,
 }
 
 impl ToolName {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 32] = [
+    pub(crate) const ALL: [Self; 35] = [
         Self::SearchRead,
         Self::SearchCount,
         Self::ReadGroup,
@@ -101,6 +104,9 @@ impl ToolName {
         Self::Workflow,
         Self::ListWorkflows,
         Self::ExplainRelation,
+        Self::Aggregate,
+        Self::ListBusinessReports,
+        Self::BusinessReport,
     ];
 
     pub(crate) const fn as_str(self) -> &'static str {
@@ -137,6 +143,9 @@ impl ToolName {
             Self::Workflow => "odoo-workflow",
             Self::ListWorkflows => "odoo-list-workflows",
             Self::ExplainRelation => "odoo-explain-relation",
+            Self::Aggregate => "odoo-aggregate",
+            Self::ListBusinessReports => "odoo-list-business-reports",
+            Self::BusinessReport => "odoo-business-report",
         }
     }
 
@@ -170,6 +179,9 @@ impl ToolName {
             Self::Workflow => Capability::Workflow,
             Self::ListWorkflows => Capability::Read,
             Self::ExplainRelation => Capability::Read,
+            Self::Aggregate => Capability::Read,
+            Self::ListBusinessReports => Capability::Read,
+            Self::BusinessReport => Capability::Read,
         }
     }
 
@@ -182,11 +194,16 @@ impl ToolName {
                 | Self::ListInstances
                 | Self::ListWorkflows
                 | Self::ExplainRelation
+                | Self::ListBusinessReports
+                | Self::BusinessReport
         )
     }
 
     pub(crate) const fn requires_client(self) -> bool {
-        !matches!(self, Self::ListInstances | Self::ListWorkflows)
+        !matches!(
+            self,
+            Self::ListInstances | Self::ListWorkflows | Self::ListBusinessReports
+        )
     }
 }
 
@@ -227,6 +244,9 @@ impl TryFrom<&str> for ToolName {
             "odoo-workflow" => Ok(Self::Workflow),
             "odoo-list-workflows" => Ok(Self::ListWorkflows),
             "odoo-explain-relation" => Ok(Self::ExplainRelation),
+            "odoo-aggregate" => Ok(Self::Aggregate),
+            "odoo-list-business-reports" => Ok(Self::ListBusinessReports),
+            "odoo-business-report" => Ok(Self::BusinessReport),
             _ => Err(()),
         }
     }
@@ -682,6 +702,48 @@ pub(crate) fn tool_definitions() -> Value {
                     "max_depth": { "type": "integer", "minimum": 1, "maximum": 8, "default": 4 }
                 },
                 "required": ["from_model", "to_model"]
+            }
+        },
+        {
+            "name": "odoo-aggregate",
+            "description": "Run a protected Odoo read_group aggregation with typed group-by fields and metrics.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "model": { "type": "string" },
+                    "domain": domain_schema(),
+                    "fields": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Aggregate expressions such as amount_total:sum" },
+                    "groupby": { "type": "array", "items": { "type": "string" } },
+                    "offset": { "type": "integer", "minimum": 0 },
+                    "limit": { "type": "integer", "minimum": 1, "default": 100 },
+                    "orderby": { "type": "string" }
+                },
+                "required": ["model", "fields"]
+            }
+        },
+        {
+            "name": "odoo-list-business-reports",
+            "description": "List curated business reports and their target models.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "odoo-business-report",
+            "description": "Run a curated business report with an optional date range.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "report": { "type": "string", "description": "Report name from odoo-list-business-reports" },
+                    "date_from": { "type": "string", "description": "Start date in YYYY-MM-DD format" },
+                    "date_to": { "type": "string", "description": "End date in YYYY-MM-DD format" },
+                    "limit": { "type": "integer", "minimum": 1 }
+                },
+                "required": ["report"]
             }
         },
         {

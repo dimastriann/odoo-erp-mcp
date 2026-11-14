@@ -264,6 +264,27 @@ pub(crate) struct WorkflowArgs {
 }
 
 #[derive(Debug, Deserialize)]
+pub(crate) struct AggregateArgs {
+    pub(crate) model: String,
+    #[serde(default = "empty_array")]
+    pub(crate) domain: Value,
+    pub(crate) fields: Value,
+    #[serde(default = "empty_array")]
+    pub(crate) groupby: Value,
+    pub(crate) offset: Option<u64>,
+    pub(crate) limit: Option<u64>,
+    pub(crate) orderby: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct BusinessReportArgs {
+    pub(crate) report: String,
+    pub(crate) date_from: Option<String>,
+    pub(crate) date_to: Option<String>,
+    pub(crate) limit: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub(crate) struct PreviewArgs {
     pub(crate) model: String,
     pub(crate) kind: String,

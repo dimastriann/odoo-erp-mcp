@@ -1,4 +1,5 @@
 #![recursion_limit = "256"]
+mod analytics;
 mod audit;
 mod config;
 mod context;

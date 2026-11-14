@@ -242,6 +242,9 @@ async fn handle_request_with_identity(
                         ToolName::ListWorkflows => {
                             ToolExecutionResult::Success(crate::workflows::definitions())
                         }
+                        ToolName::ListBusinessReports => {
+                            ToolExecutionResult::Success(crate::analytics::definitions())
+                        }
                         _ => ToolExecutionResult::Failure(AppError::internal(
                             "local tool is not implemented",
                         )),
@@ -724,6 +727,9 @@ mod tests {
             ("odoo-workflow", &["workflow", "model", "method", "ids"][..]),
             ("odoo-list-workflows", &[][..]),
             ("odoo-explain-relation", &["from_model", "to_model"][..]),
+            ("odoo-aggregate", &["model", "fields"][..]),
+            ("odoo-list-business-reports", &[][..]),
+            ("odoo-business-report", &["report"][..]),
         ];
 
         assert_eq!(tools.len(), expected_contracts.len());
