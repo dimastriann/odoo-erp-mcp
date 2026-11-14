@@ -282,6 +282,7 @@ pub(crate) struct BusinessReportArgs {
     pub(crate) date_from: Option<String>,
     pub(crate) date_to: Option<String>,
     pub(crate) limit: Option<u64>,
+    pub(crate) company_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]

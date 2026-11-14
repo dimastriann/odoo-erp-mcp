@@ -493,7 +493,13 @@ pub(crate) async fn execute_tool(
             "Error: Missing required parameter 'model'",
         ));
     }
-    let odoo_context = arguments.get("context").and_then(Value::as_object).cloned();
+    let mut odoo_context = arguments.get("context").and_then(Value::as_object).cloned();
+    if let Some(company_id) = arguments.get("company_id").and_then(Value::as_i64) {
+        odoo_context
+            .get_or_insert_with(Map::new)
+            .entry("company_id".to_string())
+            .or_insert_with(|| json!(company_id));
+    }
     if let Err(error) = validate_context(odoo_context.as_ref(), limits) {
         return ToolExecutionResult::Failure(AppError::input_validation(format!(
             "Error: Invalid context: {error}"
@@ -1263,18 +1269,51 @@ pub(crate) async fn execute_tool(
             if let Err(error) = validate_query_domain(&args.domain, limits) {
                 return ToolExecutionResult::invalid_arguments("aggregate domain", error);
             }
-            let fields = args.fields.as_array().cloned().unwrap_or_default();
-            if fields.is_empty() || fields.len() > limits.max_requested_fields {
+            let raw_fields = match args.fields.as_array() {
+                Some(fields) => fields,
+                None => {
+                    return ToolExecutionResult::Failure(AppError::input_validation(
+                        "aggregate fields must be an array",
+                    ));
+                }
+            };
+            if raw_fields.is_empty() || raw_fields.len() > limits.max_requested_fields {
                 return ToolExecutionResult::Failure(AppError::input_validation(format!(
                     "aggregate fields must contain between 1 and {} entries",
                     limits.max_requested_fields
                 )));
             }
-            let groupby = args.groupby.as_array().cloned().unwrap_or_default();
-            if groupby.len() > 3 {
+            let mut fields = Vec::with_capacity(raw_fields.len());
+            for field in raw_fields {
+                let Some(field) = field.as_str() else {
+                    return ToolExecutionResult::Failure(AppError::input_validation(
+                        "aggregate fields must be strings",
+                    ));
+                };
+                match analytics::parse_metric(field) {
+                    Ok(metric) => fields.push(Value::String(metric.canonical())),
+                    Err(error) => return ToolExecutionResult::Failure(error),
+                }
+            }
+            let raw_groupby = args.groupby.as_array().cloned().unwrap_or_default();
+            if raw_groupby.len() > 3 {
                 return ToolExecutionResult::Failure(AppError::input_validation(
                     "aggregate groupby supports at most 3 fields",
                 ));
+            }
+            let mut groupby = Vec::with_capacity(raw_groupby.len());
+            for field in raw_groupby {
+                let Some(field) = field.as_str() else {
+                    return ToolExecutionResult::Failure(AppError::input_validation(
+                        "aggregate groupby must be strings",
+                    ));
+                };
+                match analytics::parse_groupby(field) {
+                    Ok(groupby_value) => {
+                        groupby.push(Value::String(groupby_value.canonical()));
+                    }
+                    Err(error) => return ToolExecutionResult::Failure(error),
+                }
             }
             if let Some(orderby) = args.orderby.as_deref()
                 && let Err(error) = validate_order(orderby)
@@ -1318,6 +1357,7 @@ pub(crate) async fn execute_tool(
                     args.date_to.as_deref(),
                     args.limit,
                     limits.max_query_limit,
+                    args.company_id,
                 )
                 .await,
             )
@@ -1694,6 +1734,79 @@ mod tests {
             requests[1]["params"]["args"][6]["orderby"],
             "country_id desc"
         );
+    }
+
+    #[tokio::test]
+    async fn aggregate_rejects_untyped_metrics_before_rpc() {
+        let server = MockOdooServer::start(authentication_success(7)).await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Aggregate,
+            json!({"model": "res.partner", "fields": ["amount_total"]}),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        assert!(matches!(
+            result,
+            ToolExecutionResult::Failure(AppError::InputValidation { .. })
+        ));
+        assert_eq!(server.requests().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn aggregate_forwards_company_context_and_canonicalizes_expressions() {
+        let server = MockOdooServer::start_with_responses(vec![
+            authentication_success(7),
+            json_rpc_success(json!([])),
+        ])
+        .await;
+        let client = OdooClient::new(
+            server.base_url().to_string(),
+            "test-db".to_string(),
+            "admin".to_string(),
+            "secret".to_string(),
+        )
+        .await
+        .unwrap();
+
+        let result = execute_tool(
+            ToolName::Aggregate,
+            json!({
+                "model": "res.partner",
+                "fields": ["id:count"],
+                "groupby": ["create_date:month"],
+                "company_id": 2
+            }),
+            &RequestContext::new(),
+            &client,
+            TEST_QUERY_LIMITS,
+            900,
+        )
+        .await;
+
+        assert!(matches!(result, ToolExecutionResult::Success(_)));
+        let requests = server.requests().await;
+        assert_eq!(
+            requests[1]["params"]["args"][6]["fields"],
+            json!(["id:count"])
+        );
+        assert_eq!(
+            requests[1]["params"]["args"][6]["groupby"],
+            json!(["create_date:month"])
+        );
+        assert_eq!(requests[1]["params"]["args"][6]["context"]["company_id"], 2);
     }
 
     #[tokio::test]

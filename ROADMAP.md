@@ -580,8 +580,8 @@ Goal: Expose stable, protected tools expressed in business language.
 
 ## 7.1 Aggregation foundation
 
-- [ ] S7-01 — Create typed metrics.
-- [ ] S7-02 — Create typed group-by expressions.
+- [x] S7-01 — Create typed metrics.
+- [x] S7-02 — Create typed group-by expressions.
 - [x] S7-03 — Add date-interval validation.
 - [x] S7-04 — Add ranking and maximum-group protection.
 - [ ] S7-05 — Add currency and company context.
@@ -594,35 +594,35 @@ Goal: Expose stable, protected tools expressed in business language.
 - [x] S7-09 — Implement sales revenue.
 - [x] S7-10 — Implement pending sales orders.
 - [x] S7-11 — Implement top customers.
-- [ ] S7-12 — Implement inactive customers.
+- [x] S7-12 — Implement inactive customers.
 
 ## 7.3 Inventory tools
 
-- [ ] S7-13 — Implement current stock.
-- [ ] S7-14 — Implement a low-stock report.
-- [ ] S7-15 — Implement a reserved-stock report.
-- [ ] S7-16 — Implement a pending-delivery report.
+- [x] S7-13 — Implement current stock.
+- [x] S7-14 — Implement a low-stock report.
+- [x] S7-15 — Implement a reserved-stock report.
+- [x] S7-16 — Implement a pending-delivery report.
 - [x] S7-17 — Implement an inventory summary.
 
 ## 7.4 CRM tools
 
 - [x] S7-18 — Implement CRM pipeline reporting.
-- [ ] S7-19 — Implement lead queries.
+- [x] S7-19 — Implement lead queries.
 - [ ] S7-20 — Implement conversion-rate analysis.
-- [ ] S7-21 — Implement customer-activity summaries.
+- [x] S7-21 — Implement customer-activity summaries.
 
 ## 7.5 Accounting tools
 
 - [x] S7-22 — Implement a receivable report.
 - [x] S7-23 — Implement a payable report.
-- [ ] S7-24 — Implement an overdue-invoice report.
-- [ ] S7-25 — Implement a cash-flow summary.
+- [x] S7-24 — Implement an overdue-invoice report.
+- [x] S7-25 — Implement a cash-flow summary.
 
 ## 7.6 Purchase tools
 
 - [x] S7-26 — Implement pending purchase orders.
-- [ ] S7-27 — Implement a supplier summary.
-- [ ] S7-28 — Implement supplier price-change analysis.
+- [x] S7-27 — Implement a supplier summary.
+- [x] S7-28 — Implement supplier price-change analysis.
 
 ## Stage 7 Definition of Done
 
@@ -830,6 +830,6 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 4C — Live Administration and Workspace Organization | Complete | 30/30 | Pagination, tool enablement, live notifications, cache invalidation, folders, and documentation complete. |
 | Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
 | Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
-| Stage 7 - Business Tools and Analytics | In progress | 13/28 | Aggregation protection, date validation, generic reports, sales, inventory summary, CRM pipeline, receivable/payable, and pending purchases added; typed metrics/group-bys, company/currency context, remaining reports, and live Odoo validation remain. |
+| Stage 7 - Business Tools and Analytics | In progress | 26/28 | Aggregation protection, typed metrics/group-bys, company context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; currency context, conversion-rate analysis, and live Odoo validation remain. |
 | Stage 8 — Remote MCP and Enterprise Readiness | Not started | 0/22 | |
 | Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |

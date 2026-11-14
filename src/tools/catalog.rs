@@ -717,7 +717,8 @@ pub(crate) fn tool_definitions() -> Value {
                     "groupby": { "type": "array", "items": { "type": "string" } },
                     "offset": { "type": "integer", "minimum": 0 },
                     "limit": { "type": "integer", "minimum": 1, "default": 100 },
-                    "orderby": { "type": "string" }
+                    "orderby": { "type": "string" },
+                    "company_id": { "type": "integer", "description": "Optional company context" }
                 },
                 "required": ["model", "fields"]
             }
@@ -741,7 +742,8 @@ pub(crate) fn tool_definitions() -> Value {
                     "report": { "type": "string", "description": "Report name from odoo-list-business-reports" },
                     "date_from": { "type": "string", "description": "Start date in YYYY-MM-DD format" },
                     "date_to": { "type": "string", "description": "End date in YYYY-MM-DD format" },
-                    "limit": { "type": "integer", "minimum": 1 }
+                    "limit": { "type": "integer", "minimum": 1 },
+                    "company_id": { "type": "integer", "description": "Optional company context" }
                 },
                 "required": ["report"]
             }
