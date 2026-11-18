@@ -643,7 +643,7 @@ Goal: Support authenticated remote access, organizational isolation, and product
 - [x] S8-02 — Implement the selected remote MCP transport.
 - [x] S8-03 — Enforce HTTPS.
 - [x] S8-04 — Add API-key authentication as the baseline.
-- [ ] S8-05 — Add token hashing and rotation.
+- [x] S8-05 — Add token hashing and rotation.
 - [ ] S8-06 — Add JWT validation.
 - [ ] S8-07 — Add OAuth 2.1 for the selected deployment model.
 - [ ] S8-08 — Add per-principal rate limiting.
@@ -831,5 +831,5 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
 | Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
 | Stage 7 - Business Tools and Analytics | In progress | 28/28 | Aggregation protection, typed metrics/group-bys, company and currency context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; live Odoo validation remains. |
-| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 4/22 | Transport-independent core and disabled-by-default HTTP transport with HTTPS and API-key authentication added; token rotation, rate limits, sessions, RBAC, tenant isolation, and production deployment remain. |
+| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 5/22 | Transport-independent core and disabled-by-default HTTP transport with HTTPS, hashed API keys, and rotation added; JWT/OAuth, rate limits, sessions, RBAC, tenant isolation, and production deployment remain. |
 | Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |

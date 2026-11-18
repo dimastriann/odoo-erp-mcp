@@ -25,7 +25,7 @@ type SharedConfig = Arc<RwLock<Config>>;
 struct RemoteState {
     core: Arc<Mutex<McpCore>>,
     require_https: bool,
-    expected_api_key_hash: [u8; 32],
+    expected_api_key_hashes: Vec<[u8; 32]>,
 }
 
 pub(crate) async fn start_remote_mcp(
@@ -33,35 +33,39 @@ pub(crate) async fn start_remote_mcp(
     client_manager: ClientManager,
     runtime: McpRuntime,
 ) {
-    let (bind_address, api_key_env) = {
+    let (bind_address, api_key_envs) = {
         let config = config.read().unwrap();
         let settings = &config.global_settings.remote_mcp;
-        (
-            settings.bind_address.clone(),
-            settings.api_key_env.clone().unwrap_or_default(),
-        )
+        let mut names = settings.api_key_envs.clone();
+        if let Some(api_key_env) = &settings.api_key_env {
+            names.push(api_key_env.clone());
+        }
+        (settings.bind_address.clone(), names)
     };
     let require_https =
         !bind_address.starts_with("127.0.0.1:") && !bind_address.starts_with("[::1]:");
     let provider = EnvironmentSecretProvider::new();
-    let api_key = match provider.resolve(&SecretReference::new(&api_key_env)) {
-        Ok(Some(secret)) if !secret.expose_secret().is_empty() => secret,
-        Ok(_) => {
-            eprintln!(
-                "Remote MCP transport disabled: environment variable {api_key_env:?} has no API key"
-            );
-            return;
-        }
-        Err(error) => {
-            eprintln!("Remote MCP transport disabled: {error}");
-            return;
-        }
-    };
-    let expected_api_key_hash = Sha256::digest(api_key.expose_secret().as_bytes()).into();
+    let mut expected_api_key_hashes = Vec::with_capacity(api_key_envs.len());
+    for api_key_env in &api_key_envs {
+        let api_key = match provider.resolve(&SecretReference::new(api_key_env)) {
+            Ok(Some(secret)) if !secret.expose_secret().is_empty() => secret,
+            Ok(_) => {
+                eprintln!(
+                    "Remote MCP transport disabled: environment variable {api_key_env:?} has no API key"
+                );
+                return;
+            }
+            Err(error) => {
+                eprintln!("Remote MCP transport disabled: {error}");
+                return;
+            }
+        };
+        expected_api_key_hashes.push(Sha256::digest(api_key.expose_secret().as_bytes()).into());
+    }
     let state = RemoteState {
         core: Arc::new(Mutex::new(McpCore::new(config, client_manager, runtime))),
         require_https,
-        expected_api_key_hash,
+        expected_api_key_hashes,
     };
 
     let app = Router::new()
@@ -91,7 +95,7 @@ async fn authorize_remote(
     if state.require_https && !request_is_https(&request) {
         return JsonRpcErrorBody::parse_error("HTTPS required for remote MCP").into_response();
     }
-    if !api_key_is_valid(&request, &state.expected_api_key_hash) {
+    if !api_key_is_valid(&request, &state.expected_api_key_hashes) {
         return (
             StatusCode::UNAUTHORIZED,
             [(
@@ -105,7 +109,7 @@ async fn authorize_remote(
     next.run(request).await
 }
 
-fn api_key_is_valid(request: &Request, expected: &[u8; 32]) -> bool {
+fn api_key_is_valid(request: &Request, expected: &[[u8; 32]]) -> bool {
     request
         .headers()
         .get(header::AUTHORIZATION)
@@ -117,7 +121,9 @@ fn api_key_is_valid(request: &Request, expected: &[u8; 32]) -> bool {
         })
         .is_some_and(|api_key| {
             let provided: [u8; 32] = Sha256::digest(api_key.as_bytes()).into();
-            constant_time_eq(&provided, expected)
+            expected
+                .iter()
+                .any(|expected| constant_time_eq(&provided, expected))
         })
 }
 
@@ -254,7 +260,7 @@ mod tests {
                 runtime,
             ))),
             require_https: false,
-            expected_api_key_hash: Sha256::digest(b"valid-api-key").into(),
+            expected_api_key_hashes: vec![Sha256::digest(b"valid-api-key").into()],
         };
 
         let response = handle_mcp_request(
@@ -284,7 +290,7 @@ mod tests {
                 runtime,
             ))),
             require_https: false,
-            expected_api_key_hash: Sha256::digest(b"valid-api-key").into(),
+            expected_api_key_hashes: vec![Sha256::digest(b"valid-api-key").into()],
         };
 
         let response = handle_mcp_request(
@@ -325,18 +331,23 @@ mod tests {
     #[test]
     fn api_keys_are_verified_with_constant_time_hash_comparison() {
         let expected: [u8; 32] = Sha256::digest(b"valid-api-key").into();
+        let rotated = vec![expected, Sha256::digest(b"replacement-api-key").into()];
         assert!(api_key_is_valid(
             &request_with_bearer("valid-api-key"),
-            &expected
+            &rotated
+        ));
+        assert!(api_key_is_valid(
+            &request_with_bearer("replacement-api-key"),
+            &rotated
         ));
         assert!(!api_key_is_valid(
             &request_with_bearer("wrong-api-key"),
-            &expected
+            &rotated
         ));
-        assert!(!api_key_is_valid(&request_with_bearer(""), &expected));
+        assert!(!api_key_is_valid(&request_with_bearer(""), &rotated));
         assert!(!api_key_is_valid(
             &request("http://gateway/mcp", None),
-            &expected
+            &rotated
         ));
     }
 

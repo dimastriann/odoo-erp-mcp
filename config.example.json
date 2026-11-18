@@ -23,7 +23,7 @@
     "remote_mcp": {
       "enabled": false,
       "bind_address": "127.0.0.1:3334",
-      "api_key_env": "ODOO_MCP_REMOTE_API_KEY"
+      "api_key_envs": ["ODOO_MCP_REMOTE_API_KEY"]
     }
   },
   "folders": [

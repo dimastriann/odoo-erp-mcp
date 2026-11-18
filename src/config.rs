@@ -239,6 +239,8 @@ pub struct RemoteMcpSettings {
     pub bind_address: String,
     #[serde(default)]
     pub api_key_env: Option<String>,
+    #[serde(default)]
+    pub api_key_envs: Vec<String>,
 }
 
 fn default_remote_mcp_bind() -> String {
@@ -251,6 +253,7 @@ impl Default for RemoteMcpSettings {
             enabled: false,
             bind_address: default_remote_mcp_bind(),
             api_key_env: None,
+            api_key_envs: Vec::new(),
         }
     }
 }
@@ -261,11 +264,26 @@ impl RemoteMcpSettings {
             .map(|_| ())
             .map_err(|_| format!("invalid remote_mcp.bind_address {:?}", self.bind_address))?;
         if self.enabled {
-            let api_key_env = self.api_key_env.as_deref().unwrap_or_default();
-            if api_key_env.trim().is_empty() {
+            let mut names = self.api_key_envs.clone();
+            if let Some(api_key_env) = &self.api_key_env {
+                names.push(api_key_env.clone());
+            }
+            if names.is_empty() {
                 return Err(
                     "remote_mcp.api_key_env is required when remote MCP is enabled".to_string(),
                 );
+            }
+            for name in &names {
+                if name.trim().is_empty() {
+                    return Err(
+                        "remote_mcp API-key environment names must not be empty".to_string()
+                    );
+                }
+            }
+            for (index, name) in names.iter().enumerate() {
+                if names[..index].iter().any(|other| other == name) {
+                    return Err(format!("duplicate remote_mcp API-key environment {name:?}"));
+                }
             }
         }
         Ok(())
@@ -858,6 +876,26 @@ mod tests {
 
         settings.remote_mcp.api_key_env = Some("   ".to_string());
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn remote_mcp_supports_rotated_api_keys_without_duplicates() {
+        let mut settings = GlobalSettings::default();
+        settings.remote_mcp.enabled = true;
+        settings.remote_mcp.api_key_envs = vec![
+            "ODOO_MCP_REMOTE_API_KEY_OLD".to_string(),
+            "ODOO_MCP_REMOTE_API_KEY_NEW".to_string(),
+        ];
+        assert!(settings.validate().is_ok());
+
+        settings.remote_mcp.api_key_envs = vec![
+            "ODOO_MCP_REMOTE_API_KEY".to_string(),
+            "ODOO_MCP_REMOTE_API_KEY".to_string(),
+        ];
+        assert_eq!(
+            settings.validate(),
+            Err("duplicate remote_mcp API-key environment \"ODOO_MCP_REMOTE_API_KEY\"".to_string())
+        );
     }
 
     #[test]
