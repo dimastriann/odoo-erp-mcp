@@ -1865,7 +1865,13 @@ mod tests {
 
         let result = execute_tool(
             ToolName::BusinessReport,
-            json!({"report": "sales_summary", "company_id": 2}),
+            json!({
+                "report": "sales_summary",
+                "date_from": "2026-01-01",
+                "date_to": "2026-01-31",
+                "company_id": 2,
+                "context": {"tz": "UTC"}
+            }),
             &RequestContext::new(),
             &client,
             TEST_QUERY_LIMITS,
@@ -1878,6 +1884,9 @@ mod tests {
         };
         assert_eq!(value["company_id"], 2);
         assert_eq!(value["currency"], json!([1, "USD"]));
+        assert_eq!(value["date_from"], "2026-01-01");
+        assert_eq!(value["date_to"], "2026-01-31");
+        assert_eq!(value["timezone"], "UTC");
         let requests = server.requests().await;
         assert_eq!(requests[1]["params"]["args"][6]["context"]["company_id"], 2);
         assert_eq!(requests[2]["params"]["args"][3], "res.company");

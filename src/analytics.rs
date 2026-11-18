@@ -583,6 +583,10 @@ pub(crate) async fn run(
         }
         None => None,
     };
+    let timezone = odoo
+        .context()
+        .and_then(|context| context.get("tz"))
+        .and_then(Value::as_str);
     Ok(json!({
         "report": report.name,
         "model": report.model,
@@ -591,6 +595,9 @@ pub(crate) async fn run(
         "groupby": groupby,
         "fields": fields,
         "limit": limit,
+        "date_from": date_from,
+        "date_to": date_to,
+        "timezone": timezone,
         "company_id": company_id,
         "currency": currency,
         "rows": rows

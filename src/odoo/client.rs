@@ -194,6 +194,10 @@ impl OdooClient {
         client
     }
 
+    pub(crate) fn context(&self) -> Option<&Map<String, Value>> {
+        self.context.as_ref()
+    }
+
     fn apply_context(&self, mut params: Value) -> Value {
         let Some(context) = &self.context else {
             return params;
