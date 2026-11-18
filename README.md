@@ -128,17 +128,18 @@ Remote MCP is disabled by default. Enable it explicitly with
 ```json
 "remote_mcp": {
   "enabled": false,
-  "bind_address": "127.0.0.1:3334"
+  "bind_address": "127.0.0.1:3334",
+  "api_key_env": "ODOO_MCP_REMOTE_API_KEY"
 }
 ```
 
 When enabled, the server exposes `POST /mcp` as a JSON-RPC-over-HTTP endpoint
-and reuses the same transport-independent MCP core as stdio. Notifications
-return `202 Accepted`. Non-loopback binds reject requests unless the reverse
+and reuses the same transport-independent MCP core as stdio. Requests must use
+`Authorization: Bearer <key>`; the key is read from `api_key_env` and only its
+SHA-256 hash is kept in memory. Notifications return `202 Accepted`. Non-loopback binds reject requests unless the reverse
 proxy sets `x-forwarded-proto: https`; configure that proxy to strip or
-override this header from client input. API-key authentication for this
-endpoint is not implemented yet, so keep `remote_mcp.enabled` set to `false`
-until it is added.
+override this header from client input. Keep `remote_mcp.enabled` set to
+`false` unless HTTPS and the API-key environment variable are configured.
 
 ### Configuration
 

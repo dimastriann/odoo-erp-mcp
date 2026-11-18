@@ -2,6 +2,7 @@ use super::server::McpCore;
 use crate::mcp::McpRuntime;
 use crate::observability;
 use crate::odoo::ClientManager;
+use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference};
 use axum::{
     Router,
     extract::{Request, State},
@@ -11,6 +12,7 @@ use axum::{
     routing::post,
 };
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::Mutex;
@@ -23,6 +25,7 @@ type SharedConfig = Arc<RwLock<Config>>;
 struct RemoteState {
     core: Arc<Mutex<McpCore>>,
     require_https: bool,
+    expected_api_key_hash: [u8; 32],
 }
 
 pub(crate) async fn start_remote_mcp(
@@ -30,22 +33,42 @@ pub(crate) async fn start_remote_mcp(
     client_manager: ClientManager,
     runtime: McpRuntime,
 ) {
-    let bind_address = {
+    let (bind_address, api_key_env) = {
         let config = config.read().unwrap();
-        config.global_settings.remote_mcp.bind_address.clone()
+        let settings = &config.global_settings.remote_mcp;
+        (
+            settings.bind_address.clone(),
+            settings.api_key_env.clone().unwrap_or_default(),
+        )
     };
     let require_https =
         !bind_address.starts_with("127.0.0.1:") && !bind_address.starts_with("[::1]:");
+    let provider = EnvironmentSecretProvider::new();
+    let api_key = match provider.resolve(&SecretReference::new(&api_key_env)) {
+        Ok(Some(secret)) if !secret.expose_secret().is_empty() => secret,
+        Ok(_) => {
+            eprintln!(
+                "Remote MCP transport disabled: environment variable {api_key_env:?} has no API key"
+            );
+            return;
+        }
+        Err(error) => {
+            eprintln!("Remote MCP transport disabled: {error}");
+            return;
+        }
+    };
+    let expected_api_key_hash = Sha256::digest(api_key.expose_secret().as_bytes()).into();
     let state = RemoteState {
         core: Arc::new(Mutex::new(McpCore::new(config, client_manager, runtime))),
         require_https,
+        expected_api_key_hash,
     };
 
     let app = Router::new()
         .route("/mcp", post(handle_mcp_request))
         .layer(middleware::from_fn_with_state(
             state.clone(),
-            require_https_middleware,
+            authorize_remote,
         ))
         .with_state(state);
 
@@ -60,7 +83,7 @@ pub(crate) async fn start_remote_mcp(
     }
 }
 
-async fn require_https_middleware(
+async fn authorize_remote(
     State(state): State<RemoteState>,
     request: Request,
     next: Next,
@@ -68,7 +91,44 @@ async fn require_https_middleware(
     if state.require_https && !request_is_https(&request) {
         return JsonRpcErrorBody::parse_error("HTTPS required for remote MCP").into_response();
     }
+    if !api_key_is_valid(&request, &state.expected_api_key_hash) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            [(
+                header::WWW_AUTHENTICATE,
+                header::HeaderValue::from_static("Bearer"),
+            )],
+            JsonRpcErrorBody::unauthorized().0.to_string(),
+        )
+            .into_response();
+    }
     next.run(request).await
+}
+
+fn api_key_is_valid(request: &Request, expected: &[u8; 32]) -> bool {
+    request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            value
+                .strip_prefix("Bearer ")
+                .or_else(|| value.strip_prefix("bearer "))
+        })
+        .is_some_and(|api_key| {
+            let provided: [u8; 32] = Sha256::digest(api_key.as_bytes()).into();
+            constant_time_eq(&provided, expected)
+        })
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    left.iter()
+        .zip(right)
+        .fold(0u8, |difference, (left, right)| difference | (left ^ right))
+        == 0
 }
 
 fn request_is_https(request: &Request) -> bool {
@@ -148,6 +208,14 @@ impl JsonRpcErrorBody {
         }))
     }
 
+    fn unauthorized() -> Self {
+        Self(json!({
+            "jsonrpc": "2.0",
+            "error": {"code": -32001, "message": "Unauthorized"},
+            "id": Value::Null
+        }))
+    }
+
     fn into_response(self) -> Response {
         (
             StatusCode::BAD_REQUEST,
@@ -186,6 +254,7 @@ mod tests {
                 runtime,
             ))),
             require_https: false,
+            expected_api_key_hash: Sha256::digest(b"valid-api-key").into(),
         };
 
         let response = handle_mcp_request(
@@ -215,6 +284,7 @@ mod tests {
                 runtime,
             ))),
             require_https: false,
+            expected_api_key_hash: Sha256::digest(b"valid-api-key").into(),
         };
 
         let response = handle_mcp_request(
@@ -250,5 +320,32 @@ mod tests {
             "http://gateway/mcp",
             Some("http")
         )));
+    }
+
+    #[test]
+    fn api_keys_are_verified_with_constant_time_hash_comparison() {
+        let expected: [u8; 32] = Sha256::digest(b"valid-api-key").into();
+        assert!(api_key_is_valid(
+            &request_with_bearer("valid-api-key"),
+            &expected
+        ));
+        assert!(!api_key_is_valid(
+            &request_with_bearer("wrong-api-key"),
+            &expected
+        ));
+        assert!(!api_key_is_valid(&request_with_bearer(""), &expected));
+        assert!(!api_key_is_valid(
+            &request("http://gateway/mcp", None),
+            &expected
+        ));
+    }
+
+    fn request_with_bearer(token: impl Into<String>) -> Request<Body> {
+        let mut request = request("http://gateway/mcp", None);
+        request.headers_mut().insert(
+            header::AUTHORIZATION,
+            header::HeaderValue::from_str(&format!("Bearer {}", token.into())).unwrap(),
+        );
+        request
     }
 }

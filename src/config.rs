@@ -237,6 +237,8 @@ pub struct RemoteMcpSettings {
     pub enabled: bool,
     #[serde(default = "default_remote_mcp_bind")]
     pub bind_address: String,
+    #[serde(default)]
+    pub api_key_env: Option<String>,
 }
 
 fn default_remote_mcp_bind() -> String {
@@ -248,6 +250,7 @@ impl Default for RemoteMcpSettings {
         Self {
             enabled: false,
             bind_address: default_remote_mcp_bind(),
+            api_key_env: None,
         }
     }
 }
@@ -256,7 +259,16 @@ impl RemoteMcpSettings {
     pub(crate) fn validate(&self) -> Result<(), String> {
         SocketAddr::from_str(&self.bind_address)
             .map(|_| ())
-            .map_err(|_| format!("invalid remote_mcp.bind_address {:?}", self.bind_address))
+            .map_err(|_| format!("invalid remote_mcp.bind_address {:?}", self.bind_address))?;
+        if self.enabled {
+            let api_key_env = self.api_key_env.as_deref().unwrap_or_default();
+            if api_key_env.trim().is_empty() {
+                return Err(
+                    "remote_mcp.api_key_env is required when remote MCP is enabled".to_string(),
+                );
+            }
+        }
+        Ok(())
     }
 }
 
@@ -829,6 +841,22 @@ mod tests {
 
         let mut settings = GlobalSettings::default();
         settings.remote_mcp.bind_address = "not-an-address".to_string();
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn enabled_remote_mcp_requires_an_api_key_environment_variable() {
+        let mut settings = GlobalSettings::default();
+        settings.remote_mcp.enabled = true;
+        assert_eq!(
+            settings.validate(),
+            Err("remote_mcp.api_key_env is required when remote MCP is enabled".to_string())
+        );
+
+        settings.remote_mcp.api_key_env = Some("ODOO_MCP_REMOTE_API_KEY".to_string());
+        assert!(settings.validate().is_ok());
+
+        settings.remote_mcp.api_key_env = Some("   ".to_string());
         assert!(settings.validate().is_err());
     }
 
