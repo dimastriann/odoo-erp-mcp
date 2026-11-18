@@ -267,6 +267,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
             metadata_cache_ttl_secs: 300,
             max_metadata_fields: 500,
             disabled_tools: Vec::new(),
+            remote_mcp: crate::config::RemoteMcpSettings::default(),
         },
         folders: Vec::new(),
         instances: vec![

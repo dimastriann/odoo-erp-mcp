@@ -120,6 +120,26 @@ src/
 
 The Web UI listens on `127.0.0.1:3333` by default. Set `ODOO_MCP_UI_BIND` (for example, `0.0.0.0:3333`) only when remote access is intentional, and place it behind HTTPS because its session cookie is designed for the local HTTP default.
 
+#### Remote MCP transport
+
+Remote MCP is disabled by default. Enable it explicitly with
+`global_settings.remote_mcp`:
+
+```json
+"remote_mcp": {
+  "enabled": false,
+  "bind_address": "127.0.0.1:3334"
+}
+```
+
+When enabled, the server exposes `POST /mcp` as a JSON-RPC-over-HTTP endpoint
+and reuses the same transport-independent MCP core as stdio. Notifications
+return `202 Accepted`. Non-loopback binds reject requests unless the reverse
+proxy sets `x-forwarded-proto: https`; configure that proxy to strip or
+override this header from client input. API-key authentication for this
+endpoint is not implemented yet, so keep `remote_mcp.enabled` set to `false`
+until it is added.
+
 ### Configuration
 
 The server stores its configuration in `config.json` (excluded from git). Use `config.example.json` as a starting template.

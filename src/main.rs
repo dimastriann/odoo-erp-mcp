@@ -59,6 +59,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let runtime = McpRuntime::new(sender);
 
+    if shared_config
+        .read()
+        .unwrap()
+        .global_settings
+        .remote_mcp
+        .enabled
+    {
+        let remote_config = Arc::clone(&shared_config);
+        let remote_runtime = runtime.clone();
+        let remote_client_manager = client_manager.clone();
+        tokio::spawn(async move {
+            mcp::http::start_remote_mcp(remote_config, remote_client_manager, remote_runtime).await;
+        });
+    }
+
     // Spawn Web UI Task
     let ui_config = Arc::clone(&shared_config);
     let ui_runtime = runtime.clone();

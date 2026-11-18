@@ -640,8 +640,8 @@ Goal: Support authenticated remote access, organizational isolation, and product
 ## 8.1 Remote transport and authentication
 
 - [x] S8-01 — Separate the transport-independent MCP core.
-- [ ] S8-02 — Implement the selected remote MCP transport.
-- [ ] S8-03 — Enforce HTTPS.
+- [x] S8-02 — Implement the selected remote MCP transport.
+- [x] S8-03 — Enforce HTTPS.
 - [ ] S8-04 — Add API-key authentication as the baseline.
 - [ ] S8-05 — Add token hashing and rotation.
 - [ ] S8-06 — Add JWT validation.
@@ -831,5 +831,5 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
 | Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
 | Stage 7 - Business Tools and Analytics | In progress | 28/28 | Aggregation protection, typed metrics/group-bys, company and currency context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; live Odoo validation remains. |
-| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 1/22 | Transport-independent MCP core extracted; remote transport, authentication, RBAC, tenant isolation, and production deployment remain. |
+| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 3/22 | Transport-independent core and disabled-by-default HTTP transport with HTTPS enforcement added; authentication, rate limits, sessions, RBAC, tenant isolation, and production deployment remain. |
 | Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |

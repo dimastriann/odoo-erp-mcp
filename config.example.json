@@ -19,7 +19,11 @@
     "audit_retention_events": 10000,
     "metadata_cache_ttl_secs": 300,
     "max_metadata_fields": 500,
-    "disabled_tools": []
+    "disabled_tools": [],
+    "remote_mcp": {
+      "enabled": false,
+      "bind_address": "127.0.0.1:3334"
+    }
   },
   "folders": [
     { "id": "f-production", "name": "Production", "description": "Live ERP" }

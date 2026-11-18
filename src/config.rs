@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::net::SocketAddr;
+use std::str::FromStr;
 // use std::path::Path;
 use anyhow::Result;
 use uuid::Uuid;
@@ -225,6 +227,37 @@ pub struct GlobalSettings {
     pub max_metadata_fields: usize,
     #[serde(default)]
     pub disabled_tools: Vec<String>,
+    #[serde(default)]
+    pub remote_mcp: RemoteMcpSettings,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct RemoteMcpSettings {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_remote_mcp_bind")]
+    pub bind_address: String,
+}
+
+fn default_remote_mcp_bind() -> String {
+    "127.0.0.1:3334".to_string()
+}
+
+impl Default for RemoteMcpSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind_address: default_remote_mcp_bind(),
+        }
+    }
+}
+
+impl RemoteMcpSettings {
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        SocketAddr::from_str(&self.bind_address)
+            .map(|_| ())
+            .map_err(|_| format!("invalid remote_mcp.bind_address {:?}", self.bind_address))
+    }
 }
 
 fn default_global_mode() -> String {
@@ -326,6 +359,7 @@ impl Default for GlobalSettings {
             metadata_cache_ttl_secs: default_metadata_cache_ttl_secs(),
             max_metadata_fields: default_max_metadata_fields(),
             disabled_tools: Vec::new(),
+            remote_mcp: RemoteMcpSettings::default(),
         }
     }
 }
@@ -372,6 +406,7 @@ impl GlobalSettings {
         if self.max_query_limit > u64::try_from(self.max_response_records).unwrap_or(u64::MAX) {
             return Err("max_query_limit cannot exceed max_response_records".to_string());
         }
+        self.remote_mcp.validate()?;
         validate_tool_names(&self.disabled_tools)?;
         Ok(())
     }
@@ -783,6 +818,18 @@ mod tests {
             settings.validate(),
             Err("approval_ttl_secs must be greater than zero".to_string())
         );
+    }
+
+    #[test]
+    fn remote_mcp_defaults_to_disabled_and_validates_bind_address() {
+        let settings = GlobalSettings::default();
+        assert!(!settings.remote_mcp.enabled);
+        assert_eq!(settings.remote_mcp.bind_address, "127.0.0.1:3334");
+        assert!(settings.validate().is_ok());
+
+        let mut settings = GlobalSettings::default();
+        settings.remote_mcp.bind_address = "not-an-address".to_string();
+        assert!(settings.validate().is_err());
     }
 
     #[test]
