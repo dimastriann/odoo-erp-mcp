@@ -64,6 +64,39 @@ fn request_context(client: &ClientIdentity, params: &Value, instance: String) ->
     RequestContext::identified(client.clone(), agent, actor, instance)
 }
 
+pub(crate) struct McpCore {
+    config: Arc<RwLock<Config>>,
+    client_manager: ClientManager,
+    runtime: McpRuntime,
+    client_identity: ClientIdentity,
+}
+
+impl McpCore {
+    pub(crate) fn new(
+        config: Arc<RwLock<Config>>,
+        client_manager: ClientManager,
+        runtime: McpRuntime,
+    ) -> Self {
+        Self {
+            config,
+            client_manager,
+            runtime,
+            client_identity: ClientIdentity::default(),
+        }
+    }
+
+    pub(crate) async fn handle_request(&mut self, req: Value) -> Option<Value> {
+        handle_request_with_identity(
+            req,
+            &self.config,
+            &self.client_manager,
+            &self.runtime,
+            &mut self.client_identity,
+        )
+        .await
+    }
+}
+
 pub async fn run_server(
     config: Arc<RwLock<Config>>,
     client_manager: ClientManager,
@@ -71,7 +104,7 @@ pub async fn run_server(
 ) {
     let stdin = io::stdin();
     let mut reader = BufReader::new(stdin).lines();
-    let mut client_identity = ClientIdentity::default();
+    let mut core = McpCore::new(config, client_manager, runtime.clone());
 
     while let Some(line) = reader.next_line().await.unwrap_or(None) {
         if line.trim().is_empty() {
@@ -92,14 +125,7 @@ pub async fn run_server(
                 runtime.mark_initialized();
             }
             let started = Instant::now();
-            let response = handle_request_with_identity(
-                request,
-                &config,
-                &client_manager,
-                &runtime,
-                &mut client_identity,
-            )
-            .await;
+            let response = core.handle_request(request).await;
             let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
             let failed = response
                 .as_ref()
@@ -621,6 +647,29 @@ mod tests {
             client.source.trust(),
             crate::context::IdentityTrust::Untrusted
         );
+    }
+
+    #[tokio::test]
+    async fn core_preserves_session_identity_across_requests() {
+        let config = multi_instance_config();
+        let client_manager = ClientManager::new();
+        let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        let runtime = McpRuntime::new(sender);
+        let mut core = McpCore::new(config, client_manager, runtime);
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "clientInfo": {"name": "codex", "version": "1.2.3"}
+            }
+        });
+
+        core.handle_request(req).await;
+
+        assert_eq!(core.client_identity.name.as_deref(), Some("codex"));
+        assert_eq!(core.client_identity.version.as_deref(), Some("1.2.3"));
+        assert_eq!(core.client_identity.source, IdentitySource::McpInitialize);
     }
 
     #[test]

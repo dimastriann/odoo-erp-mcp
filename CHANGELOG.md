@@ -19,6 +19,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   These reports still require live Odoo validation before they are considered
   stable.
 
+### Changed
+
+- Extracted a transport-independent MCP core so future remote transports reuse
+  the same request handling and session identity.
+
 ## [0.9.0] - 2026-11-14
 
 ### Added
