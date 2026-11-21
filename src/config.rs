@@ -243,6 +243,8 @@ pub struct RemoteMcpSettings {
     pub api_key_envs: Vec<String>,
     #[serde(default = "default_remote_rate_limit_per_minute")]
     pub rate_limit_per_minute: u32,
+    #[serde(default = "default_remote_max_request_bytes")]
+    pub max_request_bytes: usize,
 }
 
 fn default_remote_mcp_bind() -> String {
@@ -253,6 +255,10 @@ fn default_remote_rate_limit_per_minute() -> u32 {
     120
 }
 
+fn default_remote_max_request_bytes() -> usize {
+    1_048_576
+}
+
 impl Default for RemoteMcpSettings {
     fn default() -> Self {
         Self {
@@ -261,6 +267,7 @@ impl Default for RemoteMcpSettings {
             api_key_env: None,
             api_key_envs: Vec::new(),
             rate_limit_per_minute: default_remote_rate_limit_per_minute(),
+            max_request_bytes: default_remote_max_request_bytes(),
         }
     }
 }
@@ -296,6 +303,9 @@ impl RemoteMcpSettings {
                 return Err(
                     "remote_mcp.rate_limit_per_minute must be greater than zero".to_string()
                 );
+            }
+            if self.max_request_bytes == 0 {
+                return Err("remote_mcp.max_request_bytes must be greater than zero".to_string());
             }
         }
         Ok(())
@@ -920,6 +930,13 @@ mod tests {
         assert_eq!(
             settings.validate(),
             Err("remote_mcp.rate_limit_per_minute must be greater than zero".to_string())
+        );
+
+        settings.remote_mcp.rate_limit_per_minute = 120;
+        settings.remote_mcp.max_request_bytes = 0;
+        assert_eq!(
+            settings.validate(),
+            Err("remote_mcp.max_request_bytes must be greater than zero".to_string())
         );
     }
 

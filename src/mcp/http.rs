@@ -5,7 +5,7 @@ use crate::odoo::ClientManager;
 use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference};
 use axum::{
     Router,
-    extract::{Request, State},
+    extract::{DefaultBodyLimit, Request, State},
     http::{StatusCode, header},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -84,7 +84,7 @@ pub(crate) async fn start_remote_mcp(
     client_manager: ClientManager,
     runtime: McpRuntime,
 ) {
-    let (bind_address, api_key_envs, rate_limit_per_minute) = {
+    let (bind_address, api_key_envs, rate_limit_per_minute, max_request_bytes) = {
         let config = config.read().unwrap();
         let settings = &config.global_settings.remote_mcp;
         let mut names = settings.api_key_envs.clone();
@@ -95,6 +95,7 @@ pub(crate) async fn start_remote_mcp(
             settings.bind_address.clone(),
             names,
             settings.rate_limit_per_minute,
+            settings.max_request_bytes,
         )
     };
     let require_https =
@@ -129,6 +130,7 @@ pub(crate) async fn start_remote_mcp(
 
     let app = Router::new()
         .route("/mcp", post(handle_mcp_request))
+        .layer(DefaultBodyLimit::max(max_request_bytes))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             authorize_remote,

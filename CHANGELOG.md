@@ -12,7 +12,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Optional HTTP JSON-RPC remote MCP transport (`POST /mcp`), disabled by
   default, with HTTPS enforcement for non-loopback binds and hashed Bearer
   API-key authentication backed by environment variables, with support for
-  key rotation and per-key request rate limits.
+  key rotation, per-key request rate limits, and configurable request-body limits.
 - Protected aggregation (`odoo-aggregate`) with typed metrics, typed
   group-by expressions, and optional company context. Business reports resolve
   the selected company's currency when a company is supplied.

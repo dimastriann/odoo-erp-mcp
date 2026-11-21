@@ -24,7 +24,8 @@
       "enabled": false,
       "bind_address": "127.0.0.1:3334",
       "api_key_envs": ["ODOO_MCP_REMOTE_API_KEY"],
-      "rate_limit_per_minute": 120
+      "rate_limit_per_minute": 120,
+      "max_request_bytes": 1048576
     }
   },
   "folders": [
