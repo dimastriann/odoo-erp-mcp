@@ -245,6 +245,10 @@ pub struct RemoteMcpSettings {
     pub rate_limit_per_minute: u32,
     #[serde(default = "default_remote_max_request_bytes")]
     pub max_request_bytes: usize,
+    #[serde(default = "default_remote_max_sessions")]
+    pub max_sessions: usize,
+    #[serde(default = "default_remote_session_ttl_secs")]
+    pub session_ttl_secs: u64,
 }
 
 fn default_remote_mcp_bind() -> String {
@@ -259,6 +263,14 @@ fn default_remote_max_request_bytes() -> usize {
     1_048_576
 }
 
+fn default_remote_max_sessions() -> usize {
+    256
+}
+
+fn default_remote_session_ttl_secs() -> u64 {
+    3_600
+}
+
 impl Default for RemoteMcpSettings {
     fn default() -> Self {
         Self {
@@ -268,6 +280,8 @@ impl Default for RemoteMcpSettings {
             api_key_envs: Vec::new(),
             rate_limit_per_minute: default_remote_rate_limit_per_minute(),
             max_request_bytes: default_remote_max_request_bytes(),
+            max_sessions: default_remote_max_sessions(),
+            session_ttl_secs: default_remote_session_ttl_secs(),
         }
     }
 }
@@ -306,6 +320,12 @@ impl RemoteMcpSettings {
             }
             if self.max_request_bytes == 0 {
                 return Err("remote_mcp.max_request_bytes must be greater than zero".to_string());
+            }
+            if self.max_sessions == 0 {
+                return Err("remote_mcp.max_sessions must be greater than zero".to_string());
+            }
+            if self.session_ttl_secs == 0 {
+                return Err("remote_mcp.session_ttl_secs must be greater than zero".to_string());
             }
         }
         Ok(())
@@ -937,6 +957,20 @@ mod tests {
         assert_eq!(
             settings.validate(),
             Err("remote_mcp.max_request_bytes must be greater than zero".to_string())
+        );
+
+        settings.remote_mcp.max_request_bytes = 1_048_576;
+        settings.remote_mcp.max_sessions = 0;
+        assert_eq!(
+            settings.validate(),
+            Err("remote_mcp.max_sessions must be greater than zero".to_string())
+        );
+
+        settings.remote_mcp.max_sessions = 256;
+        settings.remote_mcp.session_ttl_secs = 0;
+        assert_eq!(
+            settings.validate(),
+            Err("remote_mcp.session_ttl_secs must be greater than zero".to_string())
         );
     }
 

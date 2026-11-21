@@ -131,7 +131,9 @@ Remote MCP is disabled by default. Enable it explicitly with
   "bind_address": "127.0.0.1:3334",
   "api_key_envs": ["ODOO_MCP_REMOTE_API_KEY_CURRENT"],
   "rate_limit_per_minute": 120,
-  "max_request_bytes": 1048576
+  "max_request_bytes": 1048576,
+  "max_sessions": 256,
+  "session_ttl_secs": 3600
 }
 ```
 
@@ -143,7 +145,11 @@ both the current and previous key enables zero-downtime rotation; remove the
 old key after clients have switched. Each key is limited to
 `rate_limit_per_minute` requests (default `120`); excess requests receive
 `429 Too Many Requests` with `Retry-After`. Request bodies are capped at
-`max_request_bytes` (default `1048576`). Notifications return
+`max_request_bytes` (default `1048576`). Initialize creates an
+`Mcp-Session-Id`; send it on later requests. Sessions are bound to the API key,
+expire after `session_ttl_secs` (default `3600`), and are capped by
+`max_sessions` (default `256`). Send `DELETE /mcp` with the session header to
+terminate one explicitly. Notifications return
 `202 Accepted`. Non-loopback binds reject requests unless the reverse proxy sets
 `x-forwarded-proto: https`; configure that proxy to strip or override this
 header from client input. Keep `remote_mcp.enabled` set to `false` unless HTTPS
