@@ -241,10 +241,16 @@ pub struct RemoteMcpSettings {
     pub api_key_env: Option<String>,
     #[serde(default)]
     pub api_key_envs: Vec<String>,
+    #[serde(default = "default_remote_rate_limit_per_minute")]
+    pub rate_limit_per_minute: u32,
 }
 
 fn default_remote_mcp_bind() -> String {
     "127.0.0.1:3334".to_string()
+}
+
+fn default_remote_rate_limit_per_minute() -> u32 {
+    120
 }
 
 impl Default for RemoteMcpSettings {
@@ -254,6 +260,7 @@ impl Default for RemoteMcpSettings {
             bind_address: default_remote_mcp_bind(),
             api_key_env: None,
             api_key_envs: Vec::new(),
+            rate_limit_per_minute: default_remote_rate_limit_per_minute(),
         }
     }
 }
@@ -284,6 +291,11 @@ impl RemoteMcpSettings {
                 if names[..index].iter().any(|other| other == name) {
                     return Err(format!("duplicate remote_mcp API-key environment {name:?}"));
                 }
+            }
+            if self.rate_limit_per_minute == 0 {
+                return Err(
+                    "remote_mcp.rate_limit_per_minute must be greater than zero".to_string()
+                );
             }
         }
         Ok(())
@@ -895,6 +907,19 @@ mod tests {
         assert_eq!(
             settings.validate(),
             Err("duplicate remote_mcp API-key environment \"ODOO_MCP_REMOTE_API_KEY\"".to_string())
+        );
+    }
+
+    #[test]
+    fn remote_mcp_rate_limit_must_be_positive_when_enabled() {
+        let mut settings = GlobalSettings::default();
+        assert_eq!(settings.remote_mcp.rate_limit_per_minute, 120);
+        settings.remote_mcp.enabled = true;
+        settings.remote_mcp.api_key_envs = vec!["ODOO_MCP_REMOTE_API_KEY".to_string()];
+        settings.remote_mcp.rate_limit_per_minute = 0;
+        assert_eq!(
+            settings.validate(),
+            Err("remote_mcp.rate_limit_per_minute must be greater than zero".to_string())
         );
     }
 

@@ -13,8 +13,9 @@ use axum::{
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 use crate::config::Config;
@@ -26,6 +27,56 @@ struct RemoteState {
     core: Arc<Mutex<McpCore>>,
     require_https: bool,
     expected_api_key_hashes: Vec<[u8; 32]>,
+    rate_limiter: Arc<RateLimiter>,
+}
+
+struct RateLimiter {
+    limit: u32,
+    window: Duration,
+    entries: Mutex<HashMap<[u8; 32], RateWindow>>,
+}
+
+struct RateWindow {
+    started: Instant,
+    count: u32,
+}
+
+impl RateLimiter {
+    fn new(limit: u32, window: Duration) -> Self {
+        Self {
+            limit,
+            window,
+            entries: Mutex::new(HashMap::new()),
+        }
+    }
+
+    async fn check(&self, principal: [u8; 32]) -> Result<(), Duration> {
+        self.check_at(principal, Instant::now()).await
+    }
+
+    async fn check_at(&self, principal: [u8; 32], now: Instant) -> Result<(), Duration> {
+        let mut entries = self.entries.lock().await;
+        if entries.len() > 4_096 {
+            entries.retain(|_, window| now.duration_since(window.started) < self.window);
+        }
+        let window = entries.entry(principal).or_insert(RateWindow {
+            started: now,
+            count: 0,
+        });
+        if now.duration_since(window.started) >= self.window {
+            *window = RateWindow {
+                started: now,
+                count: 0,
+            };
+        }
+        if window.count >= self.limit {
+            return Err(self
+                .window
+                .saturating_sub(now.duration_since(window.started)));
+        }
+        window.count += 1;
+        Ok(())
+    }
 }
 
 pub(crate) async fn start_remote_mcp(
@@ -33,14 +84,18 @@ pub(crate) async fn start_remote_mcp(
     client_manager: ClientManager,
     runtime: McpRuntime,
 ) {
-    let (bind_address, api_key_envs) = {
+    let (bind_address, api_key_envs, rate_limit_per_minute) = {
         let config = config.read().unwrap();
         let settings = &config.global_settings.remote_mcp;
         let mut names = settings.api_key_envs.clone();
         if let Some(api_key_env) = &settings.api_key_env {
             names.push(api_key_env.clone());
         }
-        (settings.bind_address.clone(), names)
+        (
+            settings.bind_address.clone(),
+            names,
+            settings.rate_limit_per_minute,
+        )
     };
     let require_https =
         !bind_address.starts_with("127.0.0.1:") && !bind_address.starts_with("[::1]:");
@@ -66,6 +121,10 @@ pub(crate) async fn start_remote_mcp(
         core: Arc::new(Mutex::new(McpCore::new(config, client_manager, runtime))),
         require_https,
         expected_api_key_hashes,
+        rate_limiter: Arc::new(RateLimiter::new(
+            rate_limit_per_minute,
+            Duration::from_secs(60),
+        )),
     };
 
     let app = Router::new()
@@ -95,21 +154,19 @@ async fn authorize_remote(
     if state.require_https && !request_is_https(&request) {
         return JsonRpcErrorBody::parse_error("HTTPS required for remote MCP").into_response();
     }
-    if !api_key_is_valid(&request, &state.expected_api_key_hashes) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            [(
-                header::WWW_AUTHENTICATE,
-                header::HeaderValue::from_static("Bearer"),
-            )],
-            JsonRpcErrorBody::unauthorized().0.to_string(),
-        )
-            .into_response();
+    let Some(principal) = presented_api_key_hash(&request) else {
+        return unauthorized_response();
+    };
+    if !api_key_is_valid(&principal, &state.expected_api_key_hashes) {
+        return unauthorized_response();
+    }
+    if let Err(retry_after) = state.rate_limiter.check(principal).await {
+        return rate_limited_response(retry_after);
     }
     next.run(request).await
 }
 
-fn api_key_is_valid(request: &Request, expected: &[[u8; 32]]) -> bool {
+fn presented_api_key_hash(request: &Request) -> Option<[u8; 32]> {
     request
         .headers()
         .get(header::AUTHORIZATION)
@@ -119,12 +176,38 @@ fn api_key_is_valid(request: &Request, expected: &[[u8; 32]]) -> bool {
                 .strip_prefix("Bearer ")
                 .or_else(|| value.strip_prefix("bearer "))
         })
-        .is_some_and(|api_key| {
-            let provided: [u8; 32] = Sha256::digest(api_key.as_bytes()).into();
-            expected
-                .iter()
-                .any(|expected| constant_time_eq(&provided, expected))
-        })
+        .map(|api_key| Sha256::digest(api_key.as_bytes()).into())
+}
+
+fn api_key_is_valid(presented: &[u8; 32], expected: &[[u8; 32]]) -> bool {
+    expected
+        .iter()
+        .any(|expected| constant_time_eq(presented, expected))
+}
+
+fn unauthorized_response() -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        [(
+            header::WWW_AUTHENTICATE,
+            header::HeaderValue::from_static("Bearer"),
+        )],
+        JsonRpcErrorBody::unauthorized().0.to_string(),
+    )
+        .into_response()
+}
+
+fn rate_limited_response(retry_after: Duration) -> Response {
+    let retry_after_secs = retry_after.as_secs().max(1).to_string();
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        [
+            (header::RETRY_AFTER, retry_after_secs),
+            (header::CONTENT_TYPE, "application/json".to_string()),
+        ],
+        JsonRpcErrorBody::rate_limited().0.to_string(),
+    )
+        .into_response()
 }
 
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
@@ -222,6 +305,14 @@ impl JsonRpcErrorBody {
         }))
     }
 
+    fn rate_limited() -> Self {
+        Self(json!({
+            "jsonrpc": "2.0",
+            "error": {"code": -32002, "message": "Rate limit exceeded"},
+            "id": Value::Null
+        }))
+    }
+
     fn into_response(self) -> Response {
         (
             StatusCode::BAD_REQUEST,
@@ -261,6 +352,7 @@ mod tests {
             ))),
             require_https: false,
             expected_api_key_hashes: vec![Sha256::digest(b"valid-api-key").into()],
+            rate_limiter: Arc::new(RateLimiter::new(120, Duration::from_secs(60))),
         };
 
         let response = handle_mcp_request(
@@ -291,6 +383,7 @@ mod tests {
             ))),
             require_https: false,
             expected_api_key_hashes: vec![Sha256::digest(b"valid-api-key").into()],
+            rate_limiter: Arc::new(RateLimiter::new(120, Duration::from_secs(60))),
         };
 
         let response = handle_mcp_request(
@@ -330,25 +423,64 @@ mod tests {
 
     #[test]
     fn api_keys_are_verified_with_constant_time_hash_comparison() {
-        let expected: [u8; 32] = Sha256::digest(b"valid-api-key").into();
-        let rotated = vec![expected, Sha256::digest(b"replacement-api-key").into()];
-        assert!(api_key_is_valid(
-            &request_with_bearer("valid-api-key"),
-            &rotated
-        ));
-        assert!(api_key_is_valid(
-            &request_with_bearer("replacement-api-key"),
-            &rotated
-        ));
+        let valid: [u8; 32] = Sha256::digest(b"valid-api-key").into();
+        let replacement: [u8; 32] = Sha256::digest(b"replacement-api-key").into();
+        let rotated = vec![valid, replacement];
+        assert!(api_key_is_valid(&valid, &rotated));
+        assert!(api_key_is_valid(&replacement, &rotated));
         assert!(!api_key_is_valid(
-            &request_with_bearer("wrong-api-key"),
+            &Sha256::digest(b"wrong-api-key").into(),
             &rotated
         ));
-        assert!(!api_key_is_valid(&request_with_bearer(""), &rotated));
-        assert!(!api_key_is_valid(
-            &request("http://gateway/mcp", None),
-            &rotated
-        ));
+        assert_eq!(
+            presented_api_key_hash(&request_with_bearer("valid-api-key")),
+            Some(valid)
+        );
+        assert!(presented_api_key_hash(&request("http://gateway/mcp", None)).is_none());
+    }
+
+    #[test]
+    fn auth_and_rate_limit_responses_are_well_formed() {
+        let unauthorized = unauthorized_response();
+        assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            unauthorized
+                .headers()
+                .get(header::WWW_AUTHENTICATE)
+                .and_then(|value| value.to_str().ok()),
+            Some("Bearer")
+        );
+
+        let limited = rate_limited_response(Duration::from_secs(3));
+        assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            limited
+                .headers()
+                .get(header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok()),
+            Some("3")
+        );
+    }
+
+    #[tokio::test]
+    async fn rate_limiter_enforces_per_principal_windows() {
+        let limiter = RateLimiter::new(2, Duration::from_secs(60));
+        let now = Instant::now();
+        let first = [1u8; 32];
+        let second = [2u8; 32];
+
+        assert!(limiter.check_at(first, now).await.is_ok());
+        assert!(limiter.check_at(first, now).await.is_ok());
+        let retry_after = limiter.check_at(first, now).await.unwrap_err();
+        assert!(retry_after > Duration::ZERO);
+        assert!(retry_after <= Duration::from_secs(60));
+        assert!(limiter.check_at(second, now).await.is_ok());
+        assert!(
+            limiter
+                .check_at(first, now + Duration::from_secs(61))
+                .await
+                .is_ok()
+        );
     }
 
     fn request_with_bearer(token: impl Into<String>) -> Request<Body> {

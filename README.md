@@ -129,7 +129,8 @@ Remote MCP is disabled by default. Enable it explicitly with
 "remote_mcp": {
   "enabled": false,
   "bind_address": "127.0.0.1:3334",
-  "api_key_envs": ["ODOO_MCP_REMOTE_API_KEY_CURRENT"]
+  "api_key_envs": ["ODOO_MCP_REMOTE_API_KEY_CURRENT"],
+  "rate_limit_per_minute": 120
 }
 ```
 
@@ -138,11 +139,13 @@ and reuses the same transport-independent MCP core as stdio. Requests must use
 `Authorization: Bearer <key>`; keys are read from `api_key_envs` (or the older
 scalar `api_key_env`) and only SHA-256 hashes are kept in memory. Supplying
 both the current and previous key enables zero-downtime rotation; remove the
-old key after clients have switched. Notifications
-return `202 Accepted`. Non-loopback binds reject requests unless the reverse
-proxy sets `x-forwarded-proto: https`; configure that proxy to strip or
-override this header from client input. Keep `remote_mcp.enabled` set to
-`false` unless HTTPS and the API-key environment variables are configured.
+old key after clients have switched. Each key is limited to
+`rate_limit_per_minute` requests (default `120`); excess requests receive
+`429 Too Many Requests` with `Retry-After`. Notifications return
+`202 Accepted`. Non-loopback binds reject requests unless the reverse proxy sets
+`x-forwarded-proto: https`; configure that proxy to strip or override this
+header from client input. Keep `remote_mcp.enabled` set to `false` unless HTTPS
+and the API-key environment variables are configured.
 
 ### Configuration
 
