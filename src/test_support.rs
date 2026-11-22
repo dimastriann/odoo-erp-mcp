@@ -246,6 +246,7 @@ impl Drop for MockOdooServer {
 
 pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
     Arc::new(RwLock::new(Config {
+        tenants: Vec::new(),
         global_settings: GlobalSettings {
             default_mode: "crud".to_string(),
             rpc_connection_timeout_secs: 10,
@@ -287,6 +288,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
                 allowed_tools: None,
                 permissions: None,
                 query_limits: None,
+                tenant_id: None,
             },
             OdooInstance {
                 id: "2".into(),
@@ -304,6 +306,7 @@ pub(crate) fn multi_instance_config() -> Arc<RwLock<Config>> {
                 allowed_tools: None,
                 permissions: None,
                 query_limits: None,
+                tenant_id: None,
             },
         ],
         prompts: vec![],

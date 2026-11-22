@@ -203,6 +203,52 @@ JWT/OAuth principals use `issuer:subject`. API keys can be mapped to a subject
 through `api_key_subjects`. Deny wins over allow; unmatched principals use
 `default_role`, and no matching role means denied.
 
+Tenant and instance scoping is enforced for remote callers:
+
+```json
+"tenants": [
+  {
+    "id": "tenant-a",
+    "name": "Tenant A",
+    "secret_envs": ["TENANT_A_ODOO_PASSWORD"]
+  }
+],
+"rbac": {
+  "principal_tenants": {
+    "https://issuer.example.com:user-42": "tenant-a"
+  },
+  "principal_instances": {
+    "https://issuer.example.com:user-42": ["1"]
+  }
+}
+```
+
+Instances in a multi-tenant configuration must declare `tenant_id`. When a
+tenant defines `secret_envs`, its instances must use one of those
+`password_env` names. When `principal_tenants` or `principal_instances` is set,
+remote callers without a matching subject are denied; `odoo-list-instances`
+returns only the instances they may access. Audit and approval records carry
+the tenant identity for isolation and review.
+
+#### Kubernetes
+Kubernetes manifests are in `deploy/k8s`. They include a namespace, PVC,
+ConfigMap, Deployment, Service, and an nginx Ingress for `/mcp`.
+
+1. Copy/edit `deploy/k8s/configmap.yaml` with your tenants and instances.
+2. Create the secret from `deploy/k8s/secret.example.yaml`.
+3. Apply the manifests:
+   ```bash
+   kubectl apply -f deploy/k8s/namespace.yaml
+   kubectl apply -f deploy/k8s/secret.example.yaml
+   kubectl apply -k deploy/k8s
+   ```
+4. Replace the placeholder image and host/TLS secret before production use.
+
+Back up the PVC (`/data`) and the `odoo-erp-mcp-config` ConfigMap before
+upgrades. The PVC contains audit and approval state; the ConfigMap holds
+`config.json`. To recover, restore both and re-apply the manifests; rotate the
+API/JWT secrets and update the Kubernetes Secret after any suspected exposure.
+
 ### Configuration
 
 The server stores its configuration in `config.json` (excluded from git). Use `config.example.json` as a starting template.

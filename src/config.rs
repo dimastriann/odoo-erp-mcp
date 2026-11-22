@@ -59,6 +59,8 @@ pub struct OdooInstance {
     pub permissions: Option<CapabilityPermissions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query_limits: Option<QueryProtectionOverrides>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -73,6 +75,10 @@ pub struct QueryProtectionOverrides {
 }
 
 impl OdooInstance {
+    pub(crate) fn tenant_id(&self) -> &str {
+        self.tenant_id.as_deref().unwrap_or("default")
+    }
+
     pub(crate) fn effective_query_settings(&self, global: &GlobalSettings) -> GlobalSettings {
         let mut effective = global.clone();
         if let Some(overrides) = &self.query_limits {
@@ -275,6 +281,10 @@ pub struct RbacSettings {
     pub principals: BTreeMap<String, Vec<String>>,
     #[serde(default)]
     pub api_key_subjects: BTreeMap<String, String>,
+    #[serde(default)]
+    pub principal_tenants: BTreeMap<String, String>,
+    #[serde(default)]
+    pub principal_instances: BTreeMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -326,6 +336,41 @@ impl RbacSettings {
                 return Err(format!(
                     "remote_mcp.rbac.api_key_subjects subject for {env:?} must not be empty"
                 ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_scopes(
+        &self,
+        tenant_ids: &[&str],
+        instance_ids: &[&str],
+        instance_names: &[&str],
+    ) -> Result<(), String> {
+        for (subject, tenant) in &self.principal_tenants {
+            if subject.trim().is_empty() || !tenant_ids.contains(&tenant.as_str()) {
+                return Err(format!(
+                    "remote_mcp.rbac principal_tenants entry {subject:?} references unknown tenant {tenant:?}"
+                ));
+            }
+        }
+        for (subject, instances) in &self.principal_instances {
+            if subject.trim().is_empty() || instances.is_empty() {
+                return Err(
+                    "remote_mcp.rbac principal_instances entries must name a subject and instances"
+                        .to_string(),
+                );
+            }
+            for instance in instances {
+                if !instance_ids.contains(&instance.as_str())
+                    && !instance_names
+                        .iter()
+                        .any(|name| name.eq_ignore_ascii_case(instance))
+                {
+                    return Err(format!(
+                        "remote_mcp.rbac principal_instances entry {subject:?} references unknown instance {instance:?}"
+                    ));
+                }
             }
         }
         Ok(())
@@ -625,9 +670,19 @@ pub struct OdooPrompt {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct Tenant {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub secret_envs: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
     #[serde(default)]
     pub global_settings: GlobalSettings,
+    #[serde(default)]
+    pub tenants: Vec<Tenant>,
     pub instances: Vec<OdooInstance>,
     #[serde(default)]
     pub folders: Vec<Folder>,
@@ -637,6 +692,23 @@ pub struct Config {
 impl Config {
     pub(crate) fn validate(&self) -> Result<(), String> {
         self.global_settings.validate()?;
+        for (index, tenant) in self.tenants.iter().enumerate() {
+            if tenant.id.trim().is_empty() || tenant.name.trim().is_empty() {
+                return Err("tenant id and name must not be empty".to_string());
+            }
+            if self.tenants[..index]
+                .iter()
+                .any(|other| other.id.eq_ignore_ascii_case(&tenant.id))
+            {
+                return Err(format!("duplicate tenant id {:?}", tenant.id));
+            }
+            if tenant.secret_envs.iter().any(|name| name.trim().is_empty()) {
+                return Err(format!(
+                    "tenant {:?} secret environment names must not be empty",
+                    tenant.id
+                ));
+            }
+        }
         for (index, folder) in self.folders.iter().enumerate() {
             if folder.id.trim().is_empty() || folder.name.trim().is_empty() {
                 return Err("folder id and name must not be empty".to_string());
@@ -671,6 +743,60 @@ impl Config {
                     instance.name
                 ));
             }
+            if self.tenants.is_empty() {
+                if instance.tenant_id.is_some() {
+                    return Err(format!(
+                        "instance {:?} references a tenant but no tenants are defined",
+                        instance.name
+                    ));
+                }
+            } else {
+                let tenant_id = instance.tenant_id.as_deref().ok_or_else(|| {
+                    format!("instance {:?} must declare tenant_id", instance.name)
+                })?;
+                let tenant = self
+                    .tenants
+                    .iter()
+                    .find(|tenant| tenant.id == tenant_id)
+                    .ok_or_else(|| {
+                        format!(
+                            "instance {:?} references unknown tenant {tenant_id:?}",
+                            instance.name
+                        )
+                    })?;
+                if !tenant.secret_envs.is_empty() {
+                    let password_env = instance.password_env.as_deref().ok_or_else(|| {
+                        format!(
+                            "instance {:?} must use password_env scoped by tenant {tenant_id:?}",
+                            instance.name
+                        )
+                    })?;
+                    if !tenant.secret_envs.iter().any(|name| name == password_env) {
+                        return Err(format!(
+                            "instance {:?} password_env is not allowed for tenant {tenant_id:?}",
+                            instance.name
+                        ));
+                    }
+                }
+            }
+        }
+        if let Some(rbac) = &self.global_settings.remote_mcp.rbac {
+            let tenant_ids = self
+                .tenants
+                .iter()
+                .map(|tenant| tenant.id.as_str())
+                .collect::<Vec<_>>();
+            let instance_ids = self
+                .instances
+                .iter()
+                .map(|instance| instance.id.as_str())
+                .collect::<Vec<_>>();
+            let instance_names = self
+                .instances
+                .iter()
+                .map(|instance| instance.name.as_str())
+                .collect::<Vec<_>>();
+            rbac.validate_scopes(&tenant_ids, &instance_ids, &instance_names)?;
         }
         Ok(())
     }
@@ -1083,6 +1209,8 @@ mod tests {
                 "ODOO_MCP_REMOTE_API_KEY".to_string(),
                 "service:automation".to_string(),
             )]),
+            principal_tenants: BTreeMap::new(),
+            principal_instances: BTreeMap::new(),
         });
         assert!(settings.validate().is_ok());
 
@@ -1114,6 +1242,40 @@ mod tests {
             settings.validate(),
             Err("duplicate remote_mcp API-key environment \"ODOO_MCP_REMOTE_API_KEY\"".to_string())
         );
+    }
+
+    #[test]
+    fn tenant_secret_scope_is_enforced() {
+        let mut config = Config {
+            tenants: vec![Tenant {
+                id: "tenant-a".to_string(),
+                name: "Tenant A".to_string(),
+                secret_envs: vec!["TENANT_A_PASSWORD".to_string()],
+            }],
+            ..Config::default()
+        };
+        config.instances.push(OdooInstance {
+            id: "1".to_string(),
+            name: "Tenant A Odoo".to_string(),
+            url: "https://odoo.test".to_string(),
+            db: "db".to_string(),
+            username: "admin".to_string(),
+            password: String::new().into(),
+            password_env: Some("OTHER_TENANT_PASSWORD".to_string()),
+            active: true,
+            rpc_transport: RpcTransport::Auto,
+            disabled_tools: None,
+            folder_id: None,
+            mode: None,
+            allowed_tools: None,
+            permissions: None,
+            query_limits: None,
+            tenant_id: Some("tenant-a".to_string()),
+        });
+
+        assert!(config.validate().is_err());
+        config.instances[0].password_env = Some("TENANT_A_PASSWORD".to_string());
+        assert!(config.validate().is_ok());
     }
 
     #[test]
@@ -1173,6 +1335,7 @@ mod tests {
                 max_response_records: Some(25),
                 ..QueryProtectionOverrides::default()
             }),
+            tenant_id: None,
         };
 
         let effective = instance.effective_query_settings(&global);
@@ -1199,6 +1362,7 @@ mod tests {
             allowed_tools: None,
             permissions: None,
             query_limits: None,
+            tenant_id: None,
         };
 
         assert!(instance.is_tool_allowed("odoo-search-read", "crud"));
@@ -1225,6 +1389,7 @@ mod tests {
             allowed_tools: None,
             permissions: None,
             query_limits: None,
+            tenant_id: None,
         };
 
         assert!(instance.is_tool_allowed("odoo-search-read", "crud"));
@@ -1253,6 +1418,7 @@ mod tests {
             allowed_tools: None,
             permissions: None,
             query_limits: None,
+            tenant_id: None,
         };
 
         assert!(!instance.is_tool_allowed("odoo-create", "read_only"));

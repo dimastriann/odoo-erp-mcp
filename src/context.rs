@@ -119,6 +119,7 @@ pub(crate) struct RequestContext {
     pub(crate) agent: AgentIdentity,
     pub(crate) actor: ActorIdentity,
     pub(crate) instance: String,
+    pub(crate) tenant: String,
 }
 
 impl RequestContext {
@@ -130,6 +131,7 @@ impl RequestContext {
             agent: AgentIdentity::default(),
             actor: ActorIdentity::default(),
             instance: String::new(),
+            tenant: String::new(),
         }
     }
 
@@ -145,6 +147,20 @@ impl RequestContext {
             agent,
             actor,
             instance,
+            tenant: String::new(),
+        }
+    }
+
+    pub(crate) fn with_tenant(mut self, tenant: impl Into<String>) -> Self {
+        self.tenant = tenant.into();
+        self
+    }
+
+    pub(crate) fn tenant_or_default(&self) -> &str {
+        if self.tenant.is_empty() {
+            "default"
+        } else {
+            &self.tenant
         }
     }
 }

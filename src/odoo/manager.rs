@@ -86,6 +86,7 @@ mod tests {
             allowed_tools: None,
             permissions: None,
             query_limits: None,
+            tenant_id: None,
         };
 
         let result = manager

@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - OAuth 2.1 resource-server validation with issuer, audience, JWKS, and asymmetric JWT checks.
 - Remote RBAC roles with principal and API-key subject mapping.
+- Tenant and instance scoping with tenant secret allowlists, tenant-tagged audit/approvals, and cross-tenant isolation tests.
+- Kubernetes manifests with namespace, PVC, ConfigMap, Deployment, Service, and Ingress.
 
 ## [0.10.0] - 2026-11-22
 

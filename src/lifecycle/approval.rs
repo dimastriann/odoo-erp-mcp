@@ -56,6 +56,8 @@ pub(crate) struct ApprovalRequest {
     pub(crate) payload_hash: String,
     pub(crate) actor_subject: Option<String>,
     pub(crate) instance: String,
+    #[serde(default = "default_tenant")]
+    pub(crate) tenant: String,
     pub(crate) requested_at: i64,
     pub(crate) expires_at: i64,
     pub(crate) state: ApprovalState,
@@ -82,6 +84,7 @@ impl ApprovalRequest {
             payload_hash: operation.payload_hash.to_string(),
             actor_subject: context.actor.subject.clone(),
             instance: context.instance.clone(),
+            tenant: context.tenant_or_default().to_string(),
             requested_at: now,
             expires_at: now.saturating_add(ttl_seconds),
             state: ApprovalState::Pending,
@@ -144,9 +147,12 @@ impl ApprovalRequest {
                 "Approval operation target changed after approval",
             ));
         }
-        if self.actor_subject != context.actor.subject || self.instance != context.instance {
+        if self.actor_subject != context.actor.subject
+            || self.instance != context.instance
+            || self.tenant != context.tenant_or_default()
+        {
             return Err(AppError::authorization(
-                "Approval actor or instance does not match the request",
+                "Approval actor, instance, or tenant does not match the request",
             ));
         }
         Ok(())
@@ -228,6 +234,10 @@ fn now_seconds() -> i64 {
         .map_or(0, |duration| duration.as_secs() as i64)
 }
 
+fn default_tenant() -> String {
+    "default".to_string()
+}
+
 fn approval_storage_path() -> PathBuf {
     Config::get_path().with_file_name("approvals.json")
 }
@@ -264,6 +274,7 @@ fn same_pending_request(
         && request.model == operation.model
         && request.actor_subject == context.actor.subject
         && request.instance == context.instance
+        && request.tenant == context.tenant_or_default()
 }
 
 /// Returns an existing pending approval for the same stable operation target or
@@ -316,6 +327,7 @@ pub(crate) fn list_approvals() -> Result<Vec<ApprovalRequest>, AppError> {
 fn record_approval_decision(request: &ApprovalRequest, outcome: AuditOutcome) {
     let mut event = AuditEvent::new(AuditEventKind::ApprovalDecided, outcome)
         .with_instance(request.instance.clone())
+        .with_tenant(request.tenant.clone())
         .with_details(json!({
             "approval_id": request.id.to_string(),
             "state": request.state
@@ -462,6 +474,17 @@ mod tests {
         assert_eq!(request.state, ApprovalState::Pending);
         assert_eq!(request.expires_at, 160);
         assert!(request.is_expired(160));
+    }
+
+    #[test]
+    fn approval_is_scoped_to_tenant() {
+        let op = operation();
+        let owner = context(Some("u1"), "prod").with_tenant("tenant-a");
+        let request = ApprovalRequest::for_operation(&op, &owner, 100, 60).unwrap();
+        assert_eq!(request.tenant, "tenant-a");
+        assert!(request.ensure_matches(&op, &owner).is_ok());
+        let other = context(Some("u1"), "prod").with_tenant("tenant-b");
+        assert!(request.ensure_matches(&op, &other).is_err());
     }
 
     #[test]

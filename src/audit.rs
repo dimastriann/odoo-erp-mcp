@@ -64,6 +64,8 @@ pub(crate) struct AuditEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) instance: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) tenant: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) operation_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) model: Option<String>,
@@ -91,6 +93,7 @@ impl AuditEvent {
             agent: None,
             client: None,
             instance: None,
+            tenant: None,
             operation_id: None,
             model: None,
             risk: None,
@@ -107,6 +110,14 @@ impl AuditEvent {
         self.agent = context.agent.name.clone();
         self.client = context.client.name.clone();
         self.instance = Some(context.instance.clone());
+        if !context.tenant.is_empty() {
+            self.tenant = Some(context.tenant.clone());
+        }
+        self
+    }
+
+    pub(crate) fn with_tenant(mut self, tenant: impl Into<String>) -> Self {
+        self.tenant = Some(tenant.into());
         self
     }
 

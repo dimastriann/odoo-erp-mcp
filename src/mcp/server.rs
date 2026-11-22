@@ -444,7 +444,8 @@ async fn handle_request_with_identity(
             };
 
             let request_context =
-                request_context(client_identity, &params, instance_obj.name.clone());
+                request_context(client_identity, &params, instance_obj.name.clone())
+                    .with_tenant(instance_obj.tenant_id().to_string());
             let span = observability::Span::new(
                 "tool_call",
                 json!({

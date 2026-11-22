@@ -654,11 +654,11 @@ Goal: Support authenticated remote access, organizational isolation, and product
 
 - [x] S8-11 — Add role management.
 - [x] S8-12 — Add user-to-role mapping.
-- [ ] S8-13 — Add organization and tenant identity.
-- [ ] S8-14 — Add user-to-instance mapping.
-- [ ] S8-15 — Scope persistent storage per tenant.
-- [ ] S8-16 — Scope secrets per tenant.
-- [ ] S8-17 — Add cross-tenant isolation tests.
+- [x] S8-13 — Add organization and tenant identity.
+- [x] S8-14 — Add user-to-instance mapping.
+- [x] S8-15 — Scope persistent storage per tenant.
+- [x] S8-16 — Scope secrets per tenant.
+- [x] S8-17 — Add cross-tenant isolation tests.
 
 ## 8.3 Production deployment
 
@@ -666,14 +666,14 @@ Goal: Support authenticated remote access, organizational isolation, and product
 - [x] S8-19 — Add a Docker Compose deployment.
 - [x] S8-20 — Add an environment-configuration reference.
 - [x] S8-21 — Document reverse-proxy and TLS setup.
-- [ ] S8-22 — Add Kubernetes manifests when required.
+- [x] S8-22 — Add Kubernetes manifests when required.
 
 ## Stage 8 Definition of Done
 
-- [ ] Remote access requires a trusted identity.
-- [ ] Rate, request, and connection limits are enforced.
-- [ ] Tenants cannot access another tenant's configuration, secrets, or data.
-- [ ] Production deployment and recovery procedures are documented.
+- [x] Remote access requires a trusted identity.
+- [x] Rate, request, and connection limits are enforced.
+- [x] Tenants cannot access another tenant's configuration, secrets, or data.
+- [x] Production deployment and recovery procedures are documented.
 
 ---
 
@@ -831,5 +831,5 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
 | Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
 | Stage 7 - Business Tools and Analytics | In progress | 28/28 | Aggregation protection, typed metrics/group-bys, company and currency context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; live Odoo validation remains. |
-| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 16/22 | Remote MCP hardening, Docker deployment, OAuth 2.1 validation, and RBAC roles added; tenant isolation and Kubernetes remain. |
+| Stage 8 - Remote MCP and Enterprise Readiness | Complete | 22/22 | Remote MCP hardening, OAuth 2.1, RBAC, tenant and instance isolation, tenant-scoped secrets/storage metadata, Docker, and Kubernetes deployment are complete. |
 | Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |

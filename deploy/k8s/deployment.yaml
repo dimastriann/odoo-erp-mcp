@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: odoo-erp-mcp
+  namespace: odoo-erp-mcp
+  labels:
+    app.kubernetes.io/name: odoo-erp-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: odoo-erp-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: odoo-erp-mcp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: odoo-erp-mcp
+          image: odoo-erp-mcp:0.10.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: ui
+              containerPort: 3333
+            - name: mcp
+              containerPort: 3334
+          env:
+            - name: ODOO_MCP_CONFIG_PATH
+              value: /data/config.json
+            - name: ODOO_MCP_UI_BIND
+              value: 0.0.0.0:3333
+          envFrom:
+            - secretRef:
+                name: odoo-erp-mcp-secrets
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /data/config.json
+              subPath: config.json
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: ui
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: ui
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: odoo-erp-mcp-data
+        - name: config
+          configMap:
+            name: odoo-erp-mcp-config
+        - name: tmp
+          emptyDir: {}

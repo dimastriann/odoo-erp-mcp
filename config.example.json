@@ -33,6 +33,7 @@
       "rbac": null
     }
   },
+  "tenants": [],
   "folders": [
     { "id": "f-production", "name": "Production", "description": "Live ERP" }
   ],

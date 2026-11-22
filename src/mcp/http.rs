@@ -5,6 +5,7 @@ use crate::odoo::ClientManager;
 use crate::policy::Capability;
 use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference};
 use crate::tools::catalog::ToolName;
+use crate::tools::result::ToolExecutionResult;
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Extension, Request, State},
@@ -55,6 +56,8 @@ struct RbacPolicy {
     roles: std::collections::BTreeMap<String, crate::config::RbacRole>,
     principals: std::collections::BTreeMap<String, Vec<String>>,
     api_key_subjects: HashMap<[u8; 32], String>,
+    tenant_by_subject: std::collections::BTreeMap<String, String>,
+    instances_by_subject: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 impl RbacPolicy {
@@ -64,11 +67,51 @@ impl RbacPolicy {
             roles: settings.roles,
             principals: settings.principals,
             api_key_subjects,
+            tenant_by_subject: settings.principal_tenants,
+            instances_by_subject: settings.principal_instances,
         }
     }
 
     fn subject_for_api_key(&self, hash: &[u8; 32]) -> Option<&str> {
         self.api_key_subjects.get(hash).map(String::as_str)
+    }
+
+    fn has_scopes(&self) -> bool {
+        !self.tenant_by_subject.is_empty() || !self.instances_by_subject.is_empty()
+    }
+
+    fn instance_allowed(
+        &self,
+        subject: Option<&str>,
+        instance_id: &str,
+        instance_name: &str,
+        instance_tenant: &str,
+    ) -> bool {
+        if !self.has_scopes() {
+            return true;
+        }
+        let Some(subject) = subject else {
+            return false;
+        };
+        if !self.tenant_by_subject.is_empty() {
+            let Some(tenant) = self.tenant_by_subject.get(subject) else {
+                return false;
+            };
+            if tenant != instance_tenant {
+                return false;
+            }
+        }
+        if !self.instances_by_subject.is_empty() {
+            let Some(instances) = self.instances_by_subject.get(subject) else {
+                return false;
+            };
+            if !instances.iter().any(|instance| {
+                instance == instance_id || instance.eq_ignore_ascii_case(instance_name)
+            }) {
+                return false;
+            }
+        }
+        true
     }
 
     fn authorize(&self, subject: Option<&str>, capability: Capability) -> bool {
@@ -634,11 +677,54 @@ async fn handle_mcp_request(
             tool.as_deref()
                 .and_then(|name| ToolName::try_from(name).ok()),
         )
-        && !rbac.authorize(principal.subject.as_deref(), tool_name.capability())
     {
-        observability::metrics().record_request(true);
-        observability::metrics().record_tool_call(true);
-        return JsonRpcErrorBody::forbidden().into_response_with_status(StatusCode::FORBIDDEN);
+        if !rbac.authorize(principal.subject.as_deref(), tool_name.capability()) {
+            observability::metrics().record_request(true);
+            observability::metrics().record_tool_call(true);
+            return JsonRpcErrorBody::forbidden().into_response_with_status(StatusCode::FORBIDDEN);
+        }
+        if tool_name == ToolName::ListInstances {
+            let revision = state.runtime.revision();
+            let instances = {
+                let config = state.config.read().unwrap();
+                filtered_instances(&config, principal.subject.as_deref(), rbac)
+            };
+            let mut result = ToolExecutionResult::Success(json!({
+                "revision": revision,
+                "instances": instances
+            }))
+            .into_mcp_result();
+            result["_meta"] = json!({"configRevision": revision});
+            return json_rpc_response(Some(json!({
+                "jsonrpc": "2.0",
+                "id": request.get("id").cloned().unwrap_or(Value::Null),
+                "result": result
+            })));
+        }
+        if tool_name.requires_client() {
+            let instance_target = request
+                .pointer("/params/arguments/instance")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let instance = {
+                let config = state.config.read().unwrap();
+                config.find_instance(instance_target).map(|instance| {
+                    (
+                        instance.id.clone(),
+                        instance.name.clone(),
+                        instance.tenant_id().to_string(),
+                    )
+                })
+            };
+            if let Some((id, name, tenant)) = instance
+                && !rbac.instance_allowed(principal.subject.as_deref(), &id, &name, &tenant)
+            {
+                observability::metrics().record_request(true);
+                observability::metrics().record_tool_call(true);
+                return JsonRpcErrorBody::forbidden()
+                    .into_response_with_status(StatusCode::FORBIDDEN);
+            }
+        }
     }
 
     let (core, session_id) =
@@ -732,6 +818,35 @@ async fn handle_session_delete(
         JsonRpcErrorBody::session_error("Unknown or expired MCP session")
             .into_response_with_status(StatusCode::NOT_FOUND)
     }
+}
+
+fn filtered_instances(config: &Config, subject: Option<&str>, rbac: &RbacPolicy) -> Vec<Value> {
+    config
+        .instances
+        .iter()
+        .filter(|instance| {
+            rbac.instance_allowed(subject, &instance.id, &instance.name, instance.tenant_id())
+        })
+        .map(|instance| {
+            let folder = instance
+                .folder_id
+                .as_ref()
+                .and_then(|folder_id| config.folders.iter().find(|folder| folder.id == *folder_id))
+                .map(|folder| json!({"id": folder.id, "name": folder.name}));
+            json!({
+                "id": instance.id,
+                "name": instance.name,
+                "tenant_id": instance.tenant_id(),
+                "active": instance.active,
+                "mode": instance.get_mode(&config.global_settings.default_mode),
+                "rpc_transport": instance.rpc_transport.as_str(),
+                "folder": folder,
+                "disabled_tools": instance.disabled_tools.clone().unwrap_or_default(),
+                "has_credentials": !instance.password.is_empty()
+                    || instance.password_env.is_some()
+            })
+        })
+        .collect()
 }
 
 fn session_header(headers: &HeaderMap) -> Option<&str> {
@@ -1176,6 +1291,8 @@ mod tests {
                     vec!["editor".to_string()],
                 )]),
                 api_key_subjects: std::collections::BTreeMap::new(),
+                principal_tenants: std::collections::BTreeMap::new(),
+                principal_instances: std::collections::BTreeMap::new(),
             },
             HashMap::new(),
         );
@@ -1184,6 +1301,99 @@ mod tests {
         assert!(!policy.authorize(Some("issuer:editor"), Capability::Delete));
         assert!(policy.authorize(Some("issuer:unknown"), Capability::Read));
         assert!(!policy.authorize(Some("issuer:unknown"), Capability::Update));
+    }
+
+    #[test]
+    fn rbac_enforces_tenant_and_instance_scopes() {
+        let policy = RbacPolicy::new(
+            RbacSettings {
+                default_role: None,
+                roles: std::collections::BTreeMap::new(),
+                principals: std::collections::BTreeMap::new(),
+                api_key_subjects: std::collections::BTreeMap::new(),
+                principal_tenants: std::collections::BTreeMap::from([(
+                    "issuer:tenant-a".to_string(),
+                    "tenant-a".to_string(),
+                )]),
+                principal_instances: std::collections::BTreeMap::from([(
+                    "issuer:tenant-a".to_string(),
+                    vec!["1".to_string()],
+                )]),
+            },
+            HashMap::new(),
+        );
+
+        assert!(policy.instance_allowed(Some("issuer:tenant-a"), "1", "Instance One", "tenant-a"));
+        assert!(!policy.instance_allowed(Some("issuer:tenant-a"), "2", "Instance Two", "tenant-a"));
+        assert!(!policy.instance_allowed(Some("issuer:tenant-a"), "1", "Instance One", "tenant-b"));
+        assert!(!policy.instance_allowed(None, "1", "Instance One", "tenant-a"));
+    }
+
+    #[tokio::test]
+    async fn http_transport_enforces_cross_tenant_instance_isolation() {
+        let mut state = remote_state(8, Duration::from_secs(60));
+        {
+            let mut config = state.config.write().unwrap();
+            config.tenants = vec![
+                crate::config::Tenant {
+                    id: "tenant-a".to_string(),
+                    name: "Tenant A".to_string(),
+                    secret_envs: Vec::new(),
+                },
+                crate::config::Tenant {
+                    id: "tenant-b".to_string(),
+                    name: "Tenant B".to_string(),
+                    secret_envs: Vec::new(),
+                },
+            ];
+            config.instances[0].tenant_id = Some("tenant-a".to_string());
+            config.instances[1].tenant_id = Some("tenant-b".to_string());
+        }
+        state.rbac = Some(Arc::new(RbacPolicy::new(
+            RbacSettings {
+                default_role: None,
+                roles: std::collections::BTreeMap::from([(
+                    "viewer".to_string(),
+                    crate::config::RbacRole {
+                        allow: vec![Capability::Read],
+                        deny: Vec::new(),
+                    },
+                )]),
+                principals: std::collections::BTreeMap::from([(
+                    "issuer:tenant-a".to_string(),
+                    vec!["viewer".to_string()],
+                )]),
+                api_key_subjects: std::collections::BTreeMap::new(),
+                principal_tenants: std::collections::BTreeMap::from([(
+                    "issuer:tenant-a".to_string(),
+                    "tenant-a".to_string(),
+                )]),
+                principal_instances: std::collections::BTreeMap::new(),
+            },
+            HashMap::new(),
+        )));
+
+        let response = handle_mcp_request(
+            State(state),
+            Extension(Principal {
+                hash: [8u8; 32],
+                subject: Some("issuer:tenant-a".to_string()),
+            }),
+            HeaderMap::new(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "odoo-search",
+                    "arguments": {"model": "res.partner", "instance": "2"}
+                }
+            })
+            .to_string(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
@@ -1204,6 +1414,8 @@ mod tests {
                     vec!["viewer".to_string()],
                 )]),
                 api_key_subjects: std::collections::BTreeMap::new(),
+                principal_tenants: std::collections::BTreeMap::new(),
+                principal_instances: std::collections::BTreeMap::new(),
             },
             HashMap::new(),
         )));
