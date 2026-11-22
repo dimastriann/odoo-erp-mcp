@@ -23,6 +23,7 @@ A high-performance, secure Model Context Protocol (MCP) server built in Rust for
     - `odoo-preview`: Preview create, update, or delete operations without writing.
     - `odoo-get-model-schema`, `odoo-get-relations`, `odoo-get-enum-values`, `odoo-get-required-fields`, `odoo-find-relation-path`, `odoo-explain-relation`: Discover and explain Odoo semantics and relationships.
     - `odoo-list-workflows`, `odoo-workflow`: Run curated, approval-gated business actions such as sales-order confirmation, invoice posting, stock validation, cancellation, and sale-order chatter messages.
+    - `odoo-plan-query`: Compile a typed, read-only natural-language query intent into a validated plan with resolved models, fields, relationships, domain, explanation, and cost estimate.
     - `odoo-aggregate`, `odoo-list-business-reports`, `odoo-business-report`: Run protected aggregations and curated sales, inventory, CRM, accounting, and purchasing reports. Reports accept `company_id`, resolve its currency, and return the effective date range and timezone.
 - **Multi-Instance Support**: Configure and keep **multiple Odoo instances active simultaneously**. Each tool call can target a specific instance by ID or name, or fall back to the default active one.
 - **Folders and Live Configuration**: Organize instances into folders, enable or disable tools globally and per instance, and receive MCP `tools/list_changed` notifications without restarting the server.

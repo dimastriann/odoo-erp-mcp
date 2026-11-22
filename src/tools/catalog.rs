@@ -67,11 +67,12 @@ pub(crate) enum ToolName {
     Aggregate,
     ListBusinessReports,
     BusinessReport,
+    PlanQuery,
 }
 
 impl ToolName {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 35] = [
+    pub(crate) const ALL: [Self; 36] = [
         Self::SearchRead,
         Self::SearchCount,
         Self::ReadGroup,
@@ -107,6 +108,7 @@ impl ToolName {
         Self::Aggregate,
         Self::ListBusinessReports,
         Self::BusinessReport,
+        Self::PlanQuery,
     ];
 
     pub(crate) const fn as_str(self) -> &'static str {
@@ -146,6 +148,7 @@ impl ToolName {
             Self::Aggregate => "odoo-aggregate",
             Self::ListBusinessReports => "odoo-list-business-reports",
             Self::BusinessReport => "odoo-business-report",
+            Self::PlanQuery => "odoo-plan-query",
         }
     }
 
@@ -182,6 +185,7 @@ impl ToolName {
             Self::Aggregate => Capability::Read,
             Self::ListBusinessReports => Capability::Read,
             Self::BusinessReport => Capability::Read,
+            Self::PlanQuery => Capability::Read,
         }
     }
 
@@ -196,6 +200,7 @@ impl ToolName {
                 | Self::ExplainRelation
                 | Self::ListBusinessReports
                 | Self::BusinessReport
+                | Self::PlanQuery
         )
     }
 
@@ -247,6 +252,7 @@ impl TryFrom<&str> for ToolName {
             "odoo-aggregate" => Ok(Self::Aggregate),
             "odoo-list-business-reports" => Ok(Self::ListBusinessReports),
             "odoo-business-report" => Ok(Self::BusinessReport),
+            "odoo-plan-query" => Ok(Self::PlanQuery),
             _ => Err(()),
         }
     }
@@ -746,6 +752,42 @@ pub(crate) fn tool_definitions() -> Value {
                     "company_id": { "type": "integer", "description": "Optional company context" }
                 },
                 "required": ["report"]
+            }
+        },
+        {
+            "name": "odoo-plan-query",
+            "description": "Compile a typed, read-only natural-language query intent into a validated Odoo execution plan.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "instance": { "type": "string", "description": "Target Odoo instance ID or Name (optional, defaults to active instance)" },
+                    "intent": {
+                        "type": "object",
+                        "properties": {
+                            "model": { "type": "string", "description": "Odoo model name, for example res.partner" },
+                            "operation": { "type": "string", "enum": ["search_read", "count", "aggregate"], "default": "search_read" },
+                            "filters": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "field": { "type": "string" },
+                                        "operator": { "type": "string" },
+                                        "value": {}
+                                    },
+                                    "required": ["field", "operator", "value"]
+                                }
+                            },
+                            "fields": { "type": "array", "items": { "type": "string" } },
+                            "group_by": { "type": "array", "items": { "type": "string" } },
+                            "metrics": { "type": "array", "items": { "type": "string" } },
+                            "order": { "type": "string" },
+                            "limit": { "type": "integer", "minimum": 1 }
+                        },
+                        "required": ["model"]
+                    }
+                },
+                "required": ["intent"]
             }
         },
         {

@@ -14,12 +14,13 @@ use crate::lifecycle::preview;
 use crate::lifecycle::verification::{self, VerificationStatus};
 use crate::metadata;
 use crate::odoo::OdooClient;
+use crate::planner;
 use crate::risk::RiskEvaluator;
 use crate::tools::arguments::{
     AggregateArgs, BusinessReportArgs, CheckAccessArgs, CopyArgs, CreateArgs, CreateBatchArgs,
     DeleteArgs, DeleteBatchArgs, EnumValuesArgs, GetViewsArgs, ListModelsArgs, ListReportsArgs,
-    ModelFieldsArgs, ModelOnlyArgs, ModelSchemaArgs, NameSearchArgs, OnchangeArgs, PreviewArgs,
-    ReadArgs, ReadGroupArgs, RefreshMetadataArgs, RelationPathArgs, RelationsArgs,
+    ModelFieldsArgs, ModelOnlyArgs, ModelSchemaArgs, NameSearchArgs, OnchangeArgs, PlanQueryArgs,
+    PreviewArgs, ReadArgs, ReadGroupArgs, RefreshMetadataArgs, RelationPathArgs, RelationsArgs,
     RenderReportArgs, SearchArgs, SearchDomainArgs, SearchReadArgs, UpdateArgs, UpdateBatchArgs,
     WorkflowArgs,
 };
@@ -1349,6 +1350,13 @@ pub(crate) async fn execute_tool(
                 result,
                 limits.max_response_records,
             ))
+        }
+        ToolName::PlanQuery => {
+            let args: PlanQueryArgs = match serde_json::from_value(arguments) {
+                Ok(args) => args,
+                Err(error) => return ToolExecutionResult::invalid_arguments("plan-query", error),
+            };
+            ToolExecutionResult::from_app_error(planner::plan(odoo, &args.intent, limits).await)
         }
         ToolName::BusinessReport => {
             let args: BusinessReportArgs = match serde_json::from_value(arguments) {

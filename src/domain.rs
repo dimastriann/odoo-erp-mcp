@@ -55,6 +55,10 @@ const ALLOWED_DOMAIN_OPERATORS: &[&str] = &[
     "any!",
 ];
 
+pub(crate) fn is_supported_operator(operator: &str) -> bool {
+    ALLOWED_DOMAIN_OPERATORS.contains(&operator)
+}
+
 impl Domain {
     fn validate_operators(&self) -> Result<(), String> {
         for term in &self.terms {

@@ -13,6 +13,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Remote RBAC roles with principal and API-key subject mapping.
 - Tenant and instance scoping with tenant secret allowlists, tenant-tagged audit/approvals, and cross-tenant isolation tests.
 - Kubernetes manifests with namespace, PVC, ConfigMap, Deployment, Service, and Ingress.
+- Typed natural-language query intent schema with domain, field, metric, and limit validation.
+- `odoo-plan-query` for resolving models, fields, relationship paths, domains, explanations, and cost estimates into read-only plans.
 
 ## [0.10.0] - 2026-11-22
 

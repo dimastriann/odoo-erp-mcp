@@ -37,7 +37,7 @@ pub(crate) fn validate_field_names(fields: &Value) -> Result<(), String> {
     Ok(())
 }
 
-fn is_valid_field_path(field: &str) -> bool {
+pub(crate) fn is_valid_field_path(field: &str) -> bool {
     !field.is_empty() && field.split('.').all(is_valid_identifier)
 }
 

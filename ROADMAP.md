@@ -683,15 +683,15 @@ Goal: Add higher-level intelligence only after the safety, semantic, and enterpr
 
 ## 9.1 Natural-language query
 
-- [ ] S9-01 — Define a typed intent schema.
-- [ ] S9-02 — Implement a model resolver.
-- [ ] S9-03 — Implement a field resolver.
-- [ ] S9-04 — Implement a relationship resolver.
-- [ ] S9-05 — Implement a constrained domain generator.
-- [ ] S9-06 — Add domain explanations.
-- [ ] S9-07 — Add query-cost assessment.
-- [ ] S9-08 — Add a human-readable execution plan.
-- [ ] S9-09 — Restrict initial execution to read-only operations.
+- [x] S9-01 — Define a typed intent schema.
+- [x] S9-02 — Implement a model resolver.
+- [x] S9-03 — Implement a field resolver.
+- [x] S9-04 — Implement a relationship resolver.
+- [x] S9-05 — Implement a constrained domain generator.
+- [x] S9-06 — Add domain explanations.
+- [x] S9-07 — Add query-cost assessment.
+- [x] S9-08 — Add a human-readable execution plan.
+- [x] S9-09 — Restrict initial execution to read-only operations.
 - [ ] S9-10 — Create an evaluation dataset and accuracy tests.
 
 ## 9.2 Domain agents
@@ -832,4 +832,4 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
 | Stage 7 - Business Tools and Analytics | In progress | 28/28 | Aggregation protection, typed metrics/group-bys, company and currency context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; live Odoo validation remains. |
 | Stage 8 - Remote MCP and Enterprise Readiness | Complete | 22/22 | Remote MCP hardening, OAuth 2.1, RBAC, tenant and instance isolation, tenant-scoped secrets/storage metadata, Docker, and Kubernetes deployment are complete. |
-| Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |
+| Stage 9 - Strategic and Optional Capabilities | In progress | 9/35 | Typed intent schema, model/field/relationship resolution, domain generation, explanations, cost assessment, read-only planning, and `odoo-plan-query` added; evaluation dataset and later agents/workflows remain. |

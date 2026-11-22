@@ -1,3 +1,4 @@
+use crate::intent::QueryIntent;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -283,6 +284,11 @@ pub(crate) struct BusinessReportArgs {
     pub(crate) date_to: Option<String>,
     pub(crate) limit: Option<u64>,
     pub(crate) company_id: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct PlanQueryArgs {
+    pub(crate) intent: QueryIntent,
 }
 
 #[derive(Debug, Deserialize)]

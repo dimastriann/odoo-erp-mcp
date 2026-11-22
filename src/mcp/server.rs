@@ -378,6 +378,7 @@ async fn handle_request_with_identity(
             let model = arguments
                 .get("model")
                 .and_then(Value::as_str)
+                .or_else(|| arguments.pointer("/intent/model").and_then(Value::as_str))
                 .unwrap_or_default()
                 .to_string();
             let requested_fields = requested_fields(&arguments);
@@ -780,6 +781,7 @@ mod tests {
             ("odoo-aggregate", &["model", "fields"][..]),
             ("odoo-list-business-reports", &[][..]),
             ("odoo-business-report", &["report"][..]),
+            ("odoo-plan-query", &["intent"][..]),
         ];
 
         assert_eq!(tools.len(), expected_contracts.len());
