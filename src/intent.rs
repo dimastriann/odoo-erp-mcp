@@ -172,6 +172,26 @@ mod tests {
         assert!(intent.description().contains("res.partner"));
     }
 
+    #[derive(Deserialize)]
+    struct EvalCase {
+        utterance: String,
+        intent: QueryIntent,
+        expected_operation: IntentOperation,
+        expected_domain: Value,
+    }
+
+    #[test]
+    fn evaluation_dataset_covers_common_queries() {
+        let cases: Vec<EvalCase> = serde_json::from_str(include_str!("intent_eval.json")).unwrap();
+        assert!(cases.len() >= 4);
+        for case in cases {
+            assert!(!case.utterance.trim().is_empty());
+            assert!(case.intent.validate().is_ok(), "{}", case.utterance);
+            assert_eq!(case.intent.operation, case.expected_operation);
+            assert_eq!(case.intent.domain(), case.expected_domain);
+        }
+    }
+
     #[test]
     fn typed_intent_rejects_unsafe_or_conflicting_shapes() {
         let mut intent = valid_intent();

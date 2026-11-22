@@ -1,0 +1,57 @@
+[
+  {
+    "utterance": "find customers named Acme and show their names",
+    "intent": {
+      "model": "res.partner",
+      "operation": "search_read",
+      "filters": [
+        { "field": "name", "operator": "ilike", "value": "Acme" }
+      ],
+      "fields": ["id", "name"],
+      "limit": 10
+    },
+    "expected_operation": "search_read",
+    "expected_domain": [["name", "ilike", "Acme"]]
+  },
+  {
+    "utterance": "how many confirmed sales orders are there",
+    "intent": {
+      "model": "sale.order",
+      "operation": "count",
+      "filters": [
+        { "field": "state", "operator": "=", "value": "sale" }
+      ]
+    },
+    "expected_operation": "count",
+    "expected_domain": [["state", "=", "sale"]]
+  },
+  {
+    "utterance": "sum confirmed sales revenue by month",
+    "intent": {
+      "model": "sale.order",
+      "operation": "aggregate",
+      "filters": [
+        { "field": "state", "operator": "=", "value": "sale" }
+      ],
+      "group_by": ["date_order:month"],
+      "metrics": ["amount_total:sum"]
+    },
+    "expected_operation": "aggregate",
+    "expected_domain": [["state", "=", "sale"]]
+  },
+  {
+    "utterance": "list storable products",
+    "intent": {
+      "model": "product.product",
+      "operation": "search_read",
+      "filters": [
+        { "field": "type", "operator": "=", "value": "product" }
+      ],
+      "fields": ["id", "name"],
+      "order": "name asc",
+      "limit": 25
+    },
+    "expected_operation": "search_read",
+    "expected_domain": [["type", "=", "product"]]
+  }
+]
