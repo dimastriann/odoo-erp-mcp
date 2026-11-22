@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-22
+
 ### Added
 
 - Production Dockerfile, Compose deployment, configurable `ODOO_MCP_CONFIG_PATH`, and reverse-proxy/TLS documentation.
@@ -265,6 +267,10 @@ changes.
   values must be JSON objects, and domain filters must use nested clauses.
 - No MCP tools were removed or renamed.
 
+[0.10.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/dimastriann/odoo-erp-mcp/compare/v0.3.1...v0.4.0

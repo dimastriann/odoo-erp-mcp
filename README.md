@@ -558,12 +558,12 @@ Keep both upstream ports bound to localhost.
 ### GitHub Actions Release
 The included workflow (`.github/workflows/release.yml`) automatically:
 - Builds optimized binaries for **Linux**, **Windows**, and **macOS** on every version tag push.
-- Names each artifact with the version number (e.g. `odoo-erp-mcp-windows-0.6.0.exe`).
+- Names each artifact with the version number (e.g. `odoo-erp-mcp-windows-0.10.0.exe`).
 - Publishes a GitHub Release with all three binaries attached.
 
 To release a new version:
 ```bash
-git tag v0.6.0
+git tag v0.10.0
 git push origin main --tags
 ```
 
