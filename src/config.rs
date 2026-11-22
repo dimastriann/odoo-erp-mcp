@@ -571,6 +571,9 @@ impl Config {
     }
 
     pub fn get_path() -> std::path::PathBuf {
+        if let Some(path) = std::env::var_os("ODOO_MCP_CONFIG_PATH") {
+            return std::path::PathBuf::from(path);
+        }
         if cfg!(debug_assertions) {
             // In debug mode, use the project root
             let manifest_dir = env!("CARGO_MANIFEST_DIR");

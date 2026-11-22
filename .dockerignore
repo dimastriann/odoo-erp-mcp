@@ -1,0 +1,12 @@
+target
+.git
+.github
+.agents
+.claude
+.opencode
+.env
+config.json
+approvals.json
+audit.log.jsonl
+data
+docker-data

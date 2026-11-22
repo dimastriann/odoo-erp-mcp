@@ -488,6 +488,71 @@ odoo-mcp/
 
 ![Example Windows release folder containing the environment file, Odoo configuration, and MCP executable](assets/example-mcp-folder.png)
 
+### Docker Deployment
+The repository includes a production-oriented `Dockerfile` and
+`docker-compose.yml`. The image runs as a non-root user with a read-only root
+filesystem; `/data` is the only writable volume.
+
+1. Create the data directory and copy the configuration template:
+   ```bash
+   mkdir -p data
+   cp config.example.json data/config.json
+   ```
+2. Set the remote bind address in `data/config.json` when using containers:
+   ```json
+   "remote_mcp": {
+     "enabled": true,
+     "bind_address": "0.0.0.0:3334"
+   }
+   ```
+3. Create `.env` from `.env.example` and set the UI password and remote API key.
+4. Start the service:
+   ```bash
+   docker compose up --build -d
+   ```
+
+Compose binds both published ports to `127.0.0.1`. Put a TLS-terminating
+reverse proxy in front of the remote MCP port; do not expose it directly.
+
+`ODOO_MCP_CONFIG_PATH` overrides the configuration file location, which is how
+the container uses `/data/config.json`. `ODOO_MCP_UI_BIND` controls the Web UI
+listener.
+
+| Variable | Purpose |
+| --- | --- |
+| `ODOO_MCP_CONFIG_PATH` | Absolute path to `config.json`; audit data is stored beside it. |
+| `ODOO_MCP_UI_USERNAME` | Web UI administrator username. Defaults to `admin`. |
+| `ODOO_MCP_UI_PASSWORD` | Web UI administrator password. Generated one-time if omitted. |
+| `ODOO_MCP_UI_BIND` | Web UI bind address. Defaults to `127.0.0.1:3333`. |
+| `ODOO_MCP_REMOTE_API_KEY` | Example API-key variable referenced by `remote_mcp.api_key_envs`. |
+| `ODOO_MCP_REMOTE_JWT_SECRET` | Example JWT secret variable referenced by `remote_mcp.jwt_hs256_secret_env`. |
+
+#### Reverse proxy and TLS
+Forward `/mcp` to `http://127.0.0.1:3334` and have the proxy overwrite
+`X-Forwarded-Proto: https`. Never forward a client-supplied value unchanged.
+
+Caddy example:
+
+```caddyfile
+mcp.example.com {
+    reverse_proxy 127.0.0.1:3334
+}
+```
+
+Nginx example:
+
+```nginx
+location = /mcp {
+    proxy_pass http://127.0.0.1:3334;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+}
+```
+
+If the Web UI is also exposed, give it a separate hostname and TLS listener.
+Keep both upstream ports bound to localhost.
+
 ### GitHub Actions Release
 The included workflow (`.github/workflows/release.yml`) automatically:
 - Builds optimized binaries for **Linux**, **Windows**, and **macOS** on every version tag push.

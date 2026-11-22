@@ -1,0 +1,20 @@
+services:
+  odoo-erp-mcp:
+    build: .
+    image: odoo-erp-mcp:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ODOO_MCP_CONFIG_PATH: /data/config.json
+      ODOO_MCP_UI_BIND: 0.0.0.0:3333
+    ports:
+      - "127.0.0.1:3333:3333"
+      - "127.0.0.1:3334:3334"
+    volumes:
+      - ./data:/data
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp

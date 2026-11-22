@@ -662,10 +662,10 @@ Goal: Support authenticated remote access, organizational isolation, and product
 
 ## 8.3 Production deployment
 
-- [ ] S8-18 — Add a production Dockerfile.
-- [ ] S8-19 — Add a Docker Compose deployment.
-- [ ] S8-20 — Add an environment-configuration reference.
-- [ ] S8-21 — Document reverse-proxy and TLS setup.
+- [x] S8-18 — Add a production Dockerfile.
+- [x] S8-19 — Add a Docker Compose deployment.
+- [x] S8-20 — Add an environment-configuration reference.
+- [x] S8-21 — Document reverse-proxy and TLS setup.
 - [ ] S8-22 — Add Kubernetes manifests when required.
 
 ## Stage 8 Definition of Done
@@ -831,5 +831,5 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
 | Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
 | Stage 7 - Business Tools and Analytics | In progress | 28/28 | Aggregation protection, typed metrics/group-bys, company and currency context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; live Odoo validation remains. |
-| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 9/22 | Transport-independent core and disabled-by-default HTTP transport with HTTPS, hashed API keys, rotation, rate limits, body limits, principal-bound sessions, and HS256 JWT validation added; OAuth, RBAC, tenant isolation, and production deployment remain. |
+| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 13/22 | Remote MCP hardening plus Docker, Compose, environment reference, and reverse-proxy/TLS docs added; OAuth, RBAC, tenant isolation, and Kubernetes remain. |
 | Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |

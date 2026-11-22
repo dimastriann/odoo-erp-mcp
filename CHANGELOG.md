@@ -9,6 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Production Dockerfile, Compose deployment, configurable `ODOO_MCP_CONFIG_PATH`, and reverse-proxy/TLS documentation.
 - Optional HTTP JSON-RPC remote MCP transport (`POST /mcp`), disabled by
   default, with HTTPS enforcement for non-loopback binds and hashed Bearer
   API-key authentication backed by environment variables, with support for
