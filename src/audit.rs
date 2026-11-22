@@ -218,10 +218,10 @@ impl LocalAuditStorage {
                 if !event.verify_hash() {
                     return Err(AppError::internal("audit event hash mismatch"));
                 }
-                if let Some(previous) = events.last() {
-                    if event.previous_hash.as_deref() != Some(previous.hash.as_str()) {
-                        return Err(AppError::internal("audit hash chain is broken"));
-                    }
+                if let Some(previous) = events.last()
+                    && event.previous_hash.as_deref() != Some(previous.hash.as_str())
+                {
+                    return Err(AppError::internal("audit hash chain is broken"));
                 }
                 events.push(event);
             }
