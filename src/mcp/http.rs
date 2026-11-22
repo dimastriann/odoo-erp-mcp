@@ -2,7 +2,9 @@ use super::server::McpCore;
 use crate::mcp::McpRuntime;
 use crate::observability;
 use crate::odoo::ClientManager;
+use crate::policy::Capability;
 use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference};
+use crate::tools::catalog::ToolName;
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Extension, Request, State},
@@ -13,6 +15,7 @@ use axum::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header, jwk::JwkSet};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -21,14 +24,17 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use crate::config::Config;
+use crate::config::{Config, OAuthSettings, RbacSettings};
 
 type SharedConfig = Arc<RwLock<Config>>;
 
 const SESSION_HEADER: &str = "mcp-session-id";
 
-#[derive(Clone, Copy)]
-struct Principal([u8; 32]);
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Principal {
+    hash: [u8; 32],
+    subject: Option<String>,
+}
 
 #[derive(Clone)]
 struct RemoteState {
@@ -38,8 +44,127 @@ struct RemoteState {
     require_https: bool,
     expected_api_key_hashes: Vec<[u8; 32]>,
     jwt_hs256_secret: Option<Vec<u8>>,
+    oauth: Option<Arc<OAuthValidator>>,
+    rbac: Option<Arc<RbacPolicy>>,
     rate_limiter: Arc<RateLimiter>,
     sessions: Arc<Mutex<SessionStore>>,
+}
+
+struct RbacPolicy {
+    default_role: Option<String>,
+    roles: std::collections::BTreeMap<String, crate::config::RbacRole>,
+    principals: std::collections::BTreeMap<String, Vec<String>>,
+    api_key_subjects: HashMap<[u8; 32], String>,
+}
+
+impl RbacPolicy {
+    fn new(settings: RbacSettings, api_key_subjects: HashMap<[u8; 32], String>) -> Self {
+        Self {
+            default_role: settings.default_role,
+            roles: settings.roles,
+            principals: settings.principals,
+            api_key_subjects,
+        }
+    }
+
+    fn subject_for_api_key(&self, hash: &[u8; 32]) -> Option<&str> {
+        self.api_key_subjects.get(hash).map(String::as_str)
+    }
+
+    fn authorize(&self, subject: Option<&str>, capability: Capability) -> bool {
+        let roles = subject
+            .and_then(|subject| self.principals.get(subject))
+            .map(|roles| roles.as_slice());
+        let roles = match roles {
+            Some(roles) if !roles.is_empty() => roles,
+            _ => match &self.default_role {
+                Some(role) => std::slice::from_ref(role),
+                None => return false,
+            },
+        };
+        let mut allowed = false;
+        for role in roles {
+            let Some(role) = self.roles.get(role) else {
+                continue;
+            };
+            if role.deny.contains(&capability) {
+                return false;
+            }
+            if role.allow.contains(&capability) {
+                allowed = true;
+            }
+        }
+        allowed
+    }
+}
+
+struct OAuthValidator {
+    issuer: String,
+    audience: String,
+    jwks: JwkSet,
+}
+
+impl OAuthValidator {
+    fn validate(&self, token: &str) -> Option<Principal> {
+        let header = decode_header(token).ok()?;
+        if !matches!(
+            header.alg,
+            Algorithm::RS256
+                | Algorithm::RS384
+                | Algorithm::RS512
+                | Algorithm::ES256
+                | Algorithm::ES384
+        ) {
+            return None;
+        }
+        let kid = header.kid.as_deref()?;
+        let jwk = self.jwks.find(kid)?;
+        let key = DecodingKey::from_jwk(jwk).ok()?;
+        let mut validation = Validation::new(header.alg);
+        validation.set_audience(&[&self.audience]);
+        validation.set_issuer(&[&self.issuer]);
+        validation.leeway = JWT_LEEWAY_SECS as u64;
+        let claims = decode::<Value>(token, &key, &validation).ok()?.claims;
+        let subject = claims.get("sub")?.as_str()?.trim();
+        if subject.is_empty() {
+            return None;
+        }
+        let issuer = claims
+            .get("iss")
+            .and_then(Value::as_str)
+            .unwrap_or(&self.issuer);
+        Some(Principal {
+            hash: Sha256::digest(format!("oauth:{issuer}:{subject}").as_bytes()).into(),
+            subject: Some(format!("{issuer}:{subject}")),
+        })
+    }
+}
+
+async fn fetch_oauth_validator(settings: &OAuthSettings) -> Result<OAuthValidator, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|error| format!("failed to build JWKS client: {error}"))?;
+    let response = client
+        .get(&settings.jwks_url)
+        .send()
+        .await
+        .map_err(|error| format!("JWKS request failed: {error}"))?;
+    if !response.status().is_success() {
+        return Err(format!("JWKS request returned HTTP {}", response.status()));
+    }
+    let jwks = response
+        .json::<JwkSet>()
+        .await
+        .map_err(|error| format!("invalid JWKS document: {error}"))?;
+    if jwks.keys.is_empty() {
+        return Err("JWKS document contains no keys".to_string());
+    }
+    Ok(OAuthValidator {
+        issuer: settings.issuer.clone(),
+        audience: settings.audience.clone(),
+        jwks,
+    })
 }
 
 struct SessionStore {
@@ -163,6 +288,8 @@ pub(crate) async fn start_remote_mcp(
         bind_address,
         api_key_envs,
         jwt_hs256_secret_env,
+        oauth_settings,
+        rbac_settings,
         rate_limit_per_minute,
         max_request_bytes,
         max_sessions,
@@ -178,6 +305,8 @@ pub(crate) async fn start_remote_mcp(
             settings.bind_address.clone(),
             names,
             settings.jwt_hs256_secret_env.clone().unwrap_or_default(),
+            settings.oauth.clone(),
+            settings.rbac.clone(),
             settings.rate_limit_per_minute,
             settings.max_request_bytes,
             settings.max_sessions,
@@ -188,6 +317,7 @@ pub(crate) async fn start_remote_mcp(
         !bind_address.starts_with("127.0.0.1:") && !bind_address.starts_with("[::1]:");
     let provider = EnvironmentSecretProvider::new();
     let mut expected_api_key_hashes = Vec::with_capacity(api_key_envs.len());
+    let mut api_key_subjects = HashMap::new();
     for api_key_env in &api_key_envs {
         let api_key = match provider.resolve(&SecretReference::new(api_key_env)) {
             Ok(Some(secret)) if !secret.expose_secret().is_empty() => secret,
@@ -202,7 +332,13 @@ pub(crate) async fn start_remote_mcp(
                 return;
             }
         };
-        expected_api_key_hashes.push(Sha256::digest(api_key.expose_secret().as_bytes()).into());
+        let hash: [u8; 32] = Sha256::digest(api_key.expose_secret().as_bytes()).into();
+        if let Some(rbac) = &rbac_settings
+            && let Some(subject) = rbac.api_key_subjects.get(api_key_env)
+        {
+            api_key_subjects.insert(hash, subject.clone());
+        }
+        expected_api_key_hashes.push(hash);
     }
     let jwt_hs256_secret = if jwt_hs256_secret_env.trim().is_empty() {
         None
@@ -223,6 +359,17 @@ pub(crate) async fn start_remote_mcp(
             }
         }
     };
+    let oauth = match oauth_settings {
+        Some(settings) => match fetch_oauth_validator(&settings).await {
+            Ok(validator) => Some(Arc::new(validator)),
+            Err(error) => {
+                eprintln!("Remote MCP transport disabled: OAuth JWKS unavailable: {error}");
+                return;
+            }
+        },
+        None => None,
+    };
+    let rbac = rbac_settings.map(|settings| Arc::new(RbacPolicy::new(settings, api_key_subjects)));
     let state = RemoteState {
         config,
         client_manager,
@@ -230,6 +377,8 @@ pub(crate) async fn start_remote_mcp(
         require_https,
         expected_api_key_hashes,
         jwt_hs256_secret,
+        oauth,
+        rbac,
         rate_limiter: Arc::new(RateLimiter::new(
             rate_limit_per_minute,
             Duration::from_secs(60),
@@ -271,18 +420,26 @@ async fn authorize_remote(
     if state.require_https && !request_is_https(&request) {
         return JsonRpcErrorBody::parse_error("HTTPS required for remote MCP").into_response();
     }
-    let Some(principal) = authenticate_request(
+    let Some(mut principal) = authenticate_request(
         &request,
         &state.expected_api_key_hashes,
         state.jwt_hs256_secret.as_deref(),
+        state.oauth.as_deref(),
     ) else {
         return unauthorized_response();
     };
-    if let Err(retry_after) = state.rate_limiter.check(principal).await {
+    if principal.subject.is_none()
+        && let Some(rbac) = &state.rbac
+    {
+        principal.subject = rbac
+            .subject_for_api_key(&principal.hash)
+            .map(str::to_string);
+    }
+    if let Err(retry_after) = state.rate_limiter.check(principal.hash).await {
         return rate_limited_response(retry_after);
     }
     let mut request = request;
-    request.extensions_mut().insert(Principal(principal));
+    request.extensions_mut().insert(principal);
     next.run(request).await
 }
 
@@ -290,19 +447,29 @@ fn authenticate_request(
     request: &Request,
     expected_api_keys: &[[u8; 32]],
     jwt_secret: Option<&[u8]>,
-) -> Option<[u8; 32]> {
+    oauth: Option<&OAuthValidator>,
+) -> Option<Principal> {
     let token = bearer_token(request)?;
-    if let Some(secret) = jwt_secret
-        && token.split('.').count() == 3
-        && let Some(principal) = validate_jwt(token, secret)
-    {
-        return Some(principal);
+    if token.split('.').count() == 3 {
+        if let Some(secret) = jwt_secret
+            && let Some(principal) = validate_jwt(token, secret)
+        {
+            return Some(principal);
+        }
+        if let Some(oauth) = oauth
+            && let Some(principal) = oauth.validate(token)
+        {
+            return Some(principal);
+        }
     }
     let api_key_hash: [u8; 32] = Sha256::digest(token.as_bytes()).into();
     expected_api_keys
         .iter()
         .any(|expected| constant_time_eq(&api_key_hash, expected))
-        .then_some(api_key_hash)
+        .then_some(Principal {
+            hash: api_key_hash,
+            subject: None,
+        })
 }
 
 fn bearer_token(request: &Request) -> Option<&str> {
@@ -319,7 +486,7 @@ fn bearer_token(request: &Request) -> Option<&str> {
 
 const JWT_LEEWAY_SECS: i64 = 60;
 
-fn validate_jwt(token: &str, secret: &[u8]) -> Option<[u8; 32]> {
+fn validate_jwt(token: &str, secret: &[u8]) -> Option<Principal> {
     let mut parts = token.split('.');
     let encoded_header = parts.next()?;
     let encoded_payload = parts.next()?;
@@ -361,7 +528,10 @@ fn validate_jwt(token: &str, secret: &[u8]) -> Option<[u8; 32]> {
         .get("iss")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    Some(Sha256::digest(format!("jwt:{issuer}:{subject}").as_bytes()).into())
+    Some(Principal {
+        hash: Sha256::digest(format!("jwt:{issuer}:{subject}").as_bytes()).into(),
+        subject: Some(format!("{issuer}:{}", subject.trim())),
+    })
 }
 
 fn numeric_date(value: &Value) -> Option<i64> {
@@ -458,19 +628,31 @@ async fn handle_mcp_request(
         .map(str::to_string);
     let started = Instant::now();
 
-    let (core, session_id) = if method == "initialize" {
-        let core = Arc::new(Mutex::new(McpCore::new(
-            state.config.clone(),
-            state.client_manager.clone(),
-            state.runtime.clone(),
-        )));
-        let session_id =
-            match state
-                .sessions
-                .lock()
-                .await
-                .create(core.clone(), principal.0, Instant::now())
-            {
+    if method == "tools/call"
+        && let (Some(rbac), Some(tool_name)) = (
+            &state.rbac,
+            tool.as_deref()
+                .and_then(|name| ToolName::try_from(name).ok()),
+        )
+        && !rbac.authorize(principal.subject.as_deref(), tool_name.capability())
+    {
+        observability::metrics().record_request(true);
+        observability::metrics().record_tool_call(true);
+        return JsonRpcErrorBody::forbidden().into_response_with_status(StatusCode::FORBIDDEN);
+    }
+
+    let (core, session_id) =
+        if method == "initialize" {
+            let core = Arc::new(Mutex::new(McpCore::new(
+                state.config.clone(),
+                state.client_manager.clone(),
+                state.runtime.clone(),
+            )));
+            let session_id = match state.sessions.lock().await.create(
+                core.clone(),
+                principal.hash,
+                Instant::now(),
+            ) {
                 Ok(session_id) => session_id,
                 Err(message) => {
                     observability::metrics().record_request(true);
@@ -478,25 +660,25 @@ async fn handle_mcp_request(
                         .into_response_with_status(StatusCode::SERVICE_UNAVAILABLE);
                 }
             };
-        (core, Some(session_id))
-    } else {
-        let Some(session_id) = session_header(&headers) else {
-            observability::metrics().record_request(true);
-            return JsonRpcErrorBody::session_error("Mcp-Session-Id header is required")
-                .into_response_with_status(StatusCode::BAD_REQUEST);
+            (core, Some(session_id))
+        } else {
+            let Some(session_id) = session_header(&headers) else {
+                observability::metrics().record_request(true);
+                return JsonRpcErrorBody::session_error("Mcp-Session-Id header is required")
+                    .into_response_with_status(StatusCode::BAD_REQUEST);
+            };
+            let core = state
+                .sessions
+                .lock()
+                .await
+                .get(session_id, principal.hash, Instant::now());
+            let Some(core) = core else {
+                observability::metrics().record_request(true);
+                return JsonRpcErrorBody::session_error("Unknown or expired MCP session")
+                    .into_response_with_status(StatusCode::NOT_FOUND);
+            };
+            (core, None)
         };
-        let core = state
-            .sessions
-            .lock()
-            .await
-            .get(session_id, principal.0, Instant::now());
-        let Some(core) = core else {
-            observability::metrics().record_request(true);
-            return JsonRpcErrorBody::session_error("Unknown or expired MCP session")
-                .into_response_with_status(StatusCode::NOT_FOUND);
-        };
-        (core, None)
-    };
 
     let response = core.lock().await.handle_request(request).await;
     let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -540,7 +722,7 @@ async fn handle_session_delete(
     let removed = {
         let mut sessions = state.sessions.lock().await;
         sessions
-            .get(session_id, principal.0, Instant::now())
+            .get(session_id, principal.hash, Instant::now())
             .is_some()
             && sessions.remove(session_id)
     };
@@ -609,6 +791,14 @@ impl JsonRpcErrorBody {
         }))
     }
 
+    fn forbidden() -> Self {
+        Self(json!({
+            "jsonrpc": "2.0",
+            "error": {"code": -32004, "message": "Forbidden"},
+            "id": Value::Null
+        }))
+    }
+
     fn session_error(message: &str) -> Self {
         Self(json!({
             "jsonrpc": "2.0",
@@ -649,11 +839,28 @@ mod tests {
     }
 
     async fn handle(state: RemoteState, headers: HeaderMap, body: String) -> Response {
-        handle_mcp_request(State(state), Extension(Principal([0u8; 32])), headers, body).await
+        handle_mcp_request(
+            State(state),
+            Extension(Principal {
+                hash: [0u8; 32],
+                subject: None,
+            }),
+            headers,
+            body,
+        )
+        .await
     }
 
     async fn delete_session(state: RemoteState, headers: HeaderMap) -> Response {
-        handle_session_delete(State(state), Extension(Principal([0u8; 32])), headers).await
+        handle_session_delete(
+            State(state),
+            Extension(Principal {
+                hash: [0u8; 32],
+                subject: None,
+            }),
+            headers,
+        )
+        .await
     }
 
     fn remote_state(max_sessions: usize, ttl: Duration) -> RemoteState {
@@ -665,6 +872,8 @@ mod tests {
             require_https: false,
             expected_api_key_hashes: vec![Sha256::digest(b"valid-api-key").into()],
             jwt_hs256_secret: None,
+            oauth: None,
+            rbac: None,
             rate_limiter: Arc::new(RateLimiter::new(120, Duration::from_secs(60))),
             sessions: Arc::new(Mutex::new(SessionStore::new(max_sessions, ttl))),
         }
@@ -777,7 +986,10 @@ mod tests {
         let state = remote_state(8, Duration::from_secs(60));
         let init = handle_mcp_request(
             State(state.clone()),
-            Extension(Principal([1u8; 32])),
+            Extension(Principal {
+                hash: [1u8; 32],
+                subject: Some("issuer:user-1".to_string()),
+            }),
             HeaderMap::new(),
             json!({"jsonrpc": "2.0", "id": 1, "method": "initialize"}).to_string(),
         )
@@ -791,7 +1003,10 @@ mod tests {
 
         let response = handle_mcp_request(
             State(state),
-            Extension(Principal([2u8; 32])),
+            Extension(Principal {
+                hash: [2u8; 32],
+                subject: Some("issuer:user-2".to_string()),
+            }),
             session_headers(&session_id),
             json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}).to_string(),
         )
@@ -860,18 +1075,27 @@ mod tests {
         let replacement: [u8; 32] = Sha256::digest(b"replacement-api-key").into();
         let rotated = vec![valid, replacement];
         assert_eq!(
-            authenticate_request(&request_with_bearer("valid-api-key"), &rotated, None),
+            authenticate_request(&request_with_bearer("valid-api-key"), &rotated, None, None)
+                .map(|principal| principal.hash),
             Some(valid)
         );
         assert_eq!(
-            authenticate_request(&request_with_bearer("replacement-api-key"), &rotated, None),
+            authenticate_request(
+                &request_with_bearer("replacement-api-key"),
+                &rotated,
+                None,
+                None
+            )
+            .map(|principal| principal.hash),
             Some(replacement)
         );
         assert!(
-            authenticate_request(&request_with_bearer("wrong-api-key"), &rotated, None).is_none()
+            authenticate_request(&request_with_bearer("wrong-api-key"), &rotated, None, None)
+                .is_none()
         );
         assert!(
-            authenticate_request(&request("http://gateway/mcp", None), &rotated, None).is_none()
+            authenticate_request(&request("http://gateway/mcp", None), &rotated, None, None)
+                .is_none()
         );
     }
 
@@ -904,11 +1128,104 @@ mod tests {
         let now = Utc::now().timestamp();
         let secret = b"jwt-test-secret";
         let token = test_jwt(secret, "user-42", now + 60, None);
-        let principal = authenticate_request(&request_with_bearer(token), &[], Some(secret));
+        let principal = authenticate_request(&request_with_bearer(token), &[], Some(secret), None);
         assert!(principal.is_some());
 
         let expired = test_jwt(secret, "user-42", now - 120, None);
-        assert!(authenticate_request(&request_with_bearer(expired), &[], Some(secret)).is_none());
+        assert!(
+            authenticate_request(&request_with_bearer(expired), &[], Some(secret), None).is_none()
+        );
+    }
+
+    #[test]
+    fn oauth_rejects_symmetric_and_unknown_key_tokens() {
+        let validator = OAuthValidator {
+            issuer: "https://issuer.example.com".to_string(),
+            audience: "odoo-mcp".to_string(),
+            jwks: JwkSet { keys: Vec::new() },
+        };
+        let now = Utc::now().timestamp();
+        let hs_token = test_jwt(b"secret", "user-42", now + 60, None);
+        assert!(validator.validate(&hs_token).is_none());
+        assert!(validator.validate("not.a.jwt").is_none());
+    }
+
+    #[test]
+    fn rbac_roles_apply_allow_deny_and_default_roles() {
+        let policy = RbacPolicy::new(
+            RbacSettings {
+                default_role: Some("viewer".to_string()),
+                roles: std::collections::BTreeMap::from([
+                    (
+                        "viewer".to_string(),
+                        crate::config::RbacRole {
+                            allow: vec![Capability::Read],
+                            deny: Vec::new(),
+                        },
+                    ),
+                    (
+                        "editor".to_string(),
+                        crate::config::RbacRole {
+                            allow: vec![Capability::Read, Capability::Delete],
+                            deny: vec![Capability::Delete],
+                        },
+                    ),
+                ]),
+                principals: std::collections::BTreeMap::from([(
+                    "issuer:editor".to_string(),
+                    vec!["editor".to_string()],
+                )]),
+                api_key_subjects: std::collections::BTreeMap::new(),
+            },
+            HashMap::new(),
+        );
+
+        assert!(policy.authorize(Some("issuer:editor"), Capability::Read));
+        assert!(!policy.authorize(Some("issuer:editor"), Capability::Delete));
+        assert!(policy.authorize(Some("issuer:unknown"), Capability::Read));
+        assert!(!policy.authorize(Some("issuer:unknown"), Capability::Update));
+    }
+
+    #[tokio::test]
+    async fn http_transport_rejects_rbac_denied_tool_calls() {
+        let mut state = remote_state(8, Duration::from_secs(60));
+        state.rbac = Some(Arc::new(RbacPolicy::new(
+            RbacSettings {
+                default_role: None,
+                roles: std::collections::BTreeMap::from([(
+                    "viewer".to_string(),
+                    crate::config::RbacRole {
+                        allow: vec![Capability::Read],
+                        deny: Vec::new(),
+                    },
+                )]),
+                principals: std::collections::BTreeMap::from([(
+                    "issuer:viewer".to_string(),
+                    vec!["viewer".to_string()],
+                )]),
+                api_key_subjects: std::collections::BTreeMap::new(),
+            },
+            HashMap::new(),
+        )));
+
+        let response = handle_mcp_request(
+            State(state),
+            Extension(Principal {
+                hash: [7u8; 32],
+                subject: Some("issuer:viewer".to_string()),
+            }),
+            HeaderMap::new(),
+            json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "odoo-delete", "arguments": {}}
+            })
+            .to_string(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 
     #[test]

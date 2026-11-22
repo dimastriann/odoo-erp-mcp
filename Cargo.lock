@@ -1137,6 +1137,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "futures",
+ "jsonwebtoken",
  "mcp-core",
  "mime_guess",
  "reqwest 0.13.2",

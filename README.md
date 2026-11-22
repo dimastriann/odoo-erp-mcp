@@ -166,6 +166,43 @@ the optional `nbf` check. Use a high-entropy secret of at least 32 bytes. JWT
 principals are derived from the issuer and subject, so sessions are bound to
 that identity.
 
+OAuth 2.1 resource-server validation can replace or supplement local JWT
+validation:
+
+```json
+"oauth": {
+  "issuer": "https://issuer.example.com",
+  "audience": "odoo-mcp",
+  "jwks_url": "https://issuer.example.com/.well-known/jwks.json"
+}
+```
+
+Only asymmetric RS256/384/512 and ES256/384 tokens are accepted. The JWKS is
+fetched at startup; if it is unavailable, the remote transport fails closed.
+The issuer, audience, expiry, not-before, and key id are validated.
+
+RBAC can restrict remote tool calls by authenticated principal:
+
+```json
+"rbac": {
+  "default_role": "viewer",
+  "roles": {
+    "viewer": { "allow": ["read"] },
+    "editor": { "allow": ["read", "update"], "deny": ["delete"] }
+  },
+  "principals": {
+    "https://issuer.example.com:user-42": ["editor"]
+  },
+  "api_key_subjects": {
+    "ODOO_MCP_REMOTE_API_KEY": "service:automation"
+  }
+}
+```
+
+JWT/OAuth principals use `issuer:subject`. API keys can be mapped to a subject
+through `api_key_subjects`. Deny wins over allow; unmatched principals use
+`default_role`, and no matching role means denied.
+
 ### Configuration
 
 The server stores its configuration in `config.json` (excluded from git). Use `config.example.json` as a starting template.

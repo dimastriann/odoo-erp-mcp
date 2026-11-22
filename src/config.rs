@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::net::SocketAddr;
 use std::str::FromStr;
@@ -7,7 +8,7 @@ use anyhow::Result;
 use uuid::Uuid;
 
 use crate::policy::{
-    CapabilityPermissions, PolicyDecision, PolicyEvaluation, evaluate_legacy_mode,
+    Capability, CapabilityPermissions, PolicyDecision, PolicyEvaluation, evaluate_legacy_mode,
 };
 use crate::secret::{EnvironmentSecretProvider, SecretProvider, SecretReference, SecretString};
 use crate::tools::catalog::ToolName;
@@ -251,6 +252,102 @@ pub struct RemoteMcpSettings {
     pub session_ttl_secs: u64,
     #[serde(default)]
     pub jwt_hs256_secret_env: Option<String>,
+    #[serde(default)]
+    pub oauth: Option<OAuthSettings>,
+    #[serde(default)]
+    pub rbac: Option<RbacSettings>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct OAuthSettings {
+    pub issuer: String,
+    pub audience: String,
+    pub jwks_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct RbacSettings {
+    #[serde(default)]
+    pub default_role: Option<String>,
+    #[serde(default)]
+    pub roles: BTreeMap<String, RbacRole>,
+    #[serde(default)]
+    pub principals: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub api_key_subjects: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct RbacRole {
+    #[serde(default)]
+    pub allow: Vec<Capability>,
+    #[serde(default)]
+    pub deny: Vec<Capability>,
+}
+
+impl RbacSettings {
+    fn validate(&self, api_key_envs: &[String]) -> Result<(), String> {
+        for name in self.roles.keys() {
+            if name.trim().is_empty() {
+                return Err("remote_mcp.rbac role names must not be empty".to_string());
+            }
+        }
+        if let Some(default_role) = &self.default_role
+            && !self.roles.contains_key(default_role)
+        {
+            return Err(format!(
+                "remote_mcp.rbac default_role {default_role:?} is not defined"
+            ));
+        }
+        for (subject, roles) in &self.principals {
+            if subject.trim().is_empty() {
+                return Err("remote_mcp.rbac principal subjects must not be empty".to_string());
+            }
+            if roles.is_empty() {
+                return Err(format!(
+                    "remote_mcp.rbac principal {subject:?} must have at least one role"
+                ));
+            }
+            for role in roles {
+                if !self.roles.contains_key(role) {
+                    return Err(format!(
+                        "remote_mcp.rbac principal {subject:?} references unknown role {role:?}"
+                    ));
+                }
+            }
+        }
+        for (env, subject) in &self.api_key_subjects {
+            if !api_key_envs.iter().any(|name| name == env) {
+                return Err(format!(
+                    "remote_mcp.rbac.api_key_subjects references unknown API-key environment {env:?}"
+                ));
+            }
+            if subject.trim().is_empty() {
+                return Err(format!(
+                    "remote_mcp.rbac.api_key_subjects subject for {env:?} must not be empty"
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl OAuthSettings {
+    fn validate(&self) -> Result<(), String> {
+        if self.issuer.trim().is_empty()
+            || self.audience.trim().is_empty()
+            || self.jwks_url.trim().is_empty()
+        {
+            return Err("remote_mcp.oauth issuer, audience, and jwks_url are required".to_string());
+        }
+        if !self.issuer.starts_with("https://") {
+            return Err("remote_mcp.oauth.issuer must use https".to_string());
+        }
+        if !self.jwks_url.starts_with("https://") {
+            return Err("remote_mcp.oauth.jwks_url must use https".to_string());
+        }
+        Ok(())
+    }
 }
 
 fn default_remote_mcp_bind() -> String {
@@ -285,6 +382,8 @@ impl Default for RemoteMcpSettings {
             max_sessions: default_remote_max_sessions(),
             session_ttl_secs: default_remote_session_ttl_secs(),
             jwt_hs256_secret_env: None,
+            oauth: None,
+            rbac: None,
         }
     }
 }
@@ -300,7 +399,13 @@ impl RemoteMcpSettings {
                 names.push(api_key_env.clone());
             }
             let jwt_secret_env = self.jwt_hs256_secret_env.as_deref().unwrap_or_default();
-            if names.is_empty() && jwt_secret_env.trim().is_empty() {
+            if let Some(oauth) = &self.oauth {
+                oauth.validate()?;
+            }
+            if let Some(rbac) = &self.rbac {
+                rbac.validate(&names)?;
+            }
+            if names.is_empty() && jwt_secret_env.trim().is_empty() && self.oauth.is_none() {
                 return Err(
                     "remote_mcp requires at least one API-key or JWT secret environment variable"
                         .to_string(),
@@ -937,6 +1042,58 @@ mod tests {
         settings.remote_mcp.enabled = true;
         settings.remote_mcp.jwt_hs256_secret_env = Some("ODOO_MCP_REMOTE_JWT_SECRET".to_string());
         assert!(settings.validate().is_ok());
+    }
+
+    #[test]
+    fn enabled_remote_mcp_can_use_oauth_only() {
+        let mut settings = GlobalSettings::default();
+        settings.remote_mcp.enabled = true;
+        settings.remote_mcp.oauth = Some(OAuthSettings {
+            issuer: "https://issuer.example.com".to_string(),
+            audience: "odoo-mcp".to_string(),
+            jwks_url: "https://issuer.example.com/.well-known/jwks.json".to_string(),
+        });
+        assert!(settings.validate().is_ok());
+
+        settings.remote_mcp.oauth.as_mut().unwrap().jwks_url = "http://insecure".to_string();
+        assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn remote_mcp_rbac_validates_roles_and_principals() {
+        let mut settings = GlobalSettings::default();
+        settings.remote_mcp.enabled = true;
+        settings.remote_mcp.api_key_envs = vec!["ODOO_MCP_REMOTE_API_KEY".to_string()];
+        let mut roles = BTreeMap::new();
+        roles.insert(
+            "viewer".to_string(),
+            RbacRole {
+                allow: vec![Capability::Read],
+                deny: Vec::new(),
+            },
+        );
+        settings.remote_mcp.rbac = Some(RbacSettings {
+            default_role: Some("viewer".to_string()),
+            roles,
+            principals: BTreeMap::from([(
+                "issuer:user-42".to_string(),
+                vec!["viewer".to_string()],
+            )]),
+            api_key_subjects: BTreeMap::from([(
+                "ODOO_MCP_REMOTE_API_KEY".to_string(),
+                "service:automation".to_string(),
+            )]),
+        });
+        assert!(settings.validate().is_ok());
+
+        settings
+            .remote_mcp
+            .rbac
+            .as_mut()
+            .unwrap()
+            .principals
+            .insert("issuer:user-99".to_string(), vec!["admin".to_string()]);
+        assert!(settings.validate().is_err());
     }
 
     #[test]

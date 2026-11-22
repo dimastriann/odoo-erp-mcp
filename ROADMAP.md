@@ -645,15 +645,15 @@ Goal: Support authenticated remote access, organizational isolation, and product
 - [x] S8-04 — Add API-key authentication as the baseline.
 - [x] S8-05 — Add token hashing and rotation.
 - [x] S8-06 — Add JWT validation.
-- [ ] S8-07 — Add OAuth 2.1 for the selected deployment model.
+- [x] S8-07 — Add OAuth 2.1 for the selected deployment model.
 - [x] S8-08 — Add per-principal rate limiting.
 - [x] S8-09 — Add request-body limits.
 - [x] S8-10 — Add session and connection management.
 
 ## 8.2 RBAC and tenant isolation
 
-- [ ] S8-11 — Add role management.
-- [ ] S8-12 — Add user-to-role mapping.
+- [x] S8-11 — Add role management.
+- [x] S8-12 — Add user-to-role mapping.
 - [ ] S8-13 — Add organization and tenant identity.
 - [ ] S8-14 — Add user-to-instance mapping.
 - [ ] S8-15 — Scope persistent storage per tenant.
@@ -831,5 +831,5 @@ IDs, write values, or flat domains may now be rejected earlier.
 | Stage 5 - Audit and Observability | Complete | 26/26 | Audit trail, preview/verification events, structured logs, spans, metrics, health, and readiness complete. |
 | Stage 6 - Odoo Semantic and Workflow Layer | Complete | 37/37 | Typed schema/relations/enums/required fields, deduplicated TTL cache with metrics, relation explanation, and curated approval-gated workflows with method schemas complete. |
 | Stage 7 - Business Tools and Analytics | In progress | 28/28 | Aggregation protection, typed metrics/group-bys, company and currency context, generic reports, sales, inventory, CRM, accounting, and purchasing reports added; live Odoo validation remains. |
-| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 13/22 | Remote MCP hardening plus Docker, Compose, environment reference, and reverse-proxy/TLS docs added; OAuth, RBAC, tenant isolation, and Kubernetes remain. |
+| Stage 8 - Remote MCP and Enterprise Readiness | In progress | 16/22 | Remote MCP hardening, Docker deployment, OAuth 2.1 validation, and RBAC roles added; tenant isolation and Kubernetes remain. |
 | Stage 9 — Strategic and Optional Capabilities | Not started | 0/35 | |

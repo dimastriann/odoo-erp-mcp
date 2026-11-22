@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- OAuth 2.1 resource-server validation with issuer, audience, JWKS, and asymmetric JWT checks.
+- Remote RBAC roles with principal and API-key subject mapping.
+
 ## [0.10.0] - 2026-11-22
 
 ### Added
