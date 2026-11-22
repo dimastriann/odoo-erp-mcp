@@ -27,6 +27,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Raised the minimum supported Rust version to 1.88.
 - Extracted a transport-independent MCP core so future remote transports reuse
   the same request handling and session identity.
 

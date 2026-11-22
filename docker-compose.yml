@@ -3,6 +3,7 @@ services:
     build: .
     image: odoo-erp-mcp:local
     restart: unless-stopped
+    stdin_open: true
     env_file:
       - .env
     environment:

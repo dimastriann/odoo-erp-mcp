@@ -84,7 +84,7 @@ src/
 
 ### Prerequisites
 
-- [Rust & Cargo](https://rustup.rs/) 1.85 or newer
+- [Rust & Cargo](https://rustup.rs/) 1.88 or newer
 - An Odoo Instance (v12 to v19+ supported)
 
 ### Local Development
@@ -512,7 +512,9 @@ filesystem; `/data` is the only writable volume.
    ```
 
 Compose binds both published ports to `127.0.0.1`. Put a TLS-terminating
-reverse proxy in front of the remote MCP port; do not expose it directly.
+reverse proxy in front of the remote MCP port; do not expose it directly. The
+container runs with stdin open because the stdio MCP loop owns the process
+lifetime; use `docker run -i` if you run the image without Compose.
 
 `ODOO_MCP_CONFIG_PATH` overrides the configuration file location, which is how
 the container uses `/data/config.json`. `ODOO_MCP_UI_BIND` controls the Web UI
