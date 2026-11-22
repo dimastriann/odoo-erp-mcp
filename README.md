@@ -139,21 +139,32 @@ Remote MCP is disabled by default. Enable it explicitly with
 
 When enabled, the server exposes `POST /mcp` as a JSON-RPC-over-HTTP endpoint
 and reuses the same transport-independent MCP core as stdio. Requests must use
-`Authorization: Bearer <key>`; keys are read from `api_key_envs` (or the older
-scalar `api_key_env`) and only SHA-256 hashes are kept in memory. Supplying
-both the current and previous key enables zero-downtime rotation; remove the
-old key after clients have switched. Each key is limited to
+`Authorization: Bearer <credential>`. API keys are read from `api_key_envs`
+(or the older scalar `api_key_env`) and only SHA-256 hashes are kept in memory.
+Supplying both the current and previous key enables zero-downtime rotation;
+remove the old key after clients have switched. Each key is limited to
 `rate_limit_per_minute` requests (default `120`); excess requests receive
 `429 Too Many Requests` with `Retry-After`. Request bodies are capped at
 `max_request_bytes` (default `1048576`). Initialize creates an
-`Mcp-Session-Id`; send it on later requests. Sessions are bound to the API key,
-expire after `session_ttl_secs` (default `3600`), and are capped by
-`max_sessions` (default `256`). Send `DELETE /mcp` with the session header to
-terminate one explicitly. Notifications return
+`Mcp-Session-Id`; send it on later requests. Sessions are bound to the
+authenticated credential, expire after `session_ttl_secs` (default `3600`), and
+are capped by `max_sessions` (default `256`). Send `DELETE /mcp` with the
+session header to terminate one explicitly. Notifications return
 `202 Accepted`. Non-loopback binds reject requests unless the reverse proxy sets
 `x-forwarded-proto: https`; configure that proxy to strip or override this
 header from client input. Keep `remote_mcp.enabled` set to `false` unless HTTPS
-and the API-key environment variables are configured.
+and a supported credential source is configured.
+
+HS256 JWTs can replace or supplement API keys:
+
+```json
+"jwt_hs256_secret_env": "ODOO_MCP_REMOTE_JWT_SECRET"
+```
+
+JWTs must use `alg: HS256`, include a non-empty `sub`, include `exp`, and pass
+the optional `nbf` check. Use a high-entropy secret of at least 32 bytes. JWT
+principals are derived from the issuer and subject, so sessions are bound to
+that identity.
 
 ### Configuration
 

@@ -13,7 +13,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   default, with HTTPS enforcement for non-loopback binds and hashed Bearer
   API-key authentication backed by environment variables, with support for
   key rotation, per-key request rate limits, configurable request-body limits,
-  and principal-bound session management.
+  principal-bound session management, and HS256 JWT validation.
 - Protected aggregation (`odoo-aggregate`) with typed metrics, typed
   group-by expressions, and optional company context. Business reports resolve
   the selected company's currency when a company is supplied.

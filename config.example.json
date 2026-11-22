@@ -27,7 +27,8 @@
       "rate_limit_per_minute": 120,
       "max_request_bytes": 1048576,
       "max_sessions": 256,
-      "session_ttl_secs": 3600
+      "session_ttl_secs": 3600,
+      "jwt_hs256_secret_env": null
     }
   },
   "folders": [

@@ -249,6 +249,8 @@ pub struct RemoteMcpSettings {
     pub max_sessions: usize,
     #[serde(default = "default_remote_session_ttl_secs")]
     pub session_ttl_secs: u64,
+    #[serde(default)]
+    pub jwt_hs256_secret_env: Option<String>,
 }
 
 fn default_remote_mcp_bind() -> String {
@@ -282,6 +284,7 @@ impl Default for RemoteMcpSettings {
             max_request_bytes: default_remote_max_request_bytes(),
             max_sessions: default_remote_max_sessions(),
             session_ttl_secs: default_remote_session_ttl_secs(),
+            jwt_hs256_secret_env: None,
         }
     }
 }
@@ -296,9 +299,11 @@ impl RemoteMcpSettings {
             if let Some(api_key_env) = &self.api_key_env {
                 names.push(api_key_env.clone());
             }
-            if names.is_empty() {
+            let jwt_secret_env = self.jwt_hs256_secret_env.as_deref().unwrap_or_default();
+            if names.is_empty() && jwt_secret_env.trim().is_empty() {
                 return Err(
-                    "remote_mcp.api_key_env is required when remote MCP is enabled".to_string(),
+                    "remote_mcp requires at least one API-key or JWT secret environment variable"
+                        .to_string(),
                 );
             }
             for name in &names {
@@ -910,7 +915,10 @@ mod tests {
         settings.remote_mcp.enabled = true;
         assert_eq!(
             settings.validate(),
-            Err("remote_mcp.api_key_env is required when remote MCP is enabled".to_string())
+            Err(
+                "remote_mcp requires at least one API-key or JWT secret environment variable"
+                    .to_string()
+            )
         );
 
         settings.remote_mcp.api_key_env = Some("ODOO_MCP_REMOTE_API_KEY".to_string());
@@ -918,6 +926,14 @@ mod tests {
 
         settings.remote_mcp.api_key_env = Some("   ".to_string());
         assert!(settings.validate().is_err());
+    }
+
+    #[test]
+    fn enabled_remote_mcp_can_use_jwt_only() {
+        let mut settings = GlobalSettings::default();
+        settings.remote_mcp.enabled = true;
+        settings.remote_mcp.jwt_hs256_secret_env = Some("ODOO_MCP_REMOTE_JWT_SECRET".to_string());
+        assert!(settings.validate().is_ok());
     }
 
     #[test]

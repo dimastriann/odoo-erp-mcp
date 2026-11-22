@@ -11,6 +11,8 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::Utc;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -35,6 +37,7 @@ struct RemoteState {
     runtime: McpRuntime,
     require_https: bool,
     expected_api_key_hashes: Vec<[u8; 32]>,
+    jwt_hs256_secret: Option<Vec<u8>>,
     rate_limiter: Arc<RateLimiter>,
     sessions: Arc<Mutex<SessionStore>>,
 }
@@ -159,6 +162,7 @@ pub(crate) async fn start_remote_mcp(
     let (
         bind_address,
         api_key_envs,
+        jwt_hs256_secret_env,
         rate_limit_per_minute,
         max_request_bytes,
         max_sessions,
@@ -173,6 +177,7 @@ pub(crate) async fn start_remote_mcp(
         (
             settings.bind_address.clone(),
             names,
+            settings.jwt_hs256_secret_env.clone().unwrap_or_default(),
             settings.rate_limit_per_minute,
             settings.max_request_bytes,
             settings.max_sessions,
@@ -199,12 +204,32 @@ pub(crate) async fn start_remote_mcp(
         };
         expected_api_key_hashes.push(Sha256::digest(api_key.expose_secret().as_bytes()).into());
     }
+    let jwt_hs256_secret = if jwt_hs256_secret_env.trim().is_empty() {
+        None
+    } else {
+        match provider.resolve(&SecretReference::new(&jwt_hs256_secret_env)) {
+            Ok(Some(secret)) if !secret.expose_secret().is_empty() => {
+                Some(secret.expose_secret().as_bytes().to_vec())
+            }
+            Ok(_) => {
+                eprintln!(
+                    "Remote MCP transport disabled: environment variable {jwt_hs256_secret_env:?} has no JWT secret"
+                );
+                return;
+            }
+            Err(error) => {
+                eprintln!("Remote MCP transport disabled: {error}");
+                return;
+            }
+        }
+    };
     let state = RemoteState {
         config,
         client_manager,
         runtime,
         require_https,
         expected_api_key_hashes,
+        jwt_hs256_secret,
         rate_limiter: Arc::new(RateLimiter::new(
             rate_limit_per_minute,
             Duration::from_secs(60),
@@ -246,12 +271,13 @@ async fn authorize_remote(
     if state.require_https && !request_is_https(&request) {
         return JsonRpcErrorBody::parse_error("HTTPS required for remote MCP").into_response();
     }
-    let Some(principal) = presented_api_key_hash(&request) else {
+    let Some(principal) = authenticate_request(
+        &request,
+        &state.expected_api_key_hashes,
+        state.jwt_hs256_secret.as_deref(),
+    ) else {
         return unauthorized_response();
     };
-    if !api_key_is_valid(&principal, &state.expected_api_key_hashes) {
-        return unauthorized_response();
-    }
     if let Err(retry_after) = state.rate_limiter.check(principal).await {
         return rate_limited_response(retry_after);
     }
@@ -260,7 +286,26 @@ async fn authorize_remote(
     next.run(request).await
 }
 
-fn presented_api_key_hash(request: &Request) -> Option<[u8; 32]> {
+fn authenticate_request(
+    request: &Request,
+    expected_api_keys: &[[u8; 32]],
+    jwt_secret: Option<&[u8]>,
+) -> Option<[u8; 32]> {
+    let token = bearer_token(request)?;
+    if let Some(secret) = jwt_secret
+        && token.split('.').count() == 3
+        && let Some(principal) = validate_jwt(token, secret)
+    {
+        return Some(principal);
+    }
+    let api_key_hash: [u8; 32] = Sha256::digest(token.as_bytes()).into();
+    expected_api_keys
+        .iter()
+        .any(|expected| constant_time_eq(&api_key_hash, expected))
+        .then_some(api_key_hash)
+}
+
+fn bearer_token(request: &Request) -> Option<&str> {
     request
         .headers()
         .get(header::AUTHORIZATION)
@@ -270,13 +315,78 @@ fn presented_api_key_hash(request: &Request) -> Option<[u8; 32]> {
                 .strip_prefix("Bearer ")
                 .or_else(|| value.strip_prefix("bearer "))
         })
-        .map(|api_key| Sha256::digest(api_key.as_bytes()).into())
 }
 
-fn api_key_is_valid(presented: &[u8; 32], expected: &[[u8; 32]]) -> bool {
-    expected
-        .iter()
-        .any(|expected| constant_time_eq(presented, expected))
+const JWT_LEEWAY_SECS: i64 = 60;
+
+fn validate_jwt(token: &str, secret: &[u8]) -> Option<[u8; 32]> {
+    let mut parts = token.split('.');
+    let encoded_header = parts.next()?;
+    let encoded_payload = parts.next()?;
+    let signature = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+
+    let header: Value =
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded_header).ok()?).ok()?;
+    if header.get("alg").and_then(Value::as_str) != Some("HS256") {
+        return None;
+    }
+
+    let signing_input = format!("{encoded_header}.{encoded_payload}");
+    let expected_signature = hmac_sha256(secret, signing_input.as_bytes());
+    let provided_signature = URL_SAFE_NO_PAD.decode(signature).ok()?;
+    if !constant_time_eq(&provided_signature, &expected_signature) {
+        return None;
+    }
+
+    let payload: Value =
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(encoded_payload).ok()?).ok()?;
+    let now = Utc::now().timestamp();
+    let exp = numeric_date(payload.get("exp")?)?;
+    if now > exp.saturating_add(JWT_LEEWAY_SECS) {
+        return None;
+    }
+    if let Some(nbf) = payload.get("nbf").and_then(numeric_date)
+        && now.saturating_add(JWT_LEEWAY_SECS) < nbf
+    {
+        return None;
+    }
+    let subject = payload.get("sub")?.as_str()?;
+    if subject.trim().is_empty() {
+        return None;
+    }
+    let issuer = payload
+        .get("iss")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    Some(Sha256::digest(format!("jwt:{issuer}:{subject}").as_bytes()).into())
+}
+
+fn numeric_date(value: &Value) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_f64().map(|value| value as i64))
+}
+
+fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    let mut key_block = [0u8; 64];
+    if key.len() > key_block.len() {
+        key_block[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        key_block[..key.len()].copy_from_slice(key);
+    }
+
+    let mut inner = Sha256::new();
+    inner.update(key_block.map(|byte| byte ^ 0x36));
+    inner.update(message);
+    let inner = inner.finalize();
+
+    let mut outer = Sha256::new();
+    outer.update(key_block.map(|byte| byte ^ 0x5c));
+    outer.update(inner);
+    outer.finalize().into()
 }
 
 fn unauthorized_response() -> Response {
@@ -554,6 +664,7 @@ mod tests {
             runtime: McpRuntime::new(sender),
             require_https: false,
             expected_api_key_hashes: vec![Sha256::digest(b"valid-api-key").into()],
+            jwt_hs256_secret: None,
             rate_limiter: Arc::new(RateLimiter::new(120, Duration::from_secs(60))),
             sessions: Arc::new(Mutex::new(SessionStore::new(max_sessions, ttl))),
         }
@@ -748,17 +859,85 @@ mod tests {
         let valid: [u8; 32] = Sha256::digest(b"valid-api-key").into();
         let replacement: [u8; 32] = Sha256::digest(b"replacement-api-key").into();
         let rotated = vec![valid, replacement];
-        assert!(api_key_is_valid(&valid, &rotated));
-        assert!(api_key_is_valid(&replacement, &rotated));
-        assert!(!api_key_is_valid(
-            &Sha256::digest(b"wrong-api-key").into(),
-            &rotated
-        ));
         assert_eq!(
-            presented_api_key_hash(&request_with_bearer("valid-api-key")),
+            authenticate_request(&request_with_bearer("valid-api-key"), &rotated, None),
             Some(valid)
         );
-        assert!(presented_api_key_hash(&request("http://gateway/mcp", None)).is_none());
+        assert_eq!(
+            authenticate_request(&request_with_bearer("replacement-api-key"), &rotated, None),
+            Some(replacement)
+        );
+        assert!(
+            authenticate_request(&request_with_bearer("wrong-api-key"), &rotated, None).is_none()
+        );
+        assert!(
+            authenticate_request(&request("http://gateway/mcp", None), &rotated, None).is_none()
+        );
+    }
+
+    #[test]
+    fn jwt_validation_checks_signature_and_time_claims() {
+        let now = Utc::now().timestamp();
+        let secret = b"jwt-test-secret";
+        let valid = test_jwt(secret, "user-42", now + 60, None);
+        assert!(validate_jwt(&valid, secret).is_some());
+        assert!(validate_jwt(&test_jwt(secret, "user-42", now - 120, None), secret).is_none());
+        assert!(
+            validate_jwt(
+                &test_jwt(secret, "user-42", now + 60, Some(now + 120)),
+                secret
+            )
+            .is_none()
+        );
+        assert!(
+            validate_jwt(
+                &test_jwt(b"wrong-secret", "user-42", now + 60, None),
+                secret
+            )
+            .is_none()
+        );
+        assert!(validate_jwt("not.a.jwt", secret).is_none());
+    }
+
+    #[test]
+    fn jwt_credentials_authenticate_requests() {
+        let now = Utc::now().timestamp();
+        let secret = b"jwt-test-secret";
+        let token = test_jwt(secret, "user-42", now + 60, None);
+        let principal = authenticate_request(&request_with_bearer(token), &[], Some(secret));
+        assert!(principal.is_some());
+
+        let expired = test_jwt(secret, "user-42", now - 120, None);
+        assert!(authenticate_request(&request_with_bearer(expired), &[], Some(secret)).is_none());
+    }
+
+    #[test]
+    fn hmac_sha256_matches_known_vector() {
+        let digest = hmac_sha256(b"key", b"The quick brown fox jumps over the lazy dog");
+        assert_eq!(
+            digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>(),
+            "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
+        );
+    }
+
+    fn test_jwt(secret: &[u8], subject: &str, exp: i64, nbf: Option<i64>) -> String {
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+        let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"HS256","typ":"JWT"}"#);
+        let mut payload = json!({
+            "sub": subject,
+            "iss": "test-issuer",
+            "exp": exp
+        });
+        if let Some(nbf) = nbf {
+            payload["nbf"] = json!(nbf);
+        }
+        let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&payload).unwrap());
+        let signing_input = format!("{header}.{payload}");
+        let signature = URL_SAFE_NO_PAD.encode(hmac_sha256(secret, signing_input.as_bytes()));
+        format!("{signing_input}.{signature}")
     }
 
     #[test]
